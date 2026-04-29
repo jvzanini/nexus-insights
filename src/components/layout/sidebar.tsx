@@ -20,6 +20,7 @@ import { signOut } from "next-auth/react";
 import {
   filterNav,
   NAV_ITEMS,
+  SECTION_LABELS,
   type NavItem,
 } from "@/lib/constants/nav";
 import type { PlatformRole } from "@/generated/prisma/client";
@@ -192,16 +193,29 @@ export function Sidebar({
       ) : null}
 
       <nav className="flex-1 px-3 py-4 space-y-1">
-        {visibleNav.map((item, index) => (
-          <motion.div
-            key={item.href}
-            initial={{ opacity: 0, x: -12 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.2, delay: index * 0.04 }}
-          >
-            {renderItem(item)}
-          </motion.div>
-        ))}
+        {(() => {
+          let lastSection: NavItem["section"] | null = null;
+          return visibleNav.map((item, index) => {
+            const showHeader =
+              item.section && item.section !== lastSection;
+            if (item.section) lastSection = item.section;
+            return (
+              <motion.div
+                key={item.href}
+                initial={{ opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.2, delay: index * 0.04 }}
+              >
+                {showHeader ? (
+                  <div className="px-3 pt-4 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground/60">
+                    {SECTION_LABELS[item.section!]}
+                  </div>
+                ) : null}
+                {renderItem(item)}
+              </motion.div>
+            );
+          });
+        })()}
       </nav>
 
       <div className="border-t border-border px-4 py-4 space-y-3">

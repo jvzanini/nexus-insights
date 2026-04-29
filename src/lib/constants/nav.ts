@@ -5,6 +5,7 @@ import {
   Settings,
   User,
   MessageSquare,
+  MessageSquareWarning,
   Calendar,
   Clock,
   Trophy,
@@ -14,10 +15,11 @@ import {
   Smile,
   Shield,
   Bot,
-  MailWarning,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { PlatformRole } from "@/generated/prisma/client";
+
+export type NavSection = "reports" | "admin";
 
 export type NavItem = {
   label: string;
@@ -27,6 +29,16 @@ export type NavItem = {
   superAdminOnly?: boolean;
   featureFlag?: string;
   children?: NavItem[];
+  /**
+   * Marca o início de uma seção visual no sidebar (com header).
+   * Aplicado apenas em itens de nível raiz.
+   */
+  section?: NavSection;
+};
+
+export const SECTION_LABELS: Record<NavSection, string> = {
+  reports: "Relatórios",
+  admin: "Administração",
 };
 
 export const NAV_ITEMS: NavItem[] = [
@@ -35,6 +47,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Relatórios",
     href: "/relatorios",
     icon: BarChart3,
+    section: "reports",
     children: [
       {
         label: "Conversas",
@@ -44,19 +57,25 @@ export const NAV_ITEMS: NavItem[] = [
       {
         label: "Mensagens não respondidas",
         href: "/relatorios/mensagens-nao-respondidas",
-        icon: MailWarning,
+        icon: MessageSquareWarning,
       },
       {
-        label: "Leads recebidos",
-        href: "/relatorios/leads-recebidos",
-        icon: Calendar,
+        label: "Status das conversas",
+        href: "/relatorios/status-conversas",
+        icon: ListChecks,
       },
-      { label: "Volumetria", href: "/relatorios/volumetria", icon: BarChart3 },
       {
         label: "Tempos de resposta",
         href: "/relatorios/tempos-resposta",
         icon: Clock,
       },
+      {
+        label: "SLA",
+        href: "/relatorios/sla",
+        icon: Shield,
+        featureFlag: "feature_flags.sla_enabled",
+      },
+      { label: "Volumetria", href: "/relatorios/volumetria", icon: BarChart3 },
       {
         label: "Ranking de atendentes",
         href: "/relatorios/ranking-atendentes",
@@ -69,27 +88,21 @@ export const NAV_ITEMS: NavItem[] = [
       },
       { label: "Por estado", href: "/relatorios/por-estado", icon: Map },
       {
-        label: "Status das conversas",
-        href: "/relatorios/status-conversas",
-        icon: ListChecks,
-      },
-      {
-        label: "CSAT",
-        href: "/relatorios/csat",
-        icon: Smile,
-        featureFlag: "feature_flags.csat_enabled",
-      },
-      {
-        label: "SLA",
-        href: "/relatorios/sla",
-        icon: Shield,
-        featureFlag: "feature_flags.sla_enabled",
+        label: "Leads recebidos",
+        href: "/relatorios/leads-recebidos",
+        icon: Calendar,
       },
       {
         label: "Matrix IA",
         href: "/relatorios/matrix-ia",
         icon: Bot,
         superAdminOnly: true,
+      },
+      {
+        label: "CSAT",
+        href: "/relatorios/csat",
+        icon: Smile,
+        featureFlag: "feature_flags.csat_enabled",
       },
     ],
   },
@@ -98,6 +111,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/usuarios",
     icon: Users,
     visibleTo: ["super_admin", "admin", "manager"],
+    section: "admin",
   },
   {
     label: "Configurações",
