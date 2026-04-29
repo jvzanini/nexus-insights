@@ -6,9 +6,6 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPrismaClient() {
-  // Adapter padrão Prisma 7 — mesmo formato do Roteador Webhook Meta.
-  // O DATABASE_URL deve apontar direto pro DB sem ?schema=public para evitar
-  // conflito de parser do adapter.
   const adapter = new PrismaPg({
     connectionString: process.env.DATABASE_URL!,
   });

@@ -1,4 +1,4 @@
-import { prisma } from "./prisma";
+import { pgPool } from "@/lib/pg-pool";
 import type { AuditAction } from "@/generated/prisma/client";
 
 export interface LogAuditParams {
@@ -12,24 +12,26 @@ export interface LogAuditParams {
 }
 
 /**
- * Registra uma entrada no audit log.
+ * Registra uma entrada no audit log via raw pg.Pool.
  *
  * Fire-and-forget: erros são logados no console mas não propagados,
  * para não interromper o fluxo principal.
  */
 export async function logAudit(params: LogAuditParams): Promise<void> {
   try {
-    await prisma.auditLog.create({
-      data: {
-        userId: params.userId ?? null,
-        action: params.action,
-        targetType: params.targetType,
-        targetId: params.targetId,
-        ipAddress: params.ipAddress,
-        userAgent: params.userAgent,
-        details: params.details as object | undefined,
-      },
-    });
+    await pgPool.query(
+      `INSERT INTO audit_logs (id, user_id, action, target_type, target_id, ip_address, user_agent, details, created_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7::jsonb, NOW())`,
+      [
+        params.userId ?? null,
+        params.action,
+        params.targetType ?? null,
+        params.targetId ?? null,
+        params.ipAddress ?? null,
+        params.userAgent ?? null,
+        params.details ? JSON.stringify(params.details) : null,
+      ],
+    );
   } catch (error) {
     console.error("[audit] Falha ao registrar audit log:", error);
   }

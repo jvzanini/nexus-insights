@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma";
+import { pgPool } from "@/lib/pg-pool";
 import { checkLoginRateLimit } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import type { PlatformRole, Theme } from "@/generated/prisma/client";
@@ -22,6 +22,19 @@ export interface AuthUser {
   teamIds: number[];
 }
 
+interface UserRow {
+  id: string;
+  email: string;
+  name: string;
+  password: string;
+  platform_role: PlatformRole;
+  is_owner: boolean;
+  is_active: boolean;
+  must_change_password: boolean;
+  avatar_url: string | null;
+  theme: Theme;
+}
+
 export async function authorizeCredentials(
   credentials: Credentials,
   ipAddress: string,
@@ -36,23 +49,15 @@ export async function authorizeCredentials(
     );
   }
 
-  const user = await prisma.user.findUnique({
-    where: { email },
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      password: true,
-      platformRole: true,
-      isOwner: true,
-      isActive: true,
-      mustChangePassword: true,
-      avatarUrl: true,
-      theme: true,
-    },
-  });
+  const userResult = await pgPool.query<UserRow>(
+    `SELECT id, email, name, password, platform_role, is_owner, is_active,
+            must_change_password, avatar_url, theme
+     FROM users WHERE email = $1`,
+    [email],
+  );
+  const user = userResult.rows[0];
 
-  if (!user || !user.isActive) {
+  if (!user || !user.is_active) {
     logAudit({
       userId: user?.id,
       action: "login_failed",
@@ -73,10 +78,10 @@ export async function authorizeCredentials(
     return null;
   }
 
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { lastLoginAt: new Date(), lastLoginIp: ipAddress },
-  });
+  await pgPool.query(
+    `UPDATE users SET last_login_at = NOW(), last_login_ip = $1 WHERE id = $2`,
+    [ipAddress, user.id],
+  );
 
   logAudit({
     userId: user.id,
@@ -85,32 +90,32 @@ export async function authorizeCredentials(
     details: { email },
   });
 
-  const [accountAccess, teamAccess] = await Promise.all([
-    prisma.userAccountAccess.findMany({
-      where: { userId: user.id },
-      select: { chatwootAccountId: true },
-    }),
-    prisma.userTeamAccess.findMany({
-      where: { userId: user.id },
-      select: { chatwootTeamId: true },
-    }),
+  const [accountAccessResult, teamAccessResult] = await Promise.all([
+    pgPool.query<{ chatwoot_account_id: number }>(
+      `SELECT chatwoot_account_id FROM user_account_access WHERE user_id = $1`,
+      [user.id],
+    ),
+    pgPool.query<{ chatwoot_team_id: number }>(
+      `SELECT chatwoot_team_id FROM user_team_access WHERE user_id = $1`,
+      [user.id],
+    ),
   ]);
 
   const accountIds: number[] = Array.from(
-    new Set(accountAccess.map((a: { chatwootAccountId: number }) => a.chatwootAccountId)),
+    new Set(accountAccessResult.rows.map((r) => r.chatwoot_account_id)),
   );
   const teamIds: number[] = Array.from(
-    new Set(teamAccess.map((t: { chatwootTeamId: number }) => t.chatwootTeamId)),
+    new Set(teamAccessResult.rows.map((r) => r.chatwoot_team_id)),
   );
 
   return {
     id: user.id,
     email: user.email,
     name: user.name,
-    platformRole: user.platformRole,
-    isOwner: user.isOwner,
-    mustChangePassword: user.mustChangePassword,
-    avatarUrl: user.avatarUrl,
+    platformRole: user.platform_role,
+    isOwner: user.is_owner,
+    mustChangePassword: user.must_change_password,
+    avatarUrl: user.avatar_url,
     theme: user.theme,
     accountIds,
     teamIds,
