@@ -1,0 +1,40 @@
+name: DB Migrate (one-shot)
+
+on:
+  workflow_dispatch:
+    inputs:
+      migration_dir:
+        description: "Nome da pasta em prisma/migrations/ (ex: 20260417190000_company_soft_delete)"
+        required: true
+        type: string
+      db_container_hint:
+        description: "Substring do nome do container Postgres"
+        required: false
+        type: string
+        default: "nexus-roteador-webhook_db"
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    env:
+      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+      PORTAINER_TOKEN: ${{ secrets.PORTAINER_TOKEN }}
+      MIGRATION_DIR: ${{ inputs.migration_dir }}
+      DB_HINT: ${{ inputs.db_container_hint }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate migration file
+        run: |
+          FILE="prisma/migrations/${MIGRATION_DIR}/migration.sql"
+          if [ ! -f "$FILE" ]; then
+            echo "::error::Migration file not found: $FILE"
+            exit 1
+          fi
+          echo "----- SQL -----"
+          cat "$FILE"
+          echo "---------------"
+
+      - name: Apply migration via Portainer API
+        run: |
+          python3 scripts/apply-migration-portainer.py

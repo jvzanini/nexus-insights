@@ -1,0 +1,116 @@
+name: Build and Push
+
+on:
+  push:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm test
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha
+            type=raw,value=latest
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+      PORTAINER_TOKEN: ${{ secrets.PORTAINER_TOKEN }}
+      GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+    steps:
+      - name: Pull image and update services
+        run: |
+          # Pull da nova imagem no Portainer
+          AUTH=$(echo -n "{\"username\":\"jvzanini\",\"password\":\"${GHCR_TOKEN}\"}" | base64 -w 0)
+
+          curl --insecure -X POST \
+            -H "X-API-Key: ${PORTAINER_TOKEN}" \
+            -H "X-Registry-Auth: ${AUTH}" \
+            "${PORTAINER_URL}/api/endpoints/1/docker/images/create?fromImage=ghcr.io/jvzanini/nexus-roteador-webhook&tag=latest" \
+            -o /dev/null -w "Pull: HTTP %{http_code}\n"
+
+          # Forçar update dos serviços
+          SERVICES=$(curl --insecure -s \
+            -H "X-API-Key: ${PORTAINER_TOKEN}" \
+            "${PORTAINER_URL}/api/endpoints/1/docker/services")
+
+          for SERVICE_NAME in nexus-roteador-webhook_app nexus-roteador-webhook_worker; do
+            SVC_ID=$(echo "$SERVICES" | python3 -c "
+          import sys,json
+          for s in json.load(sys.stdin):
+              if s['Spec']['Name'] == '$SERVICE_NAME':
+                  print(s['ID']); break
+          " 2>/dev/null)
+
+            SVC_VERSION=$(echo "$SERVICES" | python3 -c "
+          import sys,json
+          for s in json.load(sys.stdin):
+              if s['Spec']['Name'] == '$SERVICE_NAME':
+                  print(s['Version']['Index']); break
+          " 2>/dev/null)
+
+            SVC_SPEC=$(echo "$SERVICES" | python3 -c "
+          import sys,json
+          for s in json.load(sys.stdin):
+              if s['Spec']['Name'] == '$SERVICE_NAME':
+                  spec = s['Spec']
+                  spec['TaskTemplate']['ForceUpdate'] = spec['TaskTemplate'].get('ForceUpdate', 0) + 1
+                  print(json.dumps(spec)); break
+          " 2>/dev/null)
+
+            if [ -n "$SVC_ID" ] && [ -n "$SVC_SPEC" ]; then
+              curl --insecure -s -X POST \
+                -H "X-API-Key: ${PORTAINER_TOKEN}" \
+                -H "Content-Type: application/json" \
+                -H "X-Registry-Auth: ${AUTH}" \
+                -d "$SVC_SPEC" \
+                "${PORTAINER_URL}/api/endpoints/1/docker/services/${SVC_ID}/update?version=${SVC_VERSION}" \
+                -o /dev/null -w "Update ${SERVICE_NAME}: HTTP %{http_code}\n"
+            else
+              echo "Service ${SERVICE_NAME} not found, skipping"
+            fi
+          done
+
+          echo "Deploy complete!"
