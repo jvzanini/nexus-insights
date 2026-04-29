@@ -2,13 +2,13 @@ FROM node:20-alpine AS deps
 WORKDIR /app
 RUN apk add --no-cache openssl
 COPY package.json package-lock.json* ./
-RUN npm install --legacy-peer-deps --omit=dev && npm cache clean --force
+RUN npm install --legacy-peer-deps && npm cache clean --force
 
 FROM node:20-alpine AS builder
 WORKDIR /app
 RUN apk add --no-cache openssl
 COPY package.json package-lock.json* ./
-RUN npm install --legacy-peer-deps && npm cache clean --force
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
 ENV REDIS_URL="redis://dummy:6379"
