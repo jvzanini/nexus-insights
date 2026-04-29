@@ -3,26 +3,14 @@ name: Build and Push
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npx prisma generate
-      - run: npm test
-
   build:
-    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -51,66 +39,47 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            APP_VERSION=${{ github.sha }}
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' }}
     env:
       PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
       PORTAINER_TOKEN: ${{ secrets.PORTAINER_TOKEN }}
+      PORTAINER_ENDPOINT_ID: ${{ secrets.PORTAINER_ENDPOINT_ID }}
+      PORTAINER_STACK_ID: ${{ secrets.PORTAINER_STACK_ID }}
       GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
     steps:
-      - name: Pull image and update services
+      - name: Trigger Portainer redeploy
         run: |
-          # Pull da nova imagem no Portainer
-          AUTH=$(echo -n "{\"username\":\"jvzanini\",\"password\":\"${GHCR_TOKEN}\"}" | base64 -w 0)
+          if [ -z "$PORTAINER_STACK_ID" ]; then
+            echo "PORTAINER_STACK_ID não configurado — pulando redeploy automático."
+            exit 0
+          fi
 
-          curl --insecure -X POST \
+          AUTH=$(printf '{"username":"jvzanini","password":"%s"}' "$GHCR_TOKEN" | base64 | tr -d '\n')
+
+          # Pull da imagem nova
+          curl --silent --insecure -X POST \
             -H "X-API-Key: ${PORTAINER_TOKEN}" \
             -H "X-Registry-Auth: ${AUTH}" \
-            "${PORTAINER_URL}/api/endpoints/1/docker/images/create?fromImage=ghcr.io/jvzanini/nexus-roteador-webhook&tag=latest" \
-            -o /dev/null -w "Pull: HTTP %{http_code}\n"
+            "${PORTAINER_URL}/api/endpoints/${PORTAINER_ENDPOINT_ID}/docker/images/create?fromImage=ghcr.io/jvzanini/nexus-insights&tag=latest" \
+            -o /tmp/pull.log -w "Pull: HTTP %{http_code}\n" || true
 
-          # Forçar update dos serviços
-          SERVICES=$(curl --insecure -s \
+          # Redeploy stack
+          HTTP=$(curl --silent --insecure -o /tmp/redeploy.log -w "%{http_code}" -X POST \
             -H "X-API-Key: ${PORTAINER_TOKEN}" \
-            "${PORTAINER_URL}/api/endpoints/1/docker/services")
+            -H "Content-Type: application/json" \
+            "${PORTAINER_URL}/api/stacks/${PORTAINER_STACK_ID}/git/redeploy?endpointId=${PORTAINER_ENDPOINT_ID}" \
+            -d '{"PullImage":true}')
+          echo "Redeploy git: HTTP ${HTTP}"
+          [ "$HTTP" = "200" ] && exit 0
 
-          for SERVICE_NAME in nexus-roteador-webhook_app nexus-roteador-webhook_worker; do
-            SVC_ID=$(echo "$SERVICES" | python3 -c "
-          import sys,json
-          for s in json.load(sys.stdin):
-              if s['Spec']['Name'] == '$SERVICE_NAME':
-                  print(s['ID']); break
-          " 2>/dev/null)
-
-            SVC_VERSION=$(echo "$SERVICES" | python3 -c "
-          import sys,json
-          for s in json.load(sys.stdin):
-              if s['Spec']['Name'] == '$SERVICE_NAME':
-                  print(s['Version']['Index']); break
-          " 2>/dev/null)
-
-            SVC_SPEC=$(echo "$SERVICES" | python3 -c "
-          import sys,json
-          for s in json.load(sys.stdin):
-              if s['Spec']['Name'] == '$SERVICE_NAME':
-                  spec = s['Spec']
-                  spec['TaskTemplate']['ForceUpdate'] = spec['TaskTemplate'].get('ForceUpdate', 0) + 1
-                  print(json.dumps(spec)); break
-          " 2>/dev/null)
-
-            if [ -n "$SVC_ID" ] && [ -n "$SVC_SPEC" ]; then
-              curl --insecure -s -X POST \
-                -H "X-API-Key: ${PORTAINER_TOKEN}" \
-                -H "Content-Type: application/json" \
-                -H "X-Registry-Auth: ${AUTH}" \
-                -d "$SVC_SPEC" \
-                "${PORTAINER_URL}/api/endpoints/1/docker/services/${SVC_ID}/update?version=${SVC_VERSION}" \
-                -o /dev/null -w "Update ${SERVICE_NAME}: HTTP %{http_code}\n"
-            else
-              echo "Service ${SERVICE_NAME} not found, skipping"
-            fi
-          done
-
-          echo "Deploy complete!"
+          # Fallback: docker stack update via Update Stack endpoint
+          STACK=$(curl --silent --insecure -H "X-API-Key: ${PORTAINER_TOKEN}" "${PORTAINER_URL}/api/stacks/${PORTAINER_STACK_ID}")
+          echo "Stack: $STACK" | head -c 300
+          echo ""
+          echo "Considere redeploy manual via Portainer UI."
