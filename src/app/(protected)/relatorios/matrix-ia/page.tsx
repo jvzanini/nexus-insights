@@ -18,11 +18,10 @@ import { getAllSettings } from "@/lib/settings/get";
 import { matrixIaMetrics } from "@/lib/chatwoot/queries/matrix-ia";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
 import { formatDuration } from "@/lib/utils/format-time";
+import { getActiveAccountId } from "@/lib/reports/active-account";
 
 export const metadata = { title: "Matrix IA | Nexus Insights" };
 export const dynamic = "force-dynamic";
-
-const ACCOUNT_ID = 9;
 
 function readBoolean(value: unknown, fallback: boolean): boolean {
   if (typeof value === "boolean") return value;
@@ -65,10 +64,12 @@ export default async function Page() {
     redirect("/dashboard");
   }
 
+  const accountId = await getActiveAccountId();
+
   // Override do excludeMatrixIA — a query força inbox 31 internamente.
   const filters: ReportFilters = { excludeMatrixIA: false };
 
-  const result = await matrixIaMetrics({ accountId: ACCOUNT_ID, filters });
+  const result = await matrixIaMetrics({ accountId: accountId, filters });
   const m = result.data;
 
   return (
@@ -165,7 +166,7 @@ export default async function Page() {
                 </div>
                 <div className="shrink-0 sm:pt-1">
                   <OpenInChatwoot
-                    accountId={ACCOUNT_ID}
+                    accountId={accountId}
                     displayId={c.displayId}
                   />
                 </div>

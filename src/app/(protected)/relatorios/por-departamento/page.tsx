@@ -14,11 +14,10 @@ import { porDepartamento } from "@/lib/chatwoot/queries/por-departamento";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
 import { formatDuration } from "@/lib/utils/format-time";
 import { cn } from "@/lib/utils";
+import { getActiveAccountId } from "@/lib/reports/active-account";
 
 export const metadata = { title: "Por departamento | Nexus Insights" };
 export const dynamic = "force-dynamic";
-
-const ACCOUNT_ID = 9;
 
 const VALID_PERIODS: PeriodKey[] = [
   "hoje",
@@ -93,8 +92,10 @@ export default async function Page({ searchParams }: PageProps) {
   const range = getPeriod(period);
   const filters: ReportFilters = { period: range };
 
+  const accountId = await getActiveAccountId();
+
   const result = await porDepartamento({
-    accountId: ACCOUNT_ID,
+    accountId,
     filters,
   });
 

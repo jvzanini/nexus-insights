@@ -13,11 +13,10 @@ import {
 import { getCurrentUser } from "@/lib/auth";
 import { statusDistribution } from "@/lib/chatwoot/queries/status-distribution";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
+import { getActiveAccountId } from "@/lib/reports/active-account";
 
 export const metadata = { title: "Status das conversas | Nexus Insights" };
 export const dynamic = "force-dynamic";
-
-const ACCOUNT_ID = 9;
 
 const VALID_PERIODS: PeriodKey[] = [
   "hoje",
@@ -45,8 +44,10 @@ export default async function Page({ searchParams }: PageProps) {
   const range = getPeriod(period);
   const filters: ReportFilters = { period: range };
 
+  const accountId = await getActiveAccountId();
+
   const result = await statusDistribution({
-    accountId: ACCOUNT_ID,
+    accountId,
     filters,
   });
 

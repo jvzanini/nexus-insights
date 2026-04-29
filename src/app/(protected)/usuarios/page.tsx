@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import { listUsers } from "@/lib/actions/users";
 import { getCurrentUser } from "@/lib/auth";
-import { UsersTable } from "@/components/users/users-table";
-import { getInboxes, getTeams } from "@/lib/chatwoot/queries/meta-cache";
+import { UsersTabs } from "@/components/users/users-tabs";
+import { getTeams } from "@/lib/chatwoot/queries/meta-cache";
 import { getAccessibleAccountIds } from "@/lib/tenant";
 
 export const metadata = { title: "Usuários | Nexus Insights" };
@@ -41,7 +41,7 @@ export default async function UsuariosPage() {
   }
 
   return (
-    <UsersTable
+    <UsersTabs
       users={users}
       currentUser={user as never}
       accountOptions={accountOptions}

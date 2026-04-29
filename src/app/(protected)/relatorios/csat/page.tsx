@@ -5,11 +5,11 @@ import { KpiCard } from "@/components/reports/kpi-card";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
 import { chatwootQuery } from "@/lib/chatwoot/pool";
+import { getActiveAccountId } from "@/lib/reports/active-account";
 
 export const metadata = { title: "CSAT | Nexus Insights" };
 export const dynamic = "force-dynamic";
 
-const ACCOUNT_ID = 9;
 const CSAT_DOCS_URL = "https://www.chatwoot.com/docs/product/features/csat";
 
 interface RowSummary {
@@ -48,12 +48,14 @@ export default async function Page() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
+  const accountId = await getActiveAccountId();
+
   // Resumo (count + avg). Sem cache — query barata.
   const summary = await chatwootQuery<RowSummary>(
     `SELECT COUNT(*)::bigint AS total, AVG(rating)::float AS avg
        FROM csat_survey_responses
       WHERE account_id = $1`,
-    [ACCOUNT_ID],
+    [accountId],
   );
   const totalRespostas = Number(summary[0]?.total ?? 0);
   const avgRating = summary[0]?.avg ?? null;
@@ -104,7 +106,7 @@ export default async function Page() {
         WHERE account_id = $1
         GROUP BY rating
         ORDER BY rating ASC`,
-      [ACCOUNT_ID],
+      [accountId],
     ),
     chatwootQuery<RowResponse>(
       `SELECT csr.id,
@@ -117,7 +119,7 @@ export default async function Page() {
         WHERE csr.account_id = $1
         ORDER BY csr.created_at DESC
         LIMIT 10`,
-      [ACCOUNT_ID],
+      [accountId],
     ),
   ]);
 

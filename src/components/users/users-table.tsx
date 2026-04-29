@@ -52,11 +52,13 @@ export function UsersTable({
   currentUser,
   accountOptions,
   teamOptions,
+  hideHeader = false,
 }: {
   users: UserListItem[];
   currentUser: AuthUser;
   accountOptions: AccountOption[];
   teamOptions: TeamOption[];
+  hideHeader?: boolean;
 }) {
   const [openDialog, setOpenDialog] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -103,19 +105,30 @@ export function UsersTable({
 
   return (
     <div>
-      <PageHeader
-        icon={UsersIcon}
-        title="Usuários"
-        subtitle="Gerencie os usuários da plataforma"
-        actions={
-          allowedRoles.length > 0 ? (
+      {hideHeader ? (
+        allowedRoles.length > 0 ? (
+          <div className="mb-4 flex justify-end">
             <Button onClick={() => setOpenDialog(true)} className="cursor-pointer">
               <Plus className="h-4 w-4 mr-1.5" />
               Novo usuário
             </Button>
-          ) : null
-        }
-      />
+          </div>
+        ) : null
+      ) : (
+        <PageHeader
+          icon={UsersIcon}
+          title="Usuários"
+          subtitle="Gerencie os usuários da plataforma"
+          actions={
+            allowedRoles.length > 0 ? (
+              <Button onClick={() => setOpenDialog(true)} className="cursor-pointer">
+                <Plus className="h-4 w-4 mr-1.5" />
+                Novo usuário
+              </Button>
+            ) : null
+          }
+        />
+      )}
 
       <div className="rounded-2xl border border-border bg-muted/20 overflow-hidden">
         <Table>

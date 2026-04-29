@@ -19,6 +19,7 @@ export interface HomeSummaryAtendente {
 
 export interface HomeSummary {
   conversasHoje: number;
+  conversasOntem: number;
   backlog: number;
   orfas: number;
   p50FirstResponseSec: number;
@@ -28,6 +29,9 @@ export interface HomeSummary {
 const DEFAULT_TTL_SECONDS = 30;
 
 interface RowConversasHoje {
+  total: string;
+}
+interface RowConversasOntem {
   total: string;
 }
 interface RowBacklog {
@@ -76,6 +80,15 @@ export async function homeSummary(args: {
                 = (now() AT TIME ZONE 'America/Sao_Paulo')::date
           `;
 
+          // 1b) Conversas criadas ontem (mesma TZ) para comparativo.
+          const sqlOntem = `
+            SELECT COUNT(*)::bigint AS total
+            FROM conversations c
+            WHERE ${base.whereSql}
+              AND (c.created_at AT TIME ZONE 'America/Sao_Paulo')::date
+                = ((now() AT TIME ZONE 'America/Sao_Paulo')::date - interval '1 day')::date
+          `;
+
           // 2) Backlog: abertas + pendentes.
           const sqlBacklog = `
             SELECT COUNT(*)::bigint AS total
@@ -117,10 +130,14 @@ export async function homeSummary(args: {
             LIMIT 5
           `;
 
-          const [hojeRes, backlogRes, orfasRes, p50Res, topRes] =
+          const [hojeRes, ontemRes, backlogRes, orfasRes, p50Res, topRes] =
             await Promise.all([
               pool.query<RowConversasHoje>(
                 sqlHoje,
+                base.params as unknown[],
+              ),
+              pool.query<RowConversasOntem>(
+                sqlOntem,
                 base.params as unknown[],
               ),
               pool.query<RowBacklog>(
@@ -134,6 +151,7 @@ export async function homeSummary(args: {
 
           const data: HomeSummary = {
             conversasHoje: Number(hojeRes.rows[0]?.total ?? 0),
+            conversasOntem: Number(ontemRes.rows[0]?.total ?? 0),
             backlog: Number(backlogRes.rows[0]?.total ?? 0),
             orfas: Number(orfasRes.rows[0]?.total ?? 0),
             p50FirstResponseSec: Math.round(

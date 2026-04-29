@@ -17,11 +17,10 @@ import {
   type Granularity,
 } from "@/lib/chatwoot/queries/leads-recebidos";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
+import { getActiveAccountId } from "@/lib/reports/active-account";
 
 export const metadata = { title: "Leads recebidos | Nexus Insights" };
 export const dynamic = "force-dynamic";
-
-const ACCOUNT_ID = 9;
 
 const VALID_PERIODS: PeriodKey[] = [
   "hoje",
@@ -42,6 +41,8 @@ export default async function Page({ searchParams }: PageProps) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
+  const accountId = await getActiveAccountId();
+
   const sp = await searchParams;
   const periodRaw =
     typeof sp.period === "string" ? (sp.period as PeriodKey) : null;
@@ -59,24 +60,23 @@ export default async function Page({ searchParams }: PageProps) {
   const filters: ReportFilters = { period: range };
 
   const result = await leadsRecebidos({
-    accountId: ACCOUNT_ID,
+    accountId,
     filters,
     granularity,
+    compareWith: true,
   });
 
-  const total = result.data.reduce((acc, r) => acc + r.total, 0);
+  const rows = result.data.rows;
+  const comparison = result.data.comparison;
+
+  const total = rows.reduce((acc, r) => acc + r.total, 0);
 
   // Média por bucket no período (não exatamente "média diária", mas
   // funciona em qualquer granularidade).
   const avg =
-    result.data.length > 0
-      ? Math.round((total / result.data.length) * 10) / 10
-      : 0;
+    rows.length > 0 ? Math.round((total / rows.length) * 10) / 10 : 0;
 
-  const peak = result.data.reduce(
-    (acc, r) => (r.total > acc ? r.total : acc),
-    0,
-  );
+  const peak = rows.reduce((acc, r) => (r.total > acc ? r.total : acc), 0);
 
   return (
     <div>
@@ -101,6 +101,15 @@ export default async function Page({ searchParams }: PageProps) {
           icon={Sigma}
           label="Total no período"
           value={total.toLocaleString("pt-BR")}
+          delta={
+            comparison
+              ? {
+                  percent: comparison.deltaPct,
+                  direction: comparison.direction,
+                  period: "vs período anterior",
+                }
+              : undefined
+          }
         />
         <KpiCard
           icon={TrendingUp}
@@ -135,12 +144,12 @@ export default async function Page({ searchParams }: PageProps) {
             .
           </p>
         </div>
-        {result.data.length === 0 || total === 0 ? (
+        {rows.length === 0 || total === 0 ? (
           <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">
             Sem leads no período selecionado.
           </div>
         ) : (
-          <LeadsLineChart data={result.data} granularity={granularity} />
+          <LeadsLineChart data={rows} granularity={granularity} />
         )}
       </div>
     </div>

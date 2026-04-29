@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import {
   Calendar,
   Clock,
@@ -13,10 +12,10 @@ import { CachedBadge } from "@/components/reports/cached-badge";
 import { KpiCard } from "@/components/reports/kpi-card";
 import { StaleBanner } from "@/components/reports/stale-banner";
 import { homeSummary } from "@/lib/chatwoot/queries/home-summary";
+import { calculateDelta } from "@/lib/reports/delta";
+import { getActiveAccountId } from "@/lib/reports/active-account";
 
 export const metadata = { title: "Dashboard | Nexus Insights" };
-
-const DEFAULT_ACCOUNT_ID = 9;
 
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -32,13 +31,6 @@ function formatDuration(seconds: number): string {
   return `${(seconds / 3600).toFixed(1)}h`;
 }
 
-async function getActiveAccountId(): Promise<number> {
-  const store = await cookies();
-  const raw = store.get("nexus_active_account")?.value;
-  const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_ACCOUNT_ID;
-}
-
 export default async function Page() {
   const accountId = await getActiveAccountId();
   const summary = await homeSummary({ accountId, filters: {} });
@@ -52,6 +44,11 @@ export default async function Page() {
   const sortedAtendentes = [...data.topAtendentes]
     .sort((a, b) => b.volume - a.volume)
     .slice(0, 5);
+
+  const conversasDelta = calculateDelta(
+    data.conversasHoje,
+    data.conversasOntem,
+  );
 
   return (
     <div>
@@ -69,6 +66,11 @@ export default async function Page() {
           icon={Calendar}
           label="Conversas hoje"
           value={data.conversasHoje.toLocaleString("pt-BR")}
+          delta={{
+            percent: conversasDelta.percent,
+            direction: conversasDelta.direction,
+            period: "vs ontem",
+          }}
         />
         <KpiCard
           icon={Inbox}

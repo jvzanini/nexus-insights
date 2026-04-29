@@ -11,11 +11,11 @@ import { KpiCard } from "@/components/reports/kpi-card";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
 import { chatwootQuery } from "@/lib/chatwoot/pool";
+import { getActiveAccountId } from "@/lib/reports/active-account";
 
 export const metadata = { title: "SLA | Nexus Insights" };
 export const dynamic = "force-dynamic";
 
-const ACCOUNT_ID = 9;
 const SLA_DOCS_URL = "https://www.chatwoot.com/docs/product/features/sla";
 
 interface RowCount {
@@ -56,9 +56,11 @@ export default async function Page() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
+  const accountId = await getActiveAccountId();
+
   const policiesCountRows = await chatwootQuery<RowCount>(
     `SELECT COUNT(*)::bigint AS total FROM sla_policies WHERE account_id = $1`,
-    [ACCOUNT_ID],
+    [accountId],
   );
   const policiesCount = Number(policiesCountRows[0]?.total ?? 0);
 
@@ -113,7 +115,7 @@ export default async function Page() {
         WHERE account_id = $1
         ORDER BY created_at DESC
         LIMIT 50`,
-      [ACCOUNT_ID],
+      [accountId],
     ),
     chatwootQuery<RowAppliedSummary>(
       `SELECT
@@ -122,7 +124,7 @@ export default async function Page() {
           COUNT(*) FILTER (WHERE sla_status = 'active_with_misses')::bigint AS em_risco
         FROM applied_slas
         WHERE account_id = $1`,
-      [ACCOUNT_ID],
+      [accountId],
     ).catch(() => [] as RowAppliedSummary[]),
   ]);
 

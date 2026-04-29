@@ -14,11 +14,10 @@ import { getCurrentUser } from "@/lib/auth";
 import { volumetriaDow } from "@/lib/chatwoot/queries/volumetria-dow";
 import { volumetriaHeatmap } from "@/lib/chatwoot/queries/volumetria-heatmap";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
+import { getActiveAccountId } from "@/lib/reports/active-account";
 
 export const metadata = { title: "Volumetria | Nexus Insights" };
 export const dynamic = "force-dynamic";
-
-const ACCOUNT_ID = 9;
 
 const VALID_PERIODS: PeriodKey[] = [
   "hoje",
@@ -46,9 +45,11 @@ export default async function Page({ searchParams }: PageProps) {
   const range = getPeriod(period);
   const filters: ReportFilters = { period: range };
 
+  const accountId = await getActiveAccountId();
+
   const [dowResult, heatmapResult] = await Promise.all([
-    volumetriaDow({ accountId: ACCOUNT_ID, filters }),
-    volumetriaHeatmap({ accountId: ACCOUNT_ID, filters }),
+    volumetriaDow({ accountId, filters }),
+    volumetriaHeatmap({ accountId, filters }),
   ]);
 
   const stale = dowResult.stale || heatmapResult.stale;

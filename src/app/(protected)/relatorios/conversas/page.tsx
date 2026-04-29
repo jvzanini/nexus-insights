@@ -10,12 +10,11 @@ import { getCurrentUser } from "@/lib/auth";
 import { getInboxes, getTeams } from "@/lib/chatwoot/queries/meta-cache";
 import { getPeriod } from "@/lib/reports/period";
 import { fetchConversas } from "@/lib/actions/reports/conversas";
+import { getActiveAccountId } from "@/lib/reports/active-account";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
 
 export const metadata = { title: "Conversas | Nexus Insights" };
 export const dynamic = "force-dynamic";
-
-const ACCOUNT_ID = 9; // Matrix Fitness Group.
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -24,6 +23,8 @@ interface PageProps {
 export default async function ConversasPage({ searchParams }: PageProps) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+
+  const accountId = await getActiveAccountId();
 
   const sp = await searchParams;
   const params = new URLSearchParams();
@@ -44,9 +45,9 @@ export default async function ConversasPage({ searchParams }: PageProps) {
   // Carrega meta + dados em paralelo. Cada chamada é resiliente
   // a falhas do Chatwoot (cache fallback).
   const [inboxesResult, teamsResult, conversasResult] = await Promise.all([
-    getInboxes(ACCOUNT_ID).catch(() => null),
-    getTeams(ACCOUNT_ID).catch(() => null),
-    fetchConversas({ filters: reportFilters, accountId: ACCOUNT_ID }),
+    getInboxes(accountId).catch(() => null),
+    getTeams(accountId).catch(() => null),
+    fetchConversas({ filters: reportFilters, accountId: accountId }),
   ]);
 
   const inboxes = inboxesResult?.data ?? [];
@@ -81,7 +82,7 @@ export default async function ConversasPage({ searchParams }: PageProps) {
       <ConversasTable
         initialRows={conversasResult.rows}
         initialCursor={conversasResult.nextCursor}
-        accountId={ACCOUNT_ID}
+        accountId={accountId}
         filters={reportFilters}
       />
     </div>

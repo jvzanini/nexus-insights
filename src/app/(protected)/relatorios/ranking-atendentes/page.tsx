@@ -23,11 +23,10 @@ import { getCurrentUser } from "@/lib/auth";
 import { rankingAtendentes } from "@/lib/chatwoot/queries/ranking-atendentes";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
 import { formatDuration } from "@/lib/utils/format-time";
+import { getActiveAccountId } from "@/lib/reports/active-account";
 
 export const metadata = { title: "Ranking de atendentes | Nexus Insights" };
 export const dynamic = "force-dynamic";
-
-const ACCOUNT_ID = 9;
 
 const VALID_PERIODS: PeriodKey[] = [
   "hoje",
@@ -63,8 +62,10 @@ export default async function Page({ searchParams }: PageProps) {
   const range = getPeriod(period);
   const filters: ReportFilters = { period: range };
 
+  const accountId = await getActiveAccountId();
+
   const result = await rankingAtendentes({
-    accountId: ACCOUNT_ID,
+    accountId,
     filters,
     limit: 50,
   });

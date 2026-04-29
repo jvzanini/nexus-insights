@@ -23,6 +23,7 @@ import {
   type NavItem,
 } from "@/lib/constants/nav";
 import type { PlatformRole } from "@/generated/prisma/client";
+import { AccountSwitcher } from "@/components/layout/account-switcher";
 
 interface SidebarUser {
   id: string;
@@ -37,9 +38,16 @@ interface SidebarUser {
 interface SidebarProps {
   user: SidebarUser;
   appSettings?: Record<string, unknown>;
+  accounts?: Array<{ id: number; name: string }>;
+  activeAccountId?: number;
 }
 
-export function Sidebar({ user, appSettings = {} }: SidebarProps) {
+export function Sidebar({
+  user,
+  appSettings = {},
+  accounts = [],
+  activeAccountId,
+}: SidebarProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
@@ -173,6 +181,15 @@ export function Sidebar({ user, appSettings = {} }: SidebarProps) {
           </p>
         </div>
       </div>
+
+      {user.platformRole === "super_admin" &&
+      accounts.length > 0 &&
+      typeof activeAccountId === "number" ? (
+        <AccountSwitcher
+          accounts={accounts}
+          currentAccountId={activeAccountId}
+        />
+      ) : null}
 
       <nav className="flex-1 px-3 py-4 space-y-1">
         {visibleNav.map((item, index) => (
