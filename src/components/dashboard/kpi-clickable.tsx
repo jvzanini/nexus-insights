@@ -1,4 +1,5 @@
-"use client";
+// Server Component — não pode ter "use client" porque recebe LucideIcon
+// (function) como prop direto da page.tsx (Server Component).
 
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
