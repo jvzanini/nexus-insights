@@ -2,15 +2,26 @@
 
 import { z } from "zod";
 import bcrypt from "bcryptjs";
+import { nanoid } from "nanoid";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import { sendEmailChangeVerification } from "@/lib/email";
 
 type ActionResult<T = unknown> = { success: boolean; data?: T; error?: string };
 
+const EMAIL_TOKEN_EXPIRY_MS = 60 * 60 * 1000; // 1 hora
+const EMAIL_RATE_LIMIT_MS = 2 * 60 * 1000; // 2 minutos
+
 const UpdateProfileSchema = z.object({
   name: z.string().min(2).max(120).optional(),
+  avatarUrl: z.string().nullable().optional(),
   theme: z.enum(["dark", "light", "system"]).optional(),
+});
+
+const RequestEmailChangeSchema = z.object({
+  newEmail: z.string().email("E-mail inválido"),
+  password: z.string().min(1, "Senha obrigatória"),
 });
 
 const ChangePasswordSchema = z
@@ -81,6 +92,86 @@ export async function changePassword(input: unknown): Promise<ActionResult> {
   } catch (err) {
     console.error("[profile.changePassword]", err);
     return { success: false, error: "Erro ao trocar senha" };
+  }
+}
+
+export async function requestEmailChange(input: unknown): Promise<ActionResult> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, error: "Não autenticado" };
+
+    const parsed = RequestEmailChangeSchema.safeParse(input);
+    if (!parsed.success) {
+      return { success: false, error: parsed.error.issues[0]?.message ?? "Dados inválidos" };
+    }
+
+    const normalizedEmail = parsed.data.newEmail.trim().toLowerCase();
+
+    if (normalizedEmail === user.email.toLowerCase()) {
+      return { success: false, error: "O novo e-mail é igual ao atual" };
+    }
+
+    const dbUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { password: true, name: true },
+    });
+    if (!dbUser) return { success: false, error: "Usuário não encontrado" };
+
+    const valid = await bcrypt.compare(parsed.data.password, dbUser.password);
+    if (!valid) return { success: false, error: "Senha incorreta" };
+
+    const existing = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      select: { id: true },
+    });
+    if (existing) return { success: false, error: "Este e-mail já está em uso" };
+
+    // Rate limit por usuário (2 minutos)
+    const recent = await prisma.emailChangeToken.findFirst({
+      where: {
+        userId: user.id,
+        createdAt: { gte: new Date(Date.now() - EMAIL_RATE_LIMIT_MS) },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (recent) {
+      return { success: false, error: "Aguarde 2 minutos antes de solicitar novamente" };
+    }
+
+    // Gera token plain + hash (igual ao padrão de password reset deste projeto)
+    const token = nanoid(48);
+    const tokenHash = await bcrypt.hash(token, 10);
+    const expiresAt = new Date(Date.now() + EMAIL_TOKEN_EXPIRY_MS);
+
+    await prisma.emailChangeToken.create({
+      data: {
+        userId: user.id,
+        newEmail: normalizedEmail,
+        tokenHash,
+        expiresAt,
+      },
+    });
+
+    const baseUrl = process.env.NEXTAUTH_URL ?? "https://nexusinsights.nexusai360.com";
+    const verifyUrl = `${baseUrl}/verify-email?token=${token}`;
+
+    try {
+      await sendEmailChangeVerification(normalizedEmail, dbUser.name, verifyUrl);
+    } catch (err) {
+      console.error("[profile.requestEmailChange] envio falhou", err);
+      return { success: false, error: "Não foi possível enviar o e-mail de verificação" };
+    }
+
+    await logAudit({
+      userId: user.id,
+      action: "email_change_requested",
+      details: { newEmail: normalizedEmail },
+    });
+
+    return { success: true };
+  } catch (err) {
+    console.error("[profile.requestEmailChange]", err);
+    return { success: false, error: "Erro ao solicitar alteração de e-mail" };
   }
 }
 

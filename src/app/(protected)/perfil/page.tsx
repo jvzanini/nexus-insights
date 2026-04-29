@@ -1,43 +1,37 @@
 import { redirect } from "next/navigation";
-import { User } from "lucide-react";
+import { UserCog } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
-import { InfoCard } from "@/components/profile/info-card";
-import { ProfileForm } from "@/components/profile/profile-form";
+import { PersonalInfoCard } from "@/components/profile/personal-info-card";
+import { EmailChangeCard } from "@/components/profile/email-change-card";
+import { PasswordChangeCard } from "@/components/profile/password-change-card";
+import { AppearanceCard } from "@/components/profile/appearance-card";
 import { getCurrentUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 
-export const metadata = { title: "Perfil | Nexus Insights" };
+export const metadata = { title: "Meu Perfil | Nexus Insights" };
+export const dynamic = "force-dynamic";
 
 export default async function Page() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const dbUser = await prisma.user.findUnique({
-    where: { id: user.id },
-    select: { createdAt: true },
-  });
-
   return (
     <div>
       <PageHeader
-        icon={User}
-        title="Perfil"
-        subtitle="Suas informações pessoais"
+        icon={UserCog}
+        title="Meu Perfil"
+        subtitle="Suas informações pessoais e preferências"
       />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <InfoCard
-          email={user.email}
-          platformRole={user.platformRole}
-          isOwner={user.isOwner}
-          createdAt={dbUser?.createdAt ?? null}
-        />
-        <ProfileForm
-          initial={{
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <PersonalInfoCard
+          user={{
             name: user.name,
-            theme: user.theme,
+            avatarUrl: user.avatarUrl,
           }}
         />
+        <EmailChangeCard email={user.email} />
+        <PasswordChangeCard />
+        <AppearanceCard currentTheme={user.theme} />
       </div>
     </div>
   );
