@@ -1,28 +1,41 @@
-import { DefaultSession, DefaultUser } from 'next-auth';
-import { DefaultJWT } from 'next-auth/jwt';
+import type { DefaultSession, DefaultUser } from "next-auth";
+import type { DefaultJWT } from "next-auth/jwt";
+import type { PlatformRole, Theme } from "@/generated/prisma/client";
 
-declare module 'next-auth' {
+declare module "next-auth" {
   interface Session {
     user: {
       id: string;
-      isSuperAdmin: boolean;
+      platformRole: PlatformRole;
+      isOwner: boolean;
+      mustChangePassword: boolean;
       avatarUrl: string | null;
-      theme: string;
-    } & DefaultSession['user'];
+      theme: Theme;
+      accountIds: number[];
+      teamIds: number[];
+    } & DefaultSession["user"];
   }
 
   interface User extends DefaultUser {
-    isSuperAdmin: boolean;
-    avatarUrl: string | null;
-    theme: string;
+    platformRole?: PlatformRole;
+    isOwner?: boolean;
+    mustChangePassword?: boolean;
+    avatarUrl?: string | null;
+    theme?: Theme;
+    accountIds?: number[];
+    teamIds?: number[];
   }
 }
 
-declare module 'next-auth/jwt' {
+declare module "next-auth/jwt" {
   interface JWT extends DefaultJWT {
     id: string;
-    isSuperAdmin: boolean;
+    platformRole: PlatformRole;
+    isOwner: boolean;
+    mustChangePassword: boolean;
     avatarUrl: string | null;
-    theme: string;
+    theme: Theme;
+    accountIds: number[];
+    teamIds: number[];
   }
 }

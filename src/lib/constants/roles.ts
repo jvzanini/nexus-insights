@@ -1,5 +1,5 @@
 import { Crown, Shield, ShieldHalf, Eye } from "lucide-react";
-import type { PlatformRole } from "@/generated/prisma";
+import type { PlatformRole } from "@/generated/prisma/client";
 
 export const PLATFORM_ROLE_LABELS: Record<PlatformRole, string> = {
   super_admin: "Super Admin",

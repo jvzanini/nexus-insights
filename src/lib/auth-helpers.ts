@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { checkLoginRateLimit } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
-import type { PlatformRole, Theme } from "@/generated/prisma";
+import type { PlatformRole, Theme } from "@/generated/prisma/client";
 
 interface Credentials {
   email: string;
@@ -96,8 +96,12 @@ export async function authorizeCredentials(
     }),
   ]);
 
-  const accountIds = [...new Set(accountAccess.map((a) => a.chatwootAccountId))];
-  const teamIds = [...new Set(teamAccess.map((t) => t.chatwootTeamId))];
+  const accountIds: number[] = Array.from(
+    new Set(accountAccess.map((a: { chatwootAccountId: number }) => a.chatwootAccountId)),
+  );
+  const teamIds: number[] = Array.from(
+    new Set(teamAccess.map((t: { chatwootTeamId: number }) => t.chatwootTeamId)),
+  );
 
   return {
     id: user.id,

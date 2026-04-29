@@ -18,7 +18,7 @@ export async function getKnownAccounts(): Promise<
       { id: 2, name: "Invest Soluções" },
     ];
   }
-  return rows.map((r) => ({
+  return rows.map((r: { chatwootAccountId: number; chatwootAccountName: string }) => ({
     id: r.chatwootAccountId,
     name: r.chatwootAccountName,
   }));
@@ -45,7 +45,7 @@ export async function getAccessibleTeamIds(
     where: { userId: user.id, chatwootAccountId: accountId },
     select: { chatwootTeamId: true },
   });
-  return rows.map((r) => r.chatwootTeamId);
+  return rows.map((r: { chatwootTeamId: number }) => r.chatwootTeamId);
 }
 
 export async function assertAccountAccess(

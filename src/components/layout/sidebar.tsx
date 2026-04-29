@@ -22,7 +22,7 @@ import {
   NAV_ITEMS,
   type NavItem,
 } from "@/lib/constants/nav";
-import type { PlatformRole } from "@/generated/prisma";
+import type { PlatformRole } from "@/generated/prisma/client";
 
 interface SidebarUser {
   id: string;

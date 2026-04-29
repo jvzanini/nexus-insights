@@ -68,10 +68,18 @@ export const authConfig = {
               select: { chatwootTeamId: true },
             }),
           ]);
-          token.accountIds = [
-            ...new Set(accountAccess.map((a) => a.chatwootAccountId)),
-          ];
-          token.teamIds = [...new Set(teamAccess.map((t) => t.chatwootTeamId))];
+          token.accountIds = Array.from(
+            new Set(
+              accountAccess.map(
+                (a: { chatwootAccountId: number }) => a.chatwootAccountId,
+              ),
+            ),
+          );
+          token.teamIds = Array.from(
+            new Set(
+              teamAccess.map((t: { chatwootTeamId: number }) => t.chatwootTeamId),
+            ),
+          );
         } catch {
           // se falhar, manter token anterior — não derrubar auth
         }

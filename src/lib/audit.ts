@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import type { AuditAction } from "@/generated/prisma";
+import type { AuditAction } from "@/generated/prisma/client";
 
 export interface LogAuditParams {
   userId?: string | null;

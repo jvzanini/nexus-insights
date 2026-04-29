@@ -1,4 +1,4 @@
-import type { PlatformRole } from "@/generated/prisma";
+import type { PlatformRole } from "@/generated/prisma/client";
 import type { AuthUser } from "@/lib/auth-helpers";
 import { PLATFORM_ROLE_HIERARCHY } from "@/lib/constants/roles";
 

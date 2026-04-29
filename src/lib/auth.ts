@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import type { PlatformRole, Theme } from "@/generated/prisma";
+import type { PlatformRole, Theme } from "@/generated/prisma/client";
 
 export interface CurrentUser {
   id: string;
@@ -17,7 +17,7 @@ export interface CurrentUser {
 export async function getCurrentUser(): Promise<CurrentUser | null> {
   const session = await auth();
   if (!session?.user) return null;
-  const user = session.user as Record<string, unknown>;
+  const user = session.user as unknown as Record<string, unknown>;
   return {
     id: (user.id as string) ?? "",
     name: (user.name as string) ?? "",

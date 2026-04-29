@@ -115,7 +115,7 @@ export function ResetPasswordForm() {
     }
 
     startTransition(async () => {
-      const result = await resetPassword(token!, password);
+      const result = await resetPassword({ token: token!, password, confirmPassword });
       if (result.success) {
         setSuccess(true);
       } else {

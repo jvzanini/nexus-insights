@@ -16,7 +16,7 @@ import {
   Bot,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { PlatformRole } from "@/generated/prisma";
+import type { PlatformRole } from "@/generated/prisma/client";
 
 export type NavItem = {
   label: string;
