@@ -4,8 +4,10 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PollingSettingsForm } from "@/components/settings/polling-settings-form";
 import { VisibilitySettingsForm } from "@/components/settings/visibility-settings-form";
+import { PlatformSettingsCard } from "@/components/settings/platform-settings-card";
 import { getCurrentUser } from "@/lib/auth";
 import { getAllSettings } from "@/lib/actions/settings";
+import { getPlatformLocale, getPlatformTz } from "@/lib/datetime";
 
 export const metadata = { title: "Configurações | Nexus Insights" };
 
@@ -31,6 +33,13 @@ export default async function Page() {
 
   const result = await getAllSettings();
   const data = result.success && result.data ? result.data : {};
+
+  const [platformTimezone, platformLocale] = await Promise.all([
+    getPlatformTz(),
+    getPlatformLocale(),
+  ]);
+
+  const isSuperAdmin = user.platformRole === "super_admin";
 
   const polling = {
     liveSeconds: readNumber(data["polling.live_seconds"], 30),
@@ -61,6 +70,14 @@ export default async function Page() {
       />
 
       <div className="space-y-6">
+        {isSuperAdmin && (
+          <PlatformSettingsCard
+            currentTimezone={platformTimezone}
+            currentLocale={platformLocale}
+            canEdit={isSuperAdmin}
+          />
+        )}
+
         <Card className="rounded-2xl border border-border bg-muted/30 p-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-foreground">
