@@ -1,8 +1,8 @@
 /**
  * Lista paginada de conversas com JOINs para contact, inbox (estado),
  * team (departamento) e users (atendente). Inclui:
- *  - CPF extraído do additional_attributes do contato (regex).
- *  - Última mensagem (subquery).
+ *  - `identifier` e `additional_attributes` do contato (para detecção de CPF/CNPJ).
+ *  - Labels (taggings + tags) agregadas em JSON.
  *  - Cursor pagination por (last_activity_at DESC, id DESC).
  *
  * Pode ser usada tanto em modo "live" quanto histórico — caller decide TTL.
@@ -14,6 +14,11 @@ import { withCache } from "@/lib/cache/pull-through";
 import { cacheKey, hashFilters } from "@/lib/cache/keys";
 import { buildBaseFilter, type ReportFilters } from "../filters";
 
+export interface ConversaLabel {
+  name: string;
+  color: string;
+}
+
 export interface ConversaRow {
   id: number;
   display_id: number;
@@ -21,7 +26,8 @@ export interface ConversaRow {
     id: number | null;
     name: string | null;
     phone_number: string | null;
-    cpf: string | null;
+    identifier: string | null;
+    additional_attributes: Record<string, unknown> | null;
   };
   inbox: { id: number; name: string | null };
   team: { id: number | null; name: string | null };
@@ -29,7 +35,7 @@ export interface ConversaRow {
   status: number;
   priority: number | null;
   last_activity_at: string | null;
-  last_message: string | null;
+  labels: ConversaLabel[];
 }
 
 export interface ConversasListResult {
@@ -52,17 +58,18 @@ interface RawRow {
   status: number;
   priority: number | null;
   last_activity_at: Date | null;
-  last_message: string | null;
   contact_id: number | null;
   contact_name: string | null;
   contact_phone_number: string | null;
-  contact_cpf: string | null;
+  contact_identifier: string | null;
+  contact_additional_attributes: Record<string, unknown> | null;
   inbox_id: number;
   inbox_name: string | null;
   team_id: number | null;
   team_name: string | null;
   assignee_id: number | null;
   assignee_name: string | null;
+  labels: ConversaLabel[] | null;
 }
 
 function encodeCursor(c: ConversasListCursor): string {
@@ -140,23 +147,27 @@ export async function conversasList(args: {
               c.status,
               c.priority,
               c.last_activity_at,
-              (SELECT m.content FROM messages m
-                 WHERE m.conversation_id = c.id
-                 ORDER BY m.created_at DESC
-                 LIMIT 1) AS last_message,
               ct.id AS contact_id,
               ct.name AS contact_name,
               ct.phone_number AS contact_phone_number,
-              SUBSTRING(
-                ct.additional_attributes->>'description'
-                FROM 'CPF[: ]+([0-9.\\-]+)'
-              ) AS contact_cpf,
+              ct.identifier AS contact_identifier,
+              ct.additional_attributes AS contact_additional_attributes,
               c.inbox_id,
               ix.name AS inbox_name,
               c.team_id,
               tm.name AS team_name,
               c.assignee_id,
-              u.name AS assignee_name
+              u.name AS assignee_name,
+              COALESCE(
+                (
+                  SELECT json_agg(json_build_object('name', t.name, 'color', t.color))
+                  FROM taggings tg
+                  JOIN tags t ON t.id = tg.tag_id
+                  WHERE tg.taggable_id = c.id
+                    AND tg.taggable_type = 'Conversation'
+                ),
+                '[]'::json
+              ) AS labels
             FROM conversations c
             LEFT JOIN contacts ct ON ct.id = c.contact_id
             LEFT JOIN inboxes ix ON ix.id = c.inbox_id
@@ -178,7 +189,8 @@ export async function conversasList(args: {
               id: r.contact_id,
               name: r.contact_name,
               phone_number: r.contact_phone_number,
-              cpf: r.contact_cpf,
+              identifier: r.contact_identifier,
+              additional_attributes: r.contact_additional_attributes,
             },
             inbox: { id: r.inbox_id, name: r.inbox_name },
             team: { id: r.team_id, name: r.team_name },
@@ -188,7 +200,7 @@ export async function conversasList(args: {
             last_activity_at: r.last_activity_at
               ? r.last_activity_at.toISOString()
               : null,
-            last_message: r.last_message,
+            labels: Array.isArray(r.labels) ? r.labels : [],
           }));
 
           let nextCursor: string | null = null;

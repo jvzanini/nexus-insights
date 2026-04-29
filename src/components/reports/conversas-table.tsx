@@ -13,9 +13,11 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/reports/status-badge";
+import { PriorityBadge } from "@/components/reports/priority-badge";
+import { LabelsChips } from "@/components/reports/labels-chips";
 import { OpenInChatwoot } from "@/components/reports/open-in-chatwoot";
 import { formatPhone } from "@/lib/utils/format-phone";
-import { formatCpf } from "@/lib/utils/format-cpf";
+import { detectDocument } from "@/lib/utils/format-document";
 import {
   fetchConversas,
   type FetchConversasInput,
@@ -29,25 +31,18 @@ interface ConversasTableProps {
   filters: FetchConversasInput["filters"];
 }
 
-const rtf = new Intl.RelativeTimeFormat("pt-BR", { numeric: "auto" });
+function getDocumentDisplay(contact: ConversaRow["contact"]): string {
+  const doc = detectDocument({
+    identifier: contact.identifier,
+    additional_attributes: contact.additional_attributes,
+  });
+  return doc?.formatted ?? "—";
+}
 
-function formatRelativeTime(iso: string | null): string {
-  if (!iso) return "—";
-  const ts = new Date(iso).getTime();
-  if (Number.isNaN(ts)) return "—";
-  const deltaMs = Date.now() - ts;
-  const seconds = Math.round(deltaMs / 1000);
-  if (seconds < 60) return "agora mesmo";
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return rtf.format(-minutes, "minute");
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return rtf.format(-hours, "hour");
-  const days = Math.round(hours / 24);
-  if (days < 30) return rtf.format(-days, "day");
-  const months = Math.round(days / 30);
-  if (months < 12) return rtf.format(-months, "month");
-  const years = Math.round(days / 365);
-  return rtf.format(-years, "year");
+function getPhoneDisplay(phone: string | null): string {
+  if (!phone) return "—";
+  const formatted = formatPhone(phone);
+  return formatted || "—";
 }
 
 export function ConversasTable({
@@ -97,90 +92,171 @@ export function ConversasTable({
 
   return (
     <div className="rounded-2xl border border-border bg-card overflow-hidden">
-      <Table>
-        <TableHeader>
-          <TableRow className="hover:bg-transparent">
-            <TableHead className="w-16 text-xs uppercase tracking-wide text-muted-foreground">
-              #
-            </TableHead>
-            <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
-              Contato
-            </TableHead>
-            <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
-              Estado
-            </TableHead>
-            <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
-              Departamento
-            </TableHead>
-            <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
-              Atendente
-            </TableHead>
-            <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
-              Status
-            </TableHead>
-            <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
-              Última mensagem
-            </TableHead>
-            <TableHead className="w-24 text-right text-xs uppercase tracking-wide text-muted-foreground">
-              Ações
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((row) => (
-            <TableRow key={row.id} className="hover:bg-muted/30">
-              <TableCell className="font-mono text-xs text-muted-foreground">
-                #{row.display_id}
-              </TableCell>
-              <TableCell>
-                <div className="flex flex-col gap-0.5 max-w-[220px]">
-                  <span className="truncate text-sm font-medium text-foreground">
-                    {row.contact.name ?? "—"}
-                  </span>
-                  {row.contact.phone_number ? (
-                    <span className="text-xs text-muted-foreground">
-                      {formatPhone(row.contact.phone_number)}
+      {/* Desktop / large: tabela com 11 colunas. */}
+      <div className="hidden lg:block overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="w-16 text-xs uppercase tracking-wide text-muted-foreground">
+                #
+              </TableHead>
+              <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
+                Nome
+              </TableHead>
+              <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
+                WhatsApp
+              </TableHead>
+              <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
+                Documento
+              </TableHead>
+              <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
+                Estado
+              </TableHead>
+              <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
+                Departamento
+              </TableHead>
+              <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
+                Atendente
+              </TableHead>
+              <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
+                Status
+              </TableHead>
+              <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
+                Prioridade
+              </TableHead>
+              <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
+                Labels
+              </TableHead>
+              <TableHead className="w-24 text-right text-xs uppercase tracking-wide text-muted-foreground">
+                Ações
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => {
+              const phone = getPhoneDisplay(row.contact.phone_number);
+              const doc = getDocumentDisplay(row.contact);
+              const inboxName = row.inbox.name ?? "—";
+              const teamName = row.team.name ?? "—";
+              const assigneeName = row.assignee.name ?? "—";
+              const contactName = row.contact.name ?? "—";
+              return (
+                <TableRow key={row.id} className="hover:bg-muted/30">
+                  <TableCell className="font-mono text-xs text-muted-foreground">
+                    #{row.display_id}
+                  </TableCell>
+                  <TableCell>
+                    <span
+                      className="block max-w-[200px] truncate text-sm font-medium text-foreground"
+                      title={contactName}
+                    >
+                      {contactName}
                     </span>
-                  ) : null}
-                  {row.contact.cpf ? (
-                    <span className="text-xs text-muted-foreground">
-                      CPF: {formatCpf(row.contact.cpf)}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                    {phone}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
+                    {doc}
+                  </TableCell>
+                  <TableCell>
+                    <span
+                      className="block max-w-[140px] truncate text-xs text-muted-foreground"
+                      title={inboxName}
+                    >
+                      {inboxName}
                     </span>
-                  ) : null}
+                  </TableCell>
+                  <TableCell>
+                    <span
+                      className="block max-w-[140px] truncate text-xs text-muted-foreground"
+                      title={teamName}
+                    >
+                      {teamName}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <span
+                      className="block max-w-[140px] truncate text-xs text-muted-foreground"
+                      title={assigneeName}
+                    >
+                      {assigneeName}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge status={row.status} />
+                  </TableCell>
+                  <TableCell>
+                    <PriorityBadge priority={row.priority} />
+                  </TableCell>
+                  <TableCell>
+                    <LabelsChips labels={row.labels} />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <OpenInChatwoot
+                      accountId={accountId}
+                      displayId={row.display_id}
+                    />
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Mobile / tablet: lista de cards. */}
+      <ul className="lg:hidden divide-y divide-border">
+        {rows.map((row) => {
+          const phone = getPhoneDisplay(row.contact.phone_number);
+          const doc = getDocumentDisplay(row.contact);
+          const inboxName = row.inbox.name ?? "—";
+          const teamName = row.team.name ?? "—";
+          const assigneeName = row.assignee.name ?? "—";
+          const contactName = row.contact.name ?? "—";
+          return (
+            <li key={row.id} className="p-4 hover:bg-muted/30 transition-colors">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[11px] text-muted-foreground">
+                      #{row.display_id}
+                    </span>
+                  </div>
+                  <h3 className="mt-1 truncate text-sm font-semibold text-foreground">
+                    {contactName}
+                  </h3>
                 </div>
-              </TableCell>
-              <TableCell className="text-xs text-muted-foreground">
-                {row.inbox.name ?? "—"}
-              </TableCell>
-              <TableCell className="text-xs text-muted-foreground">
-                {row.team.name ?? "—"}
-              </TableCell>
-              <TableCell className="text-xs text-muted-foreground">
-                {row.assignee.name ?? "—"}
-              </TableCell>
-              <TableCell>
                 <StatusBadge status={row.status} />
-              </TableCell>
-              <TableCell>
-                <div className="flex flex-col gap-0.5 max-w-xs">
-                  <span className="truncate text-xs text-foreground/80">
-                    {row.last_message?.trim() || "—"}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground">
-                    {formatRelativeTime(row.last_activity_at)}
-                  </span>
+              </div>
+
+              <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2">
+                <Field label="WhatsApp" value={phone} mono />
+                <Field label="Documento" value={doc} mono />
+                <Field label="Estado" value={inboxName} />
+                <Field label="Departamento" value={teamName} />
+                <Field label="Atendente" value={assigneeName} />
+                <div className="flex flex-col gap-0.5">
+                  <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Prioridade
+                  </dt>
+                  <dd>
+                    <PriorityBadge priority={row.priority} />
+                  </dd>
                 </div>
-              </TableCell>
-              <TableCell className="text-right">
+              </dl>
+
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <LabelsChips labels={row.labels} />
                 <OpenInChatwoot
                   accountId={accountId}
                   displayId={row.display_id}
                 />
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
 
       {(cursor || error) && (
         <div
@@ -211,6 +287,31 @@ export function ConversasTable({
           ) : null}
         </div>
       )}
+    </div>
+  );
+}
+
+interface FieldProps {
+  label: string;
+  value: string;
+  mono?: boolean;
+}
+
+function Field({ label, value, mono }: FieldProps) {
+  return (
+    <div className="flex flex-col gap-0.5 min-w-0">
+      <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+        {label}
+      </dt>
+      <dd
+        className={cn(
+          "truncate text-xs text-foreground/90",
+          mono && "font-mono",
+        )}
+        title={value}
+      >
+        {value}
+      </dd>
     </div>
   );
 }
