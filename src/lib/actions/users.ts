@@ -1,10 +1,10 @@
 "use server";
 
 import bcrypt from "bcryptjs";
-import { nanoid } from "nanoid";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { generateTempPassword } from "@/lib/utils/generate-temp-password";
 import {
   canCreateRole,
   canDeleteUser,
@@ -36,10 +36,6 @@ export interface UserListItem {
   isActive: boolean;
   createdAt: Date;
   accountsCount: number;
-}
-
-function generateTempPassword() {
-  return nanoid(16);
 }
 
 export async function listUsers(): Promise<ActionResult<UserListItem[]>> {
