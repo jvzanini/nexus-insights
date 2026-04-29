@@ -71,7 +71,7 @@ export function LoginContent() {
         transition={{ delay: 0.15 }}
         className="text-center mb-10"
       >
-        <h1 className="text-2xl font-bold text-white tracking-tight">Nexus AI</h1>
+        <h1 className="text-2xl font-bold text-white tracking-tight">Nexus Insights</h1>
         <p className="text-sm text-zinc-500 mt-1">Relatórios e insights dos atendimentos</p>
       </motion.div>
 
