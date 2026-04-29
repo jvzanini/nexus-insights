@@ -1,137 +1,139 @@
-# Nexus AI — Roteador de Webhooks
+# Nexus Insights
 
-Plataforma interna de roteamento inteligente de webhooks da Meta (WhatsApp Cloud API). Recebe, filtra e distribui eventos para multiplos destinos com confiabilidade, retry automatico e monitoramento em tempo real.
+> Plataforma web de relatórios e insights da operação Chatwoot da Matrix Fitness Group — distribuidora nacional de equipamentos de academia.
+
+[![Deploy](https://img.shields.io/badge/deploy-portainer-blue)](https://painel.nexusai360.com) [![License](https://img.shields.io/badge/license-private-red)]() [![Stack](https://img.shields.io/badge/stack-next.js%2016%20%7C%20prisma%207-violet)]()
+
+## Visão geral
+
+Nexus Insights é uma plataforma de **somente leitura** que se conecta ao banco PostgreSQL do Chatwoot via usuário read-only (`chatwoot_leitura`), agrega dados e produz relatórios filtráveis por estado, departamento, atendente, período e status. Não realiza ações no Chatwoot — apenas redireciona o usuário para a conversa específica via deep-link quando necessário.
+
+- **URL de produção:** https://insights.nexusai360.com
+- **Branding:** seguindo o padrão do projeto Roteador Webhook Meta da Nexus AI.
+- **Domínio Chatwoot:** https://chatwoot.znsolucoes.com.br
 
 ## Funcionalidades
 
-- **Roteamento inteligente** — Filtre por tipo de evento e distribua para multiplos destinos
-- **Retry automatico** — Backoff exponencial ou fixo com recuperacao de falhas
-- **Dashboard em tempo real** — Metricas, graficos e monitoramento de entregas
-- **Gestao de empresas** — Multi-tenant com credenciais isoladas por empresa
-- **Controle de acesso** — Hierarquia Super Admin > Admin > Gerente > Visualizador
-- **Notificacoes** — Feed em tempo real via SSE (Server-Sent Events)
-- **Logs detalhados** — Consulta com paginacao cursor-based e filtros avancados
-- **Reenvio de webhooks** — Reprocesse entregas com falha em um clique
-- **Perfil de usuario** — Avatar, nome, email com verificacao, senha, tema
-- **Temas** — Dark mode, light mode e modo sistema
-- **Responsivo** — Otimizado para desktop, tablet e mobile
+### Implementado
+- Cópia integral do esqueleto do Roteador Webhook Meta (auth, sidebar, tema dark/light/system, primitivos UI).
+- Modelo de dados próprio: `User`, `UserAccountAccess`, `UserTeamAccess`, `AppSetting`, `AuditLog`, `PasswordResetToken`, `EmailChangeToken`.
+- Auth completa (NextAuth v5, JWT stateless, bcrypt, rate-limit, audit).
+- Sidebar adaptada com navegação para os 12 relatórios + Usuários + Configurações + Perfil.
+- Tela de login replicando exatamente o visual do Roteador.
+- Healthcheck granular `/api/health` com checks de DB, Redis e Chatwoot.
+- Camada de acesso ao Chatwoot via `pg` (pool dedicado) com `withChatwootResilience`.
+- Cache híbrido (Redis pull-through) com TTL configurável em runtime.
+- Settings dinâmicos (`AppSetting`) com cache 60s e invalidação SSE.
+- Worker BullMQ (audit-write, housekeeping placeholders).
 
-## Stack Tecnica
+### Em construção (próximas fases)
+- 12 relatórios completos (Dashboard, Conversas, Leads, Volumetria, Tempos, Ranking, Por Departamento, Por Estado, Status, CSAT, SLA, Matrix IA).
+- Server actions completas de usuários com regras hierárquicas e subset rules.
+- Tela `/usuarios` com tabela completa, dialogs, audit tab.
+- Tela `/configuracoes` (super admin) com toggles em tempo real.
+- Account switcher (super admin).
+- Worker pré-aquecimento real de cache.
+- Testes Jest com cobertura ≥80% nas áreas críticas.
+- Mapa do Brasil colorido por volume.
+
+## Stack
 
 | Camada | Tecnologia |
 |--------|-----------|
-| Frontend | Next.js 14+ (App Router, Server Components, Server Actions) |
-| Linguagem | TypeScript |
-| Estilo | Tailwind CSS + shadcn/ui (base-ui) + Framer Motion |
-| Autenticacao | NextAuth.js v5 (JWT stateless) |
-| Banco de dados | PostgreSQL 16 |
-| Cache/Fila | Redis 7 + BullMQ |
-| ORM | Prisma v7 |
-| Graficos | Recharts |
-| Email | Resend |
-| Icones | Lucide React |
-| Temas | next-themes |
-| Deploy | Docker Swarm via Portainer |
-| CI/CD | GitHub Actions |
-| Registry | GitHub Container Registry (ghcr.io) |
+| Framework | Next.js 16 (App Router) + React 19 |
+| Linguagem | TypeScript 5 strict |
+| Styling | Tailwind CSS 4 + base-ui (shadcn-style) |
+| Auth | NextAuth.js 5 (Credentials + JWT + bcryptjs) |
+| ORM (próprio DB) | Prisma 7 + `@prisma/adapter-pg` |
+| Acesso Chatwoot | `pg` 8 com queries SQL parametrizadas + Zod |
+| Cache & pub/sub | Redis 7 + ioredis |
+| Filas | BullMQ 5 |
+| Realtime | SSE em `/api/events` |
+| Charts | Recharts 3 |
+| Email | Resend + React Email |
+| Tests | Jest 30 + jest-mock-extended |
+| Container | Docker + Traefik labels |
+| Registry | `ghcr.io/jvzanini/nexus-insights` |
+| CI/CD | GitHub Actions → GHCR → Portainer redeploy |
 
-## Arquitetura
-
-```
-                    ┌─────────────────┐
-  Meta Webhook ────>│  Next.js API     │
-                    │  /api/webhook/:key│
-                    └────────┬────────┘
-                             │
-                    ┌────────▼────────┐
-                    │   Redis + BullMQ │
-                    │   (fila)         │
-                    └────────┬────────┘
-                             │
-                    ┌────────▼────────┐
-                    │   Worker         │
-                    │   (processador)  │
-                    └────────┬────────┘
-                             │
-               ┌─────────────┼─────────────┐
-               ▼             ▼             ▼
-          Destino A     Destino B     Destino N
-```
-
-## Infraestrutura
-
-4 containers Docker via Docker Swarm Stack:
-
-| Container | Servico |
-|-----------|---------|
-| `app` | Next.js (frontend + API + worker) |
-| `db` | PostgreSQL 16 |
-| `redis` | Redis 7 |
-| `worker` | BullMQ job processor |
-
-## Setup Local
-
-```bash
-# Clone
-git clone https://github.com/jvzanini/nexus-roteador-webhook.git
-cd nexus-roteador-webhook
-
-# Dependencias
-npm install
-
-# Variaveis de ambiente
-cp .env.example .env
-# Edite .env com suas credenciais
-
-# Prisma
-npx prisma generate
-npx prisma db push
-
-# Dev
-npm run dev
-```
-
-## Deploy
-
-O deploy e automatico via GitHub Actions:
-
-1. Push na branch `main`
-2. GitHub Actions executa build + testes
-3. Imagem Docker publicada no GHCR
-4. Deploy automatico no Portainer (Docker Swarm Stack)
-
-**URL de producao:** https://roteadorwebhook.nexusai360.com
-
-## Estrutura do Projeto
+## Estrutura
 
 ```
 src/
 ├── app/
-│   ├── (auth)/           # Login, esqueci senha, reset, verificacao email
-│   ├── (protected)/      # Dashboard, empresas, usuarios, settings, perfil
-│   └── api/              # Webhook ingest, health check, auth
+│   ├── (auth)/      # login, forgot, reset, verify-email
+│   ├── (protected)/ # dashboard, relatorios, usuarios, configuracoes, perfil
+│   └── api/         # auth, events, health, user/theme
 ├── components/
-│   ├── dashboard/        # Stats, graficos, filtros, entregas recentes
-│   ├── layout/           # Sidebar, notification bell
-│   ├── login/            # Branding, formulario login
-│   ├── providers/        # ThemeProvider, SessionProvider
-│   ├── routes/           # Cards de rota, formularios, lista
-│   └── ui/               # Componentes base (shadcn + CustomSelect)
+│   ├── layout/      # sidebar
+│   ├── login/       # login-branding, content, form
+│   ├── providers/   # session, theme
+│   └── ui/          # primitivos base-ui
 ├── lib/
-│   ├── actions/          # Server Actions (company, credential, dashboard, logs, etc.)
-│   └── constants/        # Eventos WhatsApp, configuracoes
-└── generated/            # Prisma client gerado
+│   ├── actions/     # server actions
+│   ├── chatwoot/    # pool, queries, deep-link, resilience
+│   ├── cache/       # keys, pull-through
+│   ├── settings/    # get, update
+│   ├── constants/   # roles, nav
+│   ├── permissions  # canCreateRole, canEditUser, etc
+│   ├── tenant       # getAccessibleAccountIds, getAccessibleTeamIds
+│   ├── audit, prisma, redis, queue, realtime, env, email...
+│   └── ...
+├── worker/          # BullMQ
+└── generated/prisma # gerado pelo prisma generate
+prisma/
+├── schema.prisma
+└── seed.ts
+docker/
+├── Dockerfile (multi-stage)
+└── entrypoint.sh
+docs/
+├── discovery/      # levantamentos do Chatwoot
+├── superpowers/    # specs e plans v1→v2→v3
+└── runbooks/
 ```
 
-## Versionamento
+## Quickstart local
 
-Este projeto segue commits semanticos em portugues:
+```bash
+# 1) Variáveis
+cp .env.example .env.local
+# preencher CHATWOOT_DATABASE_URL com credenciais read-only do Chatwoot
 
-- `feat:` — Nova funcionalidade
-- `fix:` — Correcao de bug
-- `docs:` — Documentacao
-- `refactor:` — Refatoracao sem mudanca de comportamento
+# 2) Subir Postgres + Redis local
+docker compose up -d db redis
 
-## Licenca
+# 3) Instalar deps + gerar Prisma Client
+npm install
+npx prisma generate
 
-Projeto interno — NexusAI360 &copy; 2026. Todos os direitos reservados.
+# 4) Migrar e seed
+DATABASE_URL=postgresql://nexus:nexus@localhost:5433/nexus_insights npm run prisma:migrate
+DATABASE_URL=postgresql://nexus:nexus@localhost:5433/nexus_insights ADMIN_EMAIL=admin@dev.local ADMIN_PASSWORD=admin12345 npm run prisma:seed
+
+# 5) Dev
+npm run dev
+```
+
+App em `http://localhost:3000`. Login com `admin@dev.local` / `admin12345`.
+
+## Deploy
+
+Imagem publicada em `ghcr.io/jvzanini/nexus-insights:latest`. Stack rodando no Portainer da Nexus AI atrás de Traefik com SSL Let's Encrypt automático em `insights.nexusai360.com`.
+
+CI/CD: push em `main` → GitHub Actions → build & push GHCR → Portainer redeploy via API.
+
+Variáveis em produção (não versionadas): `.env.production`. Compose de produção: `docker-compose.production.yml`.
+
+## Documentação
+
+- **Spec de design (v3 final):** [`docs/superpowers/specs/2026-04-29-nexus-insights-design-v3.md`](docs/superpowers/specs/2026-04-29-nexus-insights-design-v3.md)
+- **Plan de implementação (v3 final):** [`docs/superpowers/plans/2026-04-29-nexus-insights-implementation-v3.md`](docs/superpowers/plans/2026-04-29-nexus-insights-implementation-v3.md)
+- **Levantamento do banco do Chatwoot:** [`docs/discovery/2026-04-29-chatwoot-schema-discovery.md`](docs/discovery/2026-04-29-chatwoot-schema-discovery.md)
+- **Decisões consolidadas:** [`docs/discovery/2026-04-29-decisoes-consolidadas.md`](docs/discovery/2026-04-29-decisoes-consolidadas.md)
+- **Status atual:** [`docs/STATUS.md`](docs/STATUS.md)
+- **CLAUDE.md raiz:** regras supremas do projeto.
+
+---
+
+Nexus AI © 2026. Todos os direitos reservados.
