@@ -14,6 +14,7 @@ import {
   Smile,
   Shield,
   Bot,
+  MailWarning,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { PlatformRole } from "@/generated/prisma/client";
@@ -39,6 +40,11 @@ export const NAV_ITEMS: NavItem[] = [
         label: "Conversas",
         href: "/relatorios/conversas",
         icon: MessageSquare,
+      },
+      {
+        label: "Mensagens não respondidas",
+        href: "/relatorios/mensagens-nao-respondidas",
+        icon: MailWarning,
       },
       {
         label: "Leads recebidos",
