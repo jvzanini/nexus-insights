@@ -7,7 +7,7 @@ import { PeriodSelectorUrl } from "@/components/reports/period-selector-url";
 import {
   getPeriod,
   type PeriodKey,
-} from "@/components/reports/period-selector";
+} from "@/lib/reports/period";
 import { DepartamentoBarChart } from "@/components/reports/departamento-bar-chart";
 import { getCurrentUser } from "@/lib/auth";
 import { porDepartamento } from "@/lib/chatwoot/queries/por-departamento";

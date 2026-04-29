@@ -10,7 +10,7 @@ import { GranularitySelector } from "@/components/reports/granularity-selector";
 import {
   getPeriod,
   type PeriodKey,
-} from "@/components/reports/period-selector";
+} from "@/lib/reports/period";
 import { getCurrentUser } from "@/lib/auth";
 import {
   leadsRecebidos,

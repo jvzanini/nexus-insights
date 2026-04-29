@@ -8,7 +8,7 @@ import { PeriodSelectorUrl } from "@/components/reports/period-selector-url";
 import {
   getPeriod,
   type PeriodKey,
-} from "@/components/reports/period-selector";
+} from "@/lib/reports/period";
 import { getCurrentUser } from "@/lib/auth";
 import { temposResposta } from "@/lib/chatwoot/queries/tempos-resposta";
 import type { ReportFilters } from "@/lib/chatwoot/filters";

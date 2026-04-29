@@ -3,14 +3,12 @@ import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { CachedBadge } from "@/components/reports/cached-badge";
 import { StaleBanner } from "@/components/reports/stale-banner";
-import {
-  ConversasFilters,
-  deserializeFilters,
-} from "@/components/reports/conversas-filters";
+import { ConversasFilters } from "@/components/reports/conversas-filters";
+import { deserializeFilters } from "@/lib/reports/conversas-filters";
 import { ConversasTable } from "@/components/reports/conversas-table";
 import { getCurrentUser } from "@/lib/auth";
 import { getInboxes, getTeams } from "@/lib/chatwoot/queries/meta-cache";
-import { getPeriod } from "@/components/reports/period-selector";
+import { getPeriod } from "@/lib/reports/period";
 import { fetchConversas } from "@/lib/actions/reports/conversas";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
 

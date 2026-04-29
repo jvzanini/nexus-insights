@@ -9,7 +9,7 @@ import { PeriodSelectorUrl } from "@/components/reports/period-selector-url";
 import {
   getPeriod,
   type PeriodKey,
-} from "@/components/reports/period-selector";
+} from "@/lib/reports/period";
 import { getCurrentUser } from "@/lib/auth";
 import { volumetriaDow } from "@/lib/chatwoot/queries/volumetria-dow";
 import { volumetriaHeatmap } from "@/lib/chatwoot/queries/volumetria-heatmap";

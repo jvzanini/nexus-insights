@@ -7,7 +7,7 @@ import { PeriodSelectorUrl } from "@/components/reports/period-selector-url";
 import {
   getPeriod,
   type PeriodKey,
-} from "@/components/reports/period-selector";
+} from "@/lib/reports/period";
 import { RankingBarChart } from "@/components/reports/ranking-bar-chart";
 import {
   Table,
