@@ -183,7 +183,7 @@ export function Sidebar({
       </div>
 
       {user.platformRole === "super_admin" &&
-      accounts.length > 0 &&
+      accounts.length > 1 &&
       typeof activeAccountId === "number" ? (
         <AccountSwitcher
           accounts={accounts}
