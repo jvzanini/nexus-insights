@@ -11,7 +11,7 @@ import {
   type PeriodKey as NewPeriodKey,
   type PeriodRange,
   type CustomRangeInput,
-} from "@/lib/datetime";
+} from "@/lib/datetime-core";
 
 // Tipo estendido: une as 4 chaves novas (canônicas) com chaves legadas
 // que ainda são referenciadas em páginas/componentes existentes.
