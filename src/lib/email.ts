@@ -1,6 +1,14 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let resendInstance: Resend | null = null;
+
+function getResend(): Resend {
+  if (!resendInstance) {
+    const key = process.env.RESEND_API_KEY ?? "re_dummy_for_build";
+    resendInstance = new Resend(key);
+  }
+  return resendInstance;
+}
 
 const FROM_EMAIL =
   process.env.RESEND_FROM ?? "Nexus Insights <noreply@nexusai360.com>";
@@ -46,7 +54,7 @@ export async function sendPasswordResetEmail(
     </p>
   `);
 
-  const { error } = await resend.emails.send({
+  const { error } = await getResend().emails.send({
     from: FROM_EMAIL,
     to,
     subject: "Redefinição de senha — Nexus Insights",
@@ -81,7 +89,7 @@ export async function sendEmailChangeVerification(
     </p>
   `);
 
-  const { error } = await resend.emails.send({
+  const { error } = await getResend().emails.send({
     from: FROM_EMAIL,
     to,
     subject: "Confirme seu novo e-mail — Nexus Insights",
@@ -118,7 +126,7 @@ export async function sendWelcomeEmail(
     </div>
   `);
 
-  const { error } = await resend.emails.send({
+  const { error } = await getResend().emails.send({
     from: FROM_EMAIL,
     to,
     subject: "Bem-vindo ao Nexus Insights",

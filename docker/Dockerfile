@@ -16,6 +16,9 @@ ENV CHATWOOT_DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
 ENV NEXTAUTH_SECRET="dummy_secret_for_build_only_at_least_32_chars_long"
 ENV NEXTAUTH_URL="http://localhost:3000"
 ENV ENCRYPTION_KEY="0000000000000000000000000000000000000000000000000000000000000000"
+ENV RESEND_API_KEY="re_dummy_for_build"
+ENV ADMIN_EMAIL="dummy@dummy.com"
+ENV ADMIN_PASSWORD="dummy_password_build_only"
 ARG APP_VERSION=dev
 ENV APP_VERSION=$APP_VERSION
 RUN npx prisma generate
