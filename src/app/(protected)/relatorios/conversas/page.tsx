@@ -8,7 +8,7 @@ import { deserializeFilters } from "@/lib/reports/conversas-filters";
 import { ConversasTable } from "@/components/reports/conversas-table";
 import { getCurrentUser } from "@/lib/auth";
 import { getInboxes, getTeams } from "@/lib/chatwoot/queries/meta-cache";
-import { getPeriod } from "@/lib/reports/period";
+import { resolvePeriod } from "@/lib/reports/resolve-period";
 import { fetchConversas } from "@/lib/actions/reports/conversas";
 import { getActiveAccountId } from "@/lib/reports/active-account";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
@@ -33,7 +33,11 @@ export default async function ConversasPage({ searchParams }: PageProps) {
     else if (Array.isArray(v) && v.length > 0) params.set(k, v[0] ?? "");
   }
   const filterValue = deserializeFilters(params);
-  const period = getPeriod(filterValue.period);
+  const { range: period } = await resolvePeriod({
+    period: filterValue.period,
+    customStart: filterValue.customRange?.start ?? null,
+    customEnd: filterValue.customRange?.end ?? null,
+  });
 
   const reportFilters: ReportFilters = {
     period,

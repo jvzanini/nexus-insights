@@ -5,10 +5,8 @@ import { CachedBadge } from "@/components/reports/cached-badge";
 import { StaleBanner } from "@/components/reports/stale-banner";
 import { KpiCard } from "@/components/reports/kpi-card";
 import { PeriodSelectorUrl } from "@/components/reports/period-selector-url";
-import {
-  getPeriod,
-  type PeriodKey,
-} from "@/lib/reports/period";
+import { type PeriodKey } from "@/lib/reports/period";
+import { resolvePeriod } from "@/lib/reports/resolve-period";
 import { getCurrentUser } from "@/lib/auth";
 import { temposResposta } from "@/lib/chatwoot/queries/tempos-resposta";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
@@ -41,7 +39,13 @@ export default async function Page({ searchParams }: PageProps) {
   const period: PeriodKey =
     periodRaw && VALID_PERIODS.includes(periodRaw) ? periodRaw : "30d";
 
-  const range = getPeriod(period);
+  const customStart = typeof sp.custom_start === "string" ? sp.custom_start : null;
+  const customEnd = typeof sp.custom_end === "string" ? sp.custom_end : null;
+  const { range } = await resolvePeriod({
+    period,
+    customStart,
+    customEnd,
+  });
   const filters: ReportFilters = { period: range };
 
   const accountId = await getActiveAccountId();

@@ -7,10 +7,7 @@ import { KpiCard } from "@/components/reports/kpi-card";
 import { LeadsLineChart } from "@/components/reports/leads-line-chart";
 import { PeriodSelectorUrl } from "@/components/reports/period-selector-url";
 import { GranularitySelector } from "@/components/reports/granularity-selector";
-import {
-  getPeriod,
-  type PeriodKey,
-} from "@/lib/reports/period";
+import { type PeriodKey } from "@/lib/reports/period";
 import { getCurrentUser } from "@/lib/auth";
 import {
   leadsRecebidos,
@@ -18,6 +15,7 @@ import {
 } from "@/lib/chatwoot/queries/leads-recebidos";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
 import { getActiveAccountId } from "@/lib/reports/active-account";
+import { resolvePeriod } from "@/lib/reports/resolve-period";
 
 export const metadata = { title: "Leads recebidos | Nexus Insights" };
 export const dynamic = "force-dynamic";
@@ -56,7 +54,13 @@ export default async function Page({ searchParams }: PageProps) {
   const granularity: Granularity =
     granRaw && VALID_GRANS.includes(granRaw) ? granRaw : "day";
 
-  const range = getPeriod(period);
+  const customStart = typeof sp.custom_start === "string" ? sp.custom_start : null;
+  const customEnd = typeof sp.custom_end === "string" ? sp.custom_end : null;
+  const { range } = await resolvePeriod({
+    period,
+    customStart,
+    customEnd,
+  });
   const filters: ReportFilters = { period: range };
 
   const result = await leadsRecebidos({
