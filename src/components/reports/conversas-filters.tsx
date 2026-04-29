@@ -17,64 +17,22 @@ import {
 } from "@/components/reports/period-selector";
 import { STATUS_OPTIONS } from "@/components/reports/status-badge";
 
+import {
+  type ConversasFiltersValue,
+  serializeFilters,
+  DEFAULT_PERIOD,
+} from "@/lib/reports/conversas-filters";
+
+export {
+  type ConversasFiltersValue,
+  deserializeFilters,
+  serializeFilters,
+  DEFAULT_PERIOD,
+} from "@/lib/reports/conversas-filters";
+
 interface MetaItem {
   id: number;
   name: string;
-}
-
-export interface ConversasFiltersValue {
-  period: PeriodKey;
-  inboxIds: number[];
-  teamIds: number[];
-  statuses: number[];
-}
-
-const DEFAULT_PERIOD: PeriodKey = "30d";
-
-const VALID_PERIODS: PeriodKey[] = [
-  "hoje",
-  "ontem",
-  "7d",
-  "30d",
-  "mes_atual",
-  "mes_anterior",
-];
-
-export function deserializeFilters(
-  params: URLSearchParams,
-): ConversasFiltersValue {
-  const periodRaw = params.get("period") as PeriodKey | null;
-  const period: PeriodKey =
-    periodRaw && VALID_PERIODS.includes(periodRaw) ? periodRaw : DEFAULT_PERIOD;
-
-  const parseIds = (key: string): number[] => {
-    const raw = params.get(key);
-    if (!raw) return [];
-    return raw
-      .split(",")
-      .map((s) => Number.parseInt(s, 10))
-      .filter((n) => Number.isFinite(n));
-  };
-
-  return {
-    period,
-    inboxIds: parseIds("inboxes"),
-    teamIds: parseIds("teams"),
-    statuses: parseIds("statuses"),
-  };
-}
-
-export function serializeFilters(
-  filters: ConversasFiltersValue,
-): URLSearchParams {
-  const sp = new URLSearchParams();
-  if (filters.period && filters.period !== DEFAULT_PERIOD) {
-    sp.set("period", filters.period);
-  }
-  if (filters.inboxIds.length) sp.set("inboxes", filters.inboxIds.join(","));
-  if (filters.teamIds.length) sp.set("teams", filters.teamIds.join(","));
-  if (filters.statuses.length) sp.set("statuses", filters.statuses.join(","));
-  return sp;
 }
 
 interface ConversasFiltersProps {
