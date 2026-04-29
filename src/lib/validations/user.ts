@@ -10,7 +10,11 @@ export const PlatformRoleEnum = z.enum([
 export const CreateUserInput = z.object({
   name: z.string().min(2, "Nome obrigatório").max(120),
   email: z.string().email("E-mail inválido").transform((v) => v.toLowerCase().trim()),
-  password: z.string().min(8, "Senha deve ter ao menos 8 caracteres").max(72),
+  password: z
+    .string()
+    .min(8, "Senha deve ter ao menos 8 caracteres")
+    .max(72)
+    .optional(),
   platformRole: PlatformRoleEnum,
   accountIds: z.array(z.number().int().positive()).default([]),
   teamIds: z.array(z.number().int().positive()).default([]),

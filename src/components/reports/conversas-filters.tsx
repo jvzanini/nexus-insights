@@ -11,10 +11,8 @@ import {
 } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import {
-  PeriodSelector,
-  type PeriodKey,
-} from "@/components/reports/period-selector";
+import { PeriodPills } from "@/components/reports/period-pills";
+import { type PeriodKey } from "@/lib/reports/period";
 import { STATUS_OPTIONS } from "@/components/reports/status-badge";
 
 import {
@@ -63,7 +61,17 @@ export function ConversasFilters({
     [router],
   );
 
-  const setPeriod = (period: PeriodKey) => update({ ...value, period });
+  const setPeriod = (
+    period: PeriodKey,
+    customRange?: { start: string; end: string },
+  ) => {
+    update({
+      ...value,
+      period,
+      customRange: period === "custom" ? customRange : undefined,
+    });
+  };
+
   const toggleInbox = (id: number) => {
     const next = value.inboxIds.includes(id)
       ? value.inboxIds.filter((x) => x !== id)
@@ -98,21 +106,26 @@ export function ConversasFilters({
       inboxIds: [],
       teamIds: [],
       statuses: [],
+      customRange: undefined,
     });
   };
 
-  // Garantir que o searchParams seja consumido para evitar warning de unused
-  // (o pai já passa o initial deserializado, mas mantemos o hook ativo).
+  // Mantém o hook de searchParams ativo mesmo quando o pai já passa o initial.
   void searchParams;
 
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center gap-3 mb-6",
+        "mb-6 flex flex-wrap items-center gap-3",
         pending && "opacity-80",
       )}
     >
-      <PeriodSelector value={value.period} onChange={setPeriod} />
+      <PeriodPills
+        value={value.period}
+        customRange={value.customRange}
+        onChange={setPeriod}
+        className="w-full sm:w-auto"
+      />
 
       <MultiSelectFilter
         label="Estado"

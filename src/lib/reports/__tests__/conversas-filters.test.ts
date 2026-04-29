@@ -13,6 +13,7 @@ describe("deserializeFilters", () => {
       inboxIds: [],
       teamIds: [],
       statuses: [],
+      customRange: undefined,
     });
   });
 
@@ -26,6 +27,7 @@ describe("deserializeFilters", () => {
       inboxIds: [1, 2, 3],
       teamIds: [10],
       statuses: [0, 1],
+      customRange: undefined,
     });
   });
 
@@ -40,6 +42,34 @@ describe("deserializeFilters", () => {
     expect(result.inboxIds).toEqual([1, 2]);
     expect(result.teamIds).toEqual([]);
     expect(result.statuses).toEqual([3]);
+  });
+
+  it("parseia custom range quando period=custom e datas ISO válidas", () => {
+    const sp = new URLSearchParams(
+      "period=custom&custom_start=2026-04-01&custom_end=2026-04-30",
+    );
+    const result = deserializeFilters(sp);
+    expect(result.period).toBe("custom");
+    expect(result.customRange).toEqual({
+      start: "2026-04-01",
+      end: "2026-04-30",
+    });
+  });
+
+  it("ignora custom range quando period != custom", () => {
+    const sp = new URLSearchParams(
+      "period=hoje&custom_start=2026-04-01&custom_end=2026-04-30",
+    );
+    const result = deserializeFilters(sp);
+    expect(result.customRange).toBeUndefined();
+  });
+
+  it("ignora custom range com datas inválidas", () => {
+    const sp = new URLSearchParams(
+      "period=custom&custom_start=foo&custom_end=2026-04-30",
+    );
+    const result = deserializeFilters(sp);
+    expect(result.customRange).toBeUndefined();
   });
 });
 
@@ -77,12 +107,38 @@ describe("serializeFilters", () => {
     expect(sp.get("statuses")).toBe("0,2");
   });
 
+  it("serializa custom range quando period=custom", () => {
+    const sp = serializeFilters({
+      period: "custom",
+      inboxIds: [],
+      teamIds: [],
+      statuses: [],
+      customRange: { start: "2026-04-01", end: "2026-04-30" },
+    });
+    expect(sp.get("period")).toBe("custom");
+    expect(sp.get("custom_start")).toBe("2026-04-01");
+    expect(sp.get("custom_end")).toBe("2026-04-30");
+  });
+
+  it("não serializa custom_* quando period != custom", () => {
+    const sp = serializeFilters({
+      period: "hoje",
+      inboxIds: [],
+      teamIds: [],
+      statuses: [],
+      customRange: { start: "2026-04-01", end: "2026-04-30" },
+    });
+    expect(sp.get("custom_start")).toBeNull();
+    expect(sp.get("custom_end")).toBeNull();
+  });
+
   it("round-trip preserva o valor", () => {
     const original = {
       period: "mes_atual" as const,
       inboxIds: [5, 7, 9],
       teamIds: [22, 26],
       statuses: [0, 1, 2],
+      customRange: undefined,
     };
     const sp = serializeFilters(original);
     const parsed = deserializeFilters(sp);
@@ -95,6 +151,20 @@ describe("serializeFilters", () => {
       inboxIds: [],
       teamIds: [],
       statuses: [],
+      customRange: undefined,
+    };
+    const sp = serializeFilters(original);
+    const parsed = deserializeFilters(sp);
+    expect(parsed).toEqual(original);
+  });
+
+  it("round-trip com custom range", () => {
+    const original = {
+      period: "custom" as const,
+      inboxIds: [1],
+      teamIds: [],
+      statuses: [],
+      customRange: { start: "2026-04-01", end: "2026-04-30" },
     };
     const sp = serializeFilters(original);
     const parsed = deserializeFilters(sp);

@@ -38,6 +38,65 @@ export interface UserListItem {
   accountsCount: number;
 }
 
+export interface UserDetails {
+  id: string;
+  name: string;
+  email: string;
+  platformRole: PlatformRole;
+  isOwner: boolean;
+  isActive: boolean;
+  accountIds: number[];
+  teamIds: number[];
+}
+
+export async function getUserDetails(
+  id: string,
+): Promise<ActionResult<UserDetails>> {
+  try {
+    const me = await getCurrentUser();
+    if (!me) return { success: false, error: "Não autenticado" };
+    if (me.platformRole === "viewer") {
+      return { success: false, error: "Acesso negado" };
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        platformRole: true,
+        isOwner: true,
+        isActive: true,
+        accountAccess: { select: { chatwootAccountId: true } },
+        teamAccess: { select: { chatwootTeamId: true } },
+      },
+    });
+    if (!user) return { success: false, error: "Usuário não encontrado" };
+
+    return {
+      success: true,
+      data: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        platformRole: user.platformRole,
+        isOwner: user.isOwner,
+        isActive: user.isActive,
+        accountIds: Array.from(
+          new Set(user.accountAccess.map((a) => a.chatwootAccountId)),
+        ),
+        teamIds: Array.from(
+          new Set(user.teamAccess.map((t) => t.chatwootTeamId)),
+        ),
+      },
+    };
+  } catch (err) {
+    console.error("[users.getDetails]", err);
+    return { success: false, error: "Erro ao carregar usuário" };
+  }
+}
+
 export async function listUsers(): Promise<ActionResult<UserListItem[]>> {
   try {
     const me = await getCurrentUser();
