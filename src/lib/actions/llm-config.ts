@@ -11,7 +11,6 @@ import { revalidatePath } from "next/cache";
 
 import { auth } from "@/auth";
 import { logAudit } from "@/lib/audit";
-import { encrypt } from "@/lib/encryption";
 import { ensureLlmTables } from "@/lib/llm/ensure-tables";
 import { getPublicActiveLlmConfig } from "@/lib/llm/get-active-config";
 import { invalidateNexBubbleEnabled } from "@/lib/llm/get-nex-bubble-enabled";
@@ -23,7 +22,25 @@ import {
 import type { LlmProvider } from "@/lib/llm/types";
 import { pgPool } from "@/lib/pg-pool";
 
+/**
+ * Contrato para salvar a config ativa.
+ *
+ * A partir do v0.12.0 a chave de API vive em `llm_credentials`; aqui guardamos
+ * apenas o `credentialId`. A coluna `encrypted_api_key` em `llm_configs` segue
+ * existindo (NULLABLE) por compat de rollback — gravamos string vazia.
+ */
 export interface SaveLlmConfigInput {
+  provider: LlmProvider;
+  model: string;
+  credentialId: string;
+}
+
+/**
+ * Contrato legado mantido para a UI de "testar antes de salvar nova chave"
+ * (dialog "Nova chave" no card de credenciais), onde ainda não existe um
+ * `credentialId` persistido.
+ */
+export interface TestLlmConnectionInput {
   provider: LlmProvider;
   model: string;
   apiKey: string;
@@ -61,7 +78,10 @@ async function requireSuperAdmin(): Promise<
   return { ok: true, userId: user.id ?? null };
 }
 
-function validateInput(input: SaveLlmConfigInput): string | null {
+function validateModelAndProvider(input: {
+  provider: LlmProvider;
+  model: string;
+}): string | null {
   if (!VALID_PROVIDERS.includes(input.provider)) {
     return "Provider inválido";
   }
@@ -71,11 +91,14 @@ function validateInput(input: SaveLlmConfigInput): string | null {
   if (model.length < 3 || model.length > 100) {
     return "Modelo inválido (3 a 100 caracteres)";
   }
-  if (!input.apiKey || typeof input.apiKey !== "string") {
+  return null;
+}
+
+function validateApiKey(apiKey: string | undefined): string | null {
+  if (!apiKey || typeof apiKey !== "string") {
     return "API key é obrigatória";
   }
-  const trimmed = input.apiKey.trim();
-  if (trimmed.length < 10) {
+  if (apiKey.trim().length < 10) {
     return "API key inválida (muito curta)";
   }
   return null;
@@ -87,13 +110,15 @@ export async function saveLlmConfig(
   const guard = await requireSuperAdmin();
   if (!guard.ok) return { ok: false, error: guard.error };
 
-  const validationError = validateInput(input);
+  const validationError = validateModelAndProvider(input);
   if (validationError) return { ok: false, error: validationError };
+  if (!input.credentialId) {
+    return { ok: false, error: "Selecione uma credencial" };
+  }
 
   await ensureLlmTables();
 
   const trimmedModel = input.model.trim();
-  const encryptedKey = encrypt(input.apiKey.trim());
 
   const client = await pgPool.connect();
   try {
@@ -102,9 +127,9 @@ export async function saveLlmConfig(
       `UPDATE llm_configs SET is_active = false WHERE is_active = true`,
     );
     await client.query(
-      `INSERT INTO llm_configs (id, provider, model, encrypted_api_key, is_active, created_at, updated_at, created_by_id)
-       VALUES (gen_random_uuid(), $1, $2, $3, true, NOW(), NOW(), $4)`,
-      [input.provider, trimmedModel, encryptedKey, guard.userId],
+      `INSERT INTO llm_configs (id, provider, model, encrypted_api_key, credential_id, is_active, created_at, updated_at, created_by_id)
+       VALUES (gen_random_uuid(), $1, $2, '', $3, true, NOW(), NOW(), $4)`,
+      [input.provider, trimmedModel, input.credentialId, guard.userId],
     );
     await client.query("COMMIT");
   } catch (err) {
@@ -119,7 +144,11 @@ export async function saveLlmConfig(
     userId: guard.userId,
     action: "setting_updated",
     targetType: "llm_config",
-    details: { provider: input.provider, model: trimmedModel },
+    details: {
+      provider: input.provider,
+      model: trimmedModel,
+      credentialId: input.credentialId,
+    },
   });
 
   return { ok: true };
@@ -143,13 +172,15 @@ export interface TestLlmConnectionResult {
  * possível, valida saldo (atualmente OpenRouter expõe `total_credits`).
  */
 export async function testLlmConnection(
-  input: SaveLlmConfigInput,
+  input: TestLlmConnectionInput,
 ): Promise<ActionResult<TestLlmConnectionResult>> {
   const guard = await requireSuperAdmin();
   if (!guard.ok) return { ok: false, error: guard.error };
 
-  const validationError = validateInput(input);
+  const validationError = validateModelAndProvider(input);
   if (validationError) return { ok: false, error: validationError };
+  const apiKeyError = validateApiKey(input.apiKey);
+  if (apiKeyError) return { ok: false, error: apiKeyError };
 
   const trimmedModel = input.model.trim();
   const trimmedKey = input.apiKey.trim();

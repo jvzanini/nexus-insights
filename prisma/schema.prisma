@@ -41,6 +41,10 @@ enum AuditAction {
   setting_updated
   opened_chatwoot_link
   session_revoked
+  credential_created
+  credential_updated
+  credential_deleted
+  credential_tested
 }
 
 model User {

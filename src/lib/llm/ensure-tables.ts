@@ -98,6 +98,20 @@ async function createTables(): Promise<void> {
   await pgPool.query(
     `ALTER TABLE "llm_usage" ADD COLUMN IF NOT EXISTS "usd_to_brl_rate" DECIMAL(10,4);`,
   );
+
+  // --- Novo em v0.12.0: novos valores no enum AuditAction ---
+  // ADD VALUE IF NOT EXISTS é idempotente; o cast COMMIT do enum acontece
+  // automaticamente no transaction-less ALTER TYPE.
+  for (const value of [
+    "credential_created",
+    "credential_updated",
+    "credential_deleted",
+    "credential_tested",
+  ]) {
+    await pgPool.query(
+      `ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS '${value}';`,
+    );
+  }
 }
 
 async function migrateExistingConfigs(): Promise<void> {

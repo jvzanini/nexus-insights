@@ -36,6 +36,10 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   setting_updated: "Configuração alterada",
   opened_chatwoot_link: "Abriu conversa no Chatwoot",
   session_revoked: "Sessão revogada",
+  credential_created: "Credencial de IA criada",
+  credential_updated: "Credencial de IA atualizada",
+  credential_deleted: "Credencial de IA removida",
+  credential_tested: "Credencial de IA testada",
 };
 
 function getActionBadgeClasses(action: AuditAction): string {
