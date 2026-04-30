@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { Sidebar } from "@/components/layout/sidebar";
+import { NexBubble } from "@/components/nex/nex-bubble";
 import { PLATFORM_ROLE_LABELS } from "@/lib/constants/roles";
 import { getKnownAccounts } from "@/lib/tenant";
 import { prisma } from "@/lib/prisma";
@@ -92,6 +93,7 @@ export default async function ProtectedLayout({
           {children}
         </div>
       </main>
+      <NexBubble />
     </div>
   );
 }

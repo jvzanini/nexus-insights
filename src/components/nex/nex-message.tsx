@@ -1,0 +1,232 @@
+"use client";
+
+/**
+ * Renderiza uma única mensagem no chat do Nex.
+ *
+ * Suporte a markdown leve (sem dependências externas):
+ *  - **bold** → <strong>
+ *  - `inline` → <code>
+ *  - listas com `- ` ou `* ` viram <ul>
+ *  - parágrafos separados por linha em branco
+ *
+ * Não cobre tabelas/links — caso real precise, trocamos por `react-markdown`.
+ */
+
+import { Check, Copy, Database } from "lucide-react";
+import * as React from "react";
+
+import { cn } from "@/lib/utils";
+
+export type NexMessageRole = "user" | "assistant" | "tool" | "loading";
+
+export interface NexMessageProps {
+  role: NexMessageRole;
+  content: string;
+  /** Para mensagens "tool", nome da função executada (collapsed por padrão). */
+  toolName?: string;
+}
+
+export function NexMessage({ role, content, toolName }: NexMessageProps) {
+  if (role === "loading") return <NexLoadingBubble />;
+  if (role === "tool") return <NexToolBubble name={toolName ?? "tool"} />;
+
+  const isUser = role === "user";
+
+  return (
+    <div
+      className={cn(
+        "flex w-full",
+        isUser ? "justify-end" : "justify-start",
+      )}
+    >
+      <div
+        className={cn(
+          "relative max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
+          isUser
+            ? "bg-violet-600/15 text-foreground"
+            : "bg-muted text-foreground",
+        )}
+      >
+        <MarkdownLite content={content} />
+        {!isUser ? <CopyButton text={content} /> : null}
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+
+function NexLoadingBubble() {
+  return (
+    <div className="flex w-full justify-start">
+      <div className="flex items-center gap-2 rounded-2xl bg-muted px-3.5 py-2.5 text-sm text-muted-foreground">
+        <span className="flex gap-1">
+          <Dot delay={0} />
+          <Dot delay={0.15} />
+          <Dot delay={0.3} />
+        </span>
+        <span>Nex está pensando…</span>
+      </div>
+    </div>
+  );
+}
+
+function Dot({ delay }: { delay: number }) {
+  return (
+    <span
+      className="inline-block h-1.5 w-1.5 rounded-full bg-violet-500"
+      style={{
+        animation: "nexDotBounce 1s ease-in-out infinite",
+        animationDelay: `${delay}s`,
+      }}
+    />
+  );
+}
+
+function NexToolBubble({ name }: { name: string }) {
+  return (
+    <div className="flex w-full justify-start">
+      <div className="flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1 text-xs text-muted-foreground">
+        <Database className="h-3 w-3" />
+        <span>
+          Consultou banco · <span className="font-mono">{name}</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = React.useState(false);
+  const onCopy = React.useCallback(() => {
+    if (typeof navigator === "undefined" || !navigator.clipboard) return;
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }, [text]);
+
+  return (
+    <button
+      type="button"
+      onClick={onCopy}
+      aria-label={copied ? "Copiado" : "Copiar resposta"}
+      className={cn(
+        "absolute -top-2 -right-2 flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border border-border bg-background text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100",
+        "shadow-sm",
+      )}
+      style={{ opacity: copied ? 1 : undefined }}
+    >
+      {copied ? (
+        <Check className="h-3 w-3 text-emerald-500" />
+      ) : (
+        <Copy className="h-3 w-3" />
+      )}
+    </button>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Markdown lite                                                              */
+/* -------------------------------------------------------------------------- */
+
+function MarkdownLite({ content }: { content: string }) {
+  const blocks = React.useMemo(() => splitBlocks(content), [content]);
+  return (
+    <div className="space-y-2 [overflow-wrap:anywhere]">
+      {blocks.map((block, i) => {
+        if (block.type === "ul") {
+          return (
+            <ul key={i} className="ml-4 list-disc space-y-1">
+              {block.items.map((item, j) => (
+                <li key={j}>{renderInline(item)}</li>
+              ))}
+            </ul>
+          );
+        }
+        return (
+          <p key={i} className="whitespace-pre-wrap">
+            {renderInline(block.text)}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
+type Block = { type: "p"; text: string } | { type: "ul"; items: string[] };
+
+function splitBlocks(input: string): Block[] {
+  const lines = input.split(/\r?\n/);
+  const blocks: Block[] = [];
+  let buffer: string[] = [];
+  let listItems: string[] | null = null;
+
+  const flushParagraph = () => {
+    if (buffer.length) {
+      blocks.push({ type: "p", text: buffer.join("\n") });
+      buffer = [];
+    }
+  };
+  const flushList = () => {
+    if (listItems && listItems.length) {
+      blocks.push({ type: "ul", items: listItems });
+    }
+    listItems = null;
+  };
+
+  for (const raw of lines) {
+    const line = raw;
+    const listMatch = line.match(/^\s*[-*]\s+(.*)$/);
+    if (listMatch) {
+      flushParagraph();
+      if (!listItems) listItems = [];
+      listItems.push(listMatch[1]);
+      continue;
+    }
+    if (line.trim() === "") {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+    flushList();
+    buffer.push(line);
+  }
+  flushParagraph();
+  flushList();
+  return blocks;
+}
+
+function renderInline(text: string): React.ReactNode {
+  // Tokenize **bold** e `code`. Sem regex complexo — split incremental.
+  const nodes: React.ReactNode[] = [];
+  const regex = /(\*\*[^*]+\*\*|`[^`]+`)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(text.slice(lastIndex, match.index));
+    }
+    const token = match[0];
+    if (token.startsWith("**")) {
+      nodes.push(
+        <strong key={key++} className="font-semibold text-foreground">
+          {token.slice(2, -2)}
+        </strong>,
+      );
+    } else {
+      nodes.push(
+        <code
+          key={key++}
+          className="rounded bg-violet-600/10 px-1 py-0.5 font-mono text-[0.8em] text-violet-700 dark:text-violet-300"
+        >
+          {token.slice(1, -1)}
+        </code>,
+      );
+    }
+    lastIndex = match.index + token.length;
+  }
+  if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
+  return nodes;
+}

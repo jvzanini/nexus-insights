@@ -1,0 +1,89 @@
+"use client";
+
+/**
+ * Bubble flutuante do Agente Nex.
+ *
+ * Posição: fixed bottom-6 right-6 (com offset extra no mobile pra não brigar
+ * com gesture bar / safe-area). Tamanho 56px (acima do mínimo 44pt de touch).
+ *
+ * Estética: gradient violet + glow sutil + ring branco interno. Animação idle
+ * de "respiração" do glow (loop) — discreta, respeita prefers-reduced-motion
+ * via `useReducedMotion()` do Framer Motion.
+ *
+ * Acessibilidade: aria-label, foco visível, keyboard support nativo do button.
+ */
+
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { Sparkles } from "lucide-react";
+import * as React from "react";
+
+import { cn } from "@/lib/utils";
+
+import { NexChatPanel } from "./nex-chat-panel";
+
+export function NexBubble() {
+  const [open, setOpen] = React.useState(false);
+  const reduceMotion = useReducedMotion();
+
+  return (
+    <>
+      <div
+        className={cn(
+          "fixed right-6 bottom-6 z-50",
+          // Em telas pequenas, sobe um pouco pra não brigar com o gesture bar.
+          "max-sm:right-4 max-sm:bottom-5",
+        )}
+      >
+        <motion.button
+          type="button"
+          aria-label="Abrir o Agente Nex"
+          aria-expanded={open}
+          onClick={() => setOpen(true)}
+          initial={{ opacity: 0, scale: 0.85, y: 8 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ type: "spring", stiffness: 280, damping: 22 }}
+          whileHover={reduceMotion ? undefined : { scale: 1.06 }}
+          whileTap={reduceMotion ? undefined : { scale: 0.94 }}
+          className={cn(
+            "group relative flex h-14 w-14 cursor-pointer items-center justify-center rounded-full",
+            "bg-gradient-to-br from-violet-600 to-violet-500",
+            "text-white shadow-lg shadow-violet-600/40",
+            "ring-1 ring-white/15 ring-inset",
+            "outline-none transition-shadow duration-200",
+            "hover:shadow-xl hover:shadow-violet-600/50",
+            "focus-visible:ring-3 focus-visible:ring-violet-400/60",
+          )}
+        >
+          {/* Glow externo que pulsa sutil */}
+          {!reduceMotion ? (
+            <motion.span
+              aria-hidden
+              className="pointer-events-none absolute inset-0 rounded-full bg-violet-500/40 blur-xl"
+              initial={{ opacity: 0.35, scale: 0.95 }}
+              animate={{ opacity: [0.25, 0.55, 0.25], scale: [0.95, 1.1, 0.95] }}
+              transition={{
+                duration: 2.8,
+                repeat: Infinity,
+                ease: "easeInOut",
+              }}
+            />
+          ) : null}
+
+          <Sparkles className="relative z-10 h-6 w-6" strokeWidth={2.25} />
+
+          {/* Indicador "online" — bolinha verde */}
+          <span
+            aria-hidden
+            className="absolute right-0 bottom-0 h-3.5 w-3.5 rounded-full bg-emerald-400 ring-2 ring-background"
+          />
+        </motion.button>
+      </div>
+
+      <AnimatePresence>
+        {open ? (
+          <NexChatPanel open={open} onClose={() => setOpen(false)} />
+        ) : null}
+      </AnimatePresence>
+    </>
+  );
+}
