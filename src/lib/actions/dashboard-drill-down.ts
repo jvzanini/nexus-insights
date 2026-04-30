@@ -15,12 +15,14 @@ import {
   getReceivedDrillDown,
   getResolutionRateDrillDown,
   getResolvedDrillDown,
+  getStatusDrillDown,
   getNoResponseDrillDown,
   getByTeamDrillDown,
   type OpenDrillDownData,
   type ReceivedDrillDownData,
   type ResolutionRateDrillDownData,
   type ResolvedDrillDownData,
+  type StatusDrillDownData,
   type NoResponseDrillDownData,
   type ByTeamDrillDownData,
 } from "@/lib/chatwoot/queries/dashboard-drill-down";
@@ -88,6 +90,8 @@ async function authorize(accountId: number): Promise<{
 export async function getReceivedDrillDownAction(args: {
   accountId: number;
   period: DashboardPeriod;
+  page?: number;
+  pageSize?: number;
 }): Promise<DrillDownActionResult<ReceivedDrillDownData>> {
   try {
     const auth = await authorize(args.accountId);
@@ -97,6 +101,8 @@ export async function getReceivedDrillDownAction(args: {
       accountId: args.accountId,
       period: current,
       excludeMatrixIA: auth.excludeMatrixIA,
+      page: args.page,
+      pageSize: args.pageSize,
     });
     return { success: true, data: result.data };
   } catch (err) {
@@ -108,6 +114,8 @@ export async function getReceivedDrillDownAction(args: {
 export async function getResolvedDrillDownAction(args: {
   accountId: number;
   period: DashboardPeriod;
+  page?: number;
+  pageSize?: number;
 }): Promise<DrillDownActionResult<ResolvedDrillDownData>> {
   try {
     const auth = await authorize(args.accountId);
@@ -117,6 +125,8 @@ export async function getResolvedDrillDownAction(args: {
       accountId: args.accountId,
       period: current,
       excludeMatrixIA: auth.excludeMatrixIA,
+      page: args.page,
+      pageSize: args.pageSize,
     });
     return { success: true, data: result.data };
   } catch (err) {
@@ -125,9 +135,41 @@ export async function getResolvedDrillDownAction(args: {
   }
 }
 
+/**
+ * Drill-down genérico de status (Aberto/Resolvido/Pendente/Adiado).
+ * v0.13.0 — substitui `getOpenDrillDownAction` (que vira wrapper compat).
+ */
+export async function getStatusDrillDownAction(args: {
+  accountId: number;
+  period: DashboardPeriod;
+  status: 0 | 1 | 2 | 3;
+  page?: number;
+  pageSize?: number;
+}): Promise<DrillDownActionResult<StatusDrillDownData>> {
+  try {
+    const auth = await authorize(args.accountId);
+    if (!auth.ok) return { success: false, error: auth.error };
+    const { current } = await resolvePeriodRanges(args.period);
+    const result = await getStatusDrillDown({
+      accountId: args.accountId,
+      period: current,
+      excludeMatrixIA: auth.excludeMatrixIA,
+      status: args.status,
+      page: args.page,
+      pageSize: args.pageSize,
+    });
+    return { success: true, data: result.data };
+  } catch (err) {
+    console.error("[getStatusDrillDownAction]", err);
+    return { success: false, error: "Erro ao carregar drill-down" };
+  }
+}
+
 export async function getOpenDrillDownAction(args: {
   accountId: number;
   period: DashboardPeriod;
+  page?: number;
+  pageSize?: number;
 }): Promise<DrillDownActionResult<OpenDrillDownData>> {
   try {
     const auth = await authorize(args.accountId);
@@ -137,6 +179,8 @@ export async function getOpenDrillDownAction(args: {
       accountId: args.accountId,
       period: current,
       excludeMatrixIA: auth.excludeMatrixIA,
+      page: args.page,
+      pageSize: args.pageSize,
     });
     return { success: true, data: result.data };
   } catch (err) {

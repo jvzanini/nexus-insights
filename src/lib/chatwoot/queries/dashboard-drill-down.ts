@@ -86,6 +86,10 @@ export interface ReceivedDrillDownData {
   chart: DrillDownChartPoint[];
   byInbox: DrillDownByInbox[];
   byHour: DrillDownByHour[];
+  items: DrillDownConversationItem[];
+  page: number;
+  pageSize: number;
+  /** @deprecated use items. Mantido por compat para uma versão. */
   recent: DrillDownConversationItem[];
 }
 
@@ -95,20 +99,43 @@ export interface ResolvedDrillDownData {
   chart: DrillDownChartPoint[];
   byInbox: DrillDownByInbox[];
   byHour: DrillDownByHour[];
+  items: DrillDownConversationItem[];
+  page: number;
+  pageSize: number;
+  /** @deprecated use items. Mantido por compat para uma versão. */
   recent: DrillDownConversationItem[];
 }
 
-export interface OpenDrillDownData {
+/**
+ * Drill-down genérico parametrizado por status (0=Aberto, 1=Resolvido,
+ * 2=Pendente, 3=Adiado). Substitui `OpenDrillDownData` (que era específico
+ * para status=0).
+ */
+export interface StatusDrillDownData {
+  status: 0 | 1 | 2 | 3;
   total: number;
-  byStatus: DrillDownByStatus[];
   byInbox: DrillDownByInbox[];
+  items: DrillDownConversationItem[];
+  page: number;
+  pageSize: number;
+}
+
+/**
+ * @deprecated use StatusDrillDownData. Type estendido por compat com
+ * componentes antigos (que usam `byStatus[]` e `open[]`); preenchido apenas
+ * pelo wrapper `getOpenDrillDown`. Será removido em v0.14.0.
+ */
+export interface OpenDrillDownData extends StatusDrillDownData {
+  byStatus: DrillDownByStatus[];
   open: DrillDownConversationItem[];
 }
 
 export interface ResolutionRateDrillDownData {
   current: number | null;
   previous: number | null;
+  /** @deprecated use diffPct (variação relativa em %). */
   diffPp: number | null;
+  diffPct: number | null;
   history: DrillDownHistoricalRatePoint[];
   topAgents: DrillDownAgentRate[];
 }
@@ -208,25 +235,36 @@ function pickGranularity(period: { start: Date; end: Date }): "hour" | "day" {
 
 /**
  * Drill-down de "Conversas Recebidas".
+ *
+ * v0.13.0: lista de conversas paginada server-side (`page`/`pageSize`).
+ * Default 50/pg, cap 200 (evita OFFSET extremo no Chatwoot read-only).
+ * Retorna `items` + `recent` (alias deprecated por compat).
  */
-export async function getReceivedDrillDown(args: DrillDownPeriodInput) {
+export async function getReceivedDrillDown(
+  args: DrillDownPeriodInput & { page?: number; pageSize?: number },
+) {
   const ttl = args.ttlSeconds ?? DEFAULT_TTL_SECONDS;
   const excludeMatrixIA = args.excludeMatrixIA !== false;
   const tz = await getPlatformTz();
   const granularity = pickGranularity(args.period);
+  const page = Math.max(1, args.page ?? 1);
+  const pageSize = Math.max(10, Math.min(200, args.pageSize ?? 50));
+  const offset = (page - 1) * pageSize;
 
   const filtersForHash = {
     period: {
       start: args.period.start.toISOString(),
       end: args.period.end.toISOString(),
     },
+    page,
+    pageSize,
     excludeMatrixIA,
     tz,
   };
 
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-drill-received",
+    name: "dashboard-drill-received-v2",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -316,7 +354,7 @@ export async function getReceivedDrillDown(args: DrillDownPeriodInput) {
               AND c.created_at < $3
               ${matrixClause}
             ORDER BY c.created_at DESC NULLS LAST
-            LIMIT 20
+            LIMIT $4 OFFSET $5
           `;
 
           const [totalRes, chartRes, byInboxRes, byHourRes, recentRes] =
@@ -347,8 +385,20 @@ export async function getReceivedDrillDown(args: DrillDownPeriodInput) {
                 args.accountId,
                 args.period.start,
                 args.period.end,
+                pageSize,
+                offset,
               ]),
             ]);
+
+          const items = recentRes.rows.map((r) => ({
+            id: r.id,
+            displayId: r.display_id,
+            contactName: r.contact_name,
+            inboxName: r.inbox_name,
+            assigneeName: r.assignee_name,
+            status: r.status,
+            lastActivityAt: new Date(r.last_activity_at).toISOString(),
+          }));
 
           return {
             total: Number(totalRes.rows[0]?.total ?? 0),
@@ -369,15 +419,10 @@ export async function getReceivedDrillDown(args: DrillDownPeriodInput) {
               hour: Number(r.hour ?? 0),
               count: Number(r.total ?? 0),
             })),
-            recent: recentRes.rows.map((r) => ({
-              id: r.id,
-              displayId: r.display_id,
-              contactName: r.contact_name,
-              inboxName: r.inbox_name,
-              assigneeName: r.assignee_name,
-              status: r.status,
-              lastActivityAt: new Date(r.last_activity_at).toISOString(),
-            })),
+            items,
+            page,
+            pageSize,
+            recent: items,
           };
         },
         { fallbackKey: key },
@@ -387,25 +432,35 @@ export async function getReceivedDrillDown(args: DrillDownPeriodInput) {
 
 /**
  * Drill-down de "Conversas Resolvidas".
+ *
+ * v0.13.0: lista de conversas paginada server-side (`page`/`pageSize`).
+ * Default 50/pg, cap 200. Retorna `items` + `recent` (alias deprecated).
  */
-export async function getResolvedDrillDown(args: DrillDownPeriodInput) {
+export async function getResolvedDrillDown(
+  args: DrillDownPeriodInput & { page?: number; pageSize?: number },
+) {
   const ttl = args.ttlSeconds ?? DEFAULT_TTL_SECONDS;
   const excludeMatrixIA = args.excludeMatrixIA !== false;
   const tz = await getPlatformTz();
   const granularity = pickGranularity(args.period);
+  const page = Math.max(1, args.page ?? 1);
+  const pageSize = Math.max(10, Math.min(200, args.pageSize ?? 50));
+  const offset = (page - 1) * pageSize;
 
   const filtersForHash = {
     period: {
       start: args.period.start.toISOString(),
       end: args.period.end.toISOString(),
     },
+    page,
+    pageSize,
     excludeMatrixIA,
     tz,
   };
 
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-drill-resolved",
+    name: "dashboard-drill-resolved-v2",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -503,7 +558,7 @@ export async function getResolvedDrillDown(args: DrillDownPeriodInput) {
               AND c.status = 1
               ${matrixClause}
             ORDER BY c.last_activity_at DESC NULLS LAST
-            LIMIT 20
+            LIMIT $4 OFFSET $5
           `;
 
           const [totalRes, chartRes, byInboxRes, byHourRes, recentRes] =
@@ -534,8 +589,20 @@ export async function getResolvedDrillDown(args: DrillDownPeriodInput) {
                 args.accountId,
                 args.period.start,
                 args.period.end,
+                pageSize,
+                offset,
               ]),
             ]);
+
+          const items = recentRes.rows.map((r) => ({
+            id: r.id,
+            displayId: r.display_id,
+            contactName: r.contact_name,
+            inboxName: r.inbox_name,
+            assigneeName: r.assignee_name,
+            status: r.status,
+            lastActivityAt: new Date(r.last_activity_at).toISOString(),
+          }));
 
           return {
             total: Number(totalRes.rows[0]?.total ?? 0),
@@ -556,15 +623,10 @@ export async function getResolvedDrillDown(args: DrillDownPeriodInput) {
               hour: Number(r.hour ?? 0),
               count: Number(r.total ?? 0),
             })),
-            recent: recentRes.rows.map((r) => ({
-              id: r.id,
-              displayId: r.display_id,
-              contactName: r.contact_name,
-              inboxName: r.inbox_name,
-              assigneeName: r.assignee_name,
-              status: r.status,
-              lastActivityAt: new Date(r.last_activity_at).toISOString(),
-            })),
+            items,
+            page,
+            pageSize,
+            recent: items,
           };
         },
         { fallbackKey: key },
@@ -573,25 +635,171 @@ export async function getResolvedDrillDown(args: DrillDownPeriodInput) {
 }
 
 /**
- * Drill-down "Abertas no período" — coorte: created_at ∈ período + status=0.
+ * Drill-down genérico de conversas por status.
  *
- * v0.10: deixou de ser snapshot global; aceita `period` igual aos demais
- * drill-downs para ser coerente com o KPI.
+ * v0.13.0: substitui `getOpenDrillDown` (que era hard-coded em status=0).
+ * Aceita status 0 (Aberta) | 1 (Resolvida) | 2 (Pendente) | 3 (Adiada),
+ * com paginação server-side (default 50/pg, cap 200).
+ *
+ * Coorte: created_at ∈ período + status = N.
+ *
+ * Ordenação:
+ *  - status=0 (abertas): `last_activity_at ASC` (mais antigas primeiro =
+ *    priorizar resposta).
+ *  - demais: `last_activity_at DESC` (mais recentes primeiro).
  */
-export async function getOpenDrillDown(args: DrillDownPeriodInput) {
+export interface StatusDrillDownInput extends DrillDownPeriodInput {
+  status: 0 | 1 | 2 | 3;
+  page?: number;
+  pageSize?: number;
+}
+
+export async function getStatusDrillDown(args: StatusDrillDownInput) {
   const ttl = args.ttlSeconds ?? DEFAULT_TTL_SECONDS;
   const excludeMatrixIA = args.excludeMatrixIA !== false;
+  const page = Math.max(1, args.page ?? 1);
+  const pageSize = Math.max(10, Math.min(200, args.pageSize ?? 50));
+  const offset = (page - 1) * pageSize;
 
   const filtersForHash = {
     period: {
       start: args.period.start.toISOString(),
       end: args.period.end.toISOString(),
     },
+    status: args.status,
+    page,
+    pageSize,
     excludeMatrixIA,
   };
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-drill-open-v2",
+    name: "dashboard-drill-status-v3",
+    accountId: args.accountId,
+    filtersHash: hashFilters(filtersForHash),
+  });
+
+  return withCache<StatusDrillDownData>({
+    key,
+    ttlSeconds: ttl,
+    fetcher: () =>
+      withChatwootResilience<StatusDrillDownData>(
+        async () => {
+          const pool = getChatwootPool();
+          const matrixClause = excludeMatrixIA ? " AND c.inbox_id <> 31" : "";
+
+          const sqlTotal = `
+            SELECT COUNT(*)::bigint AS total
+            FROM conversations c
+            WHERE c.account_id = $1
+              AND c.created_at >= $2 AND c.created_at < $3
+              AND c.status = $4
+              ${matrixClause}
+          `;
+          const sqlByInbox = `
+            SELECT i.id, i.name, COUNT(c.id)::bigint AS total
+            FROM conversations c
+            JOIN inboxes i ON i.id = c.inbox_id
+            WHERE c.account_id = $1
+              AND c.created_at >= $2 AND c.created_at < $3
+              AND c.status = $4
+              ${matrixClause}
+            GROUP BY i.id, i.name
+            ORDER BY total DESC
+            LIMIT 10
+          `;
+          const orderClause =
+            args.status === 0
+              ? "ORDER BY c.last_activity_at ASC NULLS LAST"
+              : "ORDER BY c.last_activity_at DESC NULLS LAST";
+          const sqlList = `
+            SELECT
+              c.id, c.display_id,
+              ct.name AS contact_name,
+              i.name AS inbox_name,
+              u.name AS assignee_name,
+              c.status,
+              c.last_activity_at
+            FROM conversations c
+            LEFT JOIN contacts ct ON ct.id = c.contact_id
+            LEFT JOIN inboxes i ON i.id = c.inbox_id
+            LEFT JOIN users u ON u.id = c.assignee_id
+            WHERE c.account_id = $1
+              AND c.created_at >= $2 AND c.created_at < $3
+              AND c.status = $4
+              ${matrixClause}
+            ${orderClause}
+            LIMIT $5 OFFSET $6
+          `;
+
+          const baseParams = [
+            args.accountId,
+            args.period.start,
+            args.period.end,
+            args.status,
+          ];
+          const listParams = [...baseParams, pageSize, offset];
+
+          const [totalRes, byInboxRes, listRes] = await Promise.all([
+            pool.query<RowCount>(sqlTotal, baseParams),
+            pool.query<RowInbox>(sqlByInbox, baseParams),
+            pool.query<RowConversation>(sqlList, listParams),
+          ]);
+
+          return {
+            status: args.status,
+            total: Number(totalRes.rows[0]?.total ?? 0),
+            byInbox: byInboxRes.rows
+              .filter((r) => r.name)
+              .map((r) => ({
+                id: r.id,
+                name: r.name ?? "(sem nome)",
+                count: Number(r.total ?? 0),
+              })),
+            items: listRes.rows.map((r) => ({
+              id: r.id,
+              displayId: r.display_id,
+              contactName: r.contact_name,
+              inboxName: r.inbox_name,
+              assigneeName: r.assignee_name,
+              status: r.status,
+              lastActivityAt: new Date(r.last_activity_at).toISOString(),
+            })),
+            page,
+            pageSize,
+          };
+        },
+        { fallbackKey: key },
+      ),
+  });
+}
+
+/**
+ * @deprecated use getStatusDrillDown. Wrapper de compat para callers
+ * existentes (KPI "Abertas no período"). Adiciona `byStatus[]` (distribuição
+ * por status no recorte) e `open[]` (alias de items) para preservar a UI
+ * antiga até T8 reescrever o componente. Cache key separado para isolar
+ * payloads enquanto a UI antiga é gradualmente migrada.
+ */
+export async function getOpenDrillDown(
+  args: DrillDownPeriodInput & { page?: number; pageSize?: number },
+) {
+  const ttl = args.ttlSeconds ?? DEFAULT_TTL_SECONDS;
+  const excludeMatrixIA = args.excludeMatrixIA !== false;
+  const page = Math.max(1, args.page ?? 1);
+  const pageSize = Math.max(10, Math.min(200, args.pageSize ?? 50));
+
+  const filtersForHash = {
+    period: {
+      start: args.period.start.toISOString(),
+      end: args.period.end.toISOString(),
+    },
+    page,
+    pageSize,
+    excludeMatrixIA,
+  };
+  const key = cacheKey({
+    scope: "report",
+    name: "dashboard-drill-open-v3",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -605,16 +813,8 @@ export async function getOpenDrillDown(args: DrillDownPeriodInput) {
           const pool = getChatwootPool();
           const matrixClause = excludeMatrixIA ? " AND c.inbox_id <> 31" : "";
 
-          const sqlTotal = `
-            SELECT COUNT(*)::bigint AS total
-            FROM conversations c
-            WHERE c.account_id = $1
-              AND c.created_at >= $2
-              AND c.created_at < $3
-              AND c.status = 0
-              ${matrixClause}
-          `;
-          // Distribuição por status no recorte do período (open/pending/snoozed).
+          // Distribuição por status no recorte do período (open/pending/snoozed)
+          // — só usada pela UI antiga; será removida em T8.
           const sqlByStatus = `
             SELECT c.status, COUNT(*)::bigint AS total
             FROM conversations c
@@ -626,76 +826,32 @@ export async function getOpenDrillDown(args: DrillDownPeriodInput) {
             GROUP BY c.status
             ORDER BY total DESC
           `;
-          const sqlByInbox = `
-            SELECT i.id, i.name, COUNT(c.id)::bigint AS total
-            FROM conversations c
-            JOIN inboxes i ON i.id = c.inbox_id
-            WHERE c.account_id = $1
-              AND c.created_at >= $2
-              AND c.created_at < $3
-              AND c.status = 0
-              ${matrixClause}
-            GROUP BY i.id, i.name
-            ORDER BY total DESC
-            LIMIT 10
-          `;
-          const sqlOpen = `
-            SELECT
-              c.id, c.display_id,
-              ct.name AS contact_name,
-              i.name AS inbox_name,
-              u.name AS assignee_name,
-              c.status,
-              c.last_activity_at
-            FROM conversations c
-            LEFT JOIN contacts ct ON ct.id = c.contact_id
-            LEFT JOIN inboxes i ON i.id = c.inbox_id
-            LEFT JOIN users u ON u.id = c.assignee_id
-            WHERE c.account_id = $1
-              AND c.created_at >= $2
-              AND c.created_at < $3
-              AND c.status = 0
-              ${matrixClause}
-            ORDER BY c.last_activity_at ASC NULLS LAST
-            LIMIT 20
-          `;
 
-          const periodParams = [
-            args.accountId,
-            args.period.start,
-            args.period.end,
-          ];
+          const [statusResult, byStatusRes] = await Promise.all([
+            getStatusDrillDown({
+              accountId: args.accountId,
+              period: args.period,
+              excludeMatrixIA,
+              ttlSeconds: ttl,
+              status: 0,
+              page,
+              pageSize,
+            }),
+            pool.query<RowStatus>(sqlByStatus, [
+              args.accountId,
+              args.period.start,
+              args.period.end,
+            ]),
+          ]);
 
-          const [totalRes, byStatusRes, byInboxRes, openRes] =
-            await Promise.all([
-              pool.query<RowCount>(sqlTotal, periodParams),
-              pool.query<RowStatus>(sqlByStatus, periodParams),
-              pool.query<RowInbox>(sqlByInbox, periodParams),
-              pool.query<RowConversation>(sqlOpen, periodParams),
-            ]);
-
+          const base = statusResult.data;
           return {
-            total: Number(totalRes.rows[0]?.total ?? 0),
+            ...base,
+            open: base.items,
             byStatus: byStatusRes.rows.map((r) => ({
               status: Number(r.status),
               label: STATUS_LABELS[Number(r.status)] ?? "—",
               count: Number(r.total ?? 0),
-            })),
-            byInbox: byInboxRes.rows
-              .filter((r) => r.name)
-              .map((r) => ({
-                id: r.id,
-                name: r.name ?? "(sem nome)",
-                count: Number(r.total ?? 0),
-              })),
-            open: openRes.rows.map((r) => ({
-              id: r.id,
-              displayId: r.display_id,
-              contactName: r.contact_name,
-              inboxName: r.inbox_name,
-              assigneeName: r.assignee_name,
-              status: r.status,
-              lastActivityAt: new Date(r.last_activity_at).toISOString(),
             })),
           };
         },
@@ -729,7 +885,7 @@ export async function getResolutionRateDrillDown(args: DrillDownPeriodInput) {
   };
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-drill-resolution",
+    name: "dashboard-drill-resolution-v2",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -856,11 +1012,23 @@ export async function getResolutionRateDrillDown(args: DrillDownPeriodInput) {
 
           const diffPp =
             current !== null && previous !== null ? current - previous : null;
+          // Variação relativa em % (não pp). Quando previous=0 e current=0 → 0%
+          // (sem mudança); quando previous=0 e current>0 → null (não definido,
+          // a UI mostra "—" ou um badge "Novo").
+          const diffPct =
+            current !== null && previous !== null
+              ? previous === 0
+                ? current === 0
+                  ? 0
+                  : null
+                : ((current - previous) / previous) * 100
+              : null;
 
           return {
             current,
             previous,
             diffPp,
+            diffPct,
             history: historyRes.rows.map((r) => {
               const received = Number(r.received ?? 0);
               const resolved = Number(r.resolved ?? 0);
