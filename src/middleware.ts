@@ -5,14 +5,24 @@ import { authConfig } from "./auth.config";
 const { auth } = NextAuth(authConfig);
 
 /**
- * Mapa pronto para consolidação futura. Ative chave por chave conforme cada
- * dashboard novo (operacao / atendentes / distribuicao / origem-resultado)
- * for criado. Por enquanto, deixamos vazio para não quebrar pages existentes.
+ * Mapa de redirects para a consolidação 12 → 5 super-relatórios (B8).
+ * Cada entrada antiga aponta para a tab correspondente do novo super-relatório.
  *
  * Formato: rota antiga → rota nova (com query string opcional preservada).
- * O lookup já está cabeado abaixo, então ativar é só adicionar a entrada.
+ * O lookup abaixo preserva a query original e injeta a tab adicional.
  */
-const REDIRECT_MAP: Record<string, string> = {};
+const REDIRECT_MAP: Record<string, string> = {
+  "/relatorios/status-conversas": "/relatorios/visao-geral?tab=status",
+  "/relatorios/volumetria": "/relatorios/visao-geral?tab=volumetria",
+  "/relatorios/tempos-resposta": "/relatorios/performance?tab=tempos",
+  "/relatorios/sla": "/relatorios/performance?tab=sla",
+  "/relatorios/csat": "/relatorios/performance?tab=csat",
+  "/relatorios/ranking-atendentes": "/relatorios/equipe?tab=ranking",
+  "/relatorios/por-departamento": "/relatorios/equipe?tab=departamento",
+  "/relatorios/por-estado": "/relatorios/distribuicao?tab=estado",
+  "/relatorios/leads-recebidos": "/relatorios/origem-ia?tab=leads",
+  "/relatorios/matrix-ia": "/relatorios/origem-ia?tab=matrix",
+};
 
 export default auth(async (req) => {
   const { nextUrl, auth: session } = req;
@@ -22,6 +32,8 @@ export default auth(async (req) => {
     const url = nextUrl.clone();
     const [pathname, query = ""] = target.split("?");
     url.pathname = pathname;
+    // Preserva query original (period, custom_start, custom_end, etc.) e
+    // injeta os params do destino (ex.: ?tab=sla) por cima.
     for (const [k, v] of new URLSearchParams(query)) {
       url.searchParams.set(k, v);
     }

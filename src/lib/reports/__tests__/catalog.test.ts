@@ -5,8 +5,8 @@ import {
 } from "@/lib/reports/catalog";
 
 describe("REPORTS_CATALOG", () => {
-  it("contém exatamente 12 entries", () => {
-    expect(REPORTS_CATALOG).toHaveLength(12);
+  it("contém exatamente 7 entries (5 super-relatórios + 2 standalone)", () => {
+    expect(REPORTS_CATALOG).toHaveLength(7);
   });
 
   it("cada entry tem key, label, href, icon e description", () => {
@@ -35,9 +35,9 @@ describe("REPORTS_CATALOG", () => {
 });
 
 describe("ALL_REPORT_KEYS", () => {
-  it("é um array de 12 strings", () => {
+  it("é um array de 7 strings", () => {
     expect(Array.isArray(ALL_REPORT_KEYS)).toBe(true);
-    expect(ALL_REPORT_KEYS).toHaveLength(12);
+    expect(ALL_REPORT_KEYS).toHaveLength(7);
     for (const k of ALL_REPORT_KEYS) {
       expect(typeof k).toBe("string");
     }

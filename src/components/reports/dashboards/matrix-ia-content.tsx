@@ -1,33 +1,21 @@
 import {
-  Bot,
   MessageSquare,
   AlertTriangle,
   Gauge,
   Timer,
   ListOrdered,
 } from "lucide-react";
-import { redirect } from "next/navigation";
-import { PageHeader } from "@/components/page-header";
+
 import { CachedBadge } from "@/components/reports/cached-badge";
 import { StaleBanner } from "@/components/reports/stale-banner";
 import { KpiCard } from "@/components/reports/kpi-card";
 import { StatusBadge } from "@/components/reports/status-badge";
 import { OpenInChatwoot } from "@/components/reports/open-in-chatwoot";
-import { getCurrentUser } from "@/lib/auth";
-import { getAllSettings } from "@/lib/settings/get";
 import { matrixIaMetrics } from "@/lib/chatwoot/queries/matrix-ia";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
 import { formatDuration } from "@/lib/utils/format-time";
-import { getActiveAccountId } from "@/lib/reports/active-account";
 
-export const metadata = { title: "Matrix IA | Nexus Insights" };
-export const dynamic = "force-dynamic";
-
-function readBoolean(value: unknown, fallback: boolean): boolean {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "string") return value === "true";
-  return fallback;
-}
+import type { DashboardContentProps } from "./types";
 
 function truncate(text: string | null, max = 120): string {
   if (!text) return "(sem mensagem)";
@@ -50,42 +38,35 @@ function formatDateTimePtBR(iso: string): string {
   }
 }
 
-export default async function Page() {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
+interface MatrixIaContentProps extends DashboardContentProps {
+  /** Quando true, mostra a observação de visibilidade restrita. */
+  showSuperAdminNote?: boolean;
+}
 
-  // Gate: super_admin only quando feature flag estiver ativa.
-  const settings = await getAllSettings();
-  const restrictToSuperAdmin = readBoolean(
-    settings["feature_flags.matrix_ia_visible_to_super_admin_only"],
-    true,
-  );
-  if (restrictToSuperAdmin && user.platformRole !== "super_admin") {
-    redirect("/dashboard");
-  }
-
-  const accountId = await getActiveAccountId();
-
-  // Override do excludeMatrixIA — a query força inbox 31 internamente.
+export async function MatrixIaContent({
+  accountId,
+  showSuperAdminNote = false,
+}: MatrixIaContentProps) {
+  // A query força inbox 31 internamente; sobrescrevemos excludeMatrixIA.
   const filters: ReportFilters = { excludeMatrixIA: false };
-
-  const result = await matrixIaMetrics({ accountId: accountId, filters });
+  const result = await matrixIaMetrics({ accountId, filters });
   const m = result.data;
 
   return (
-    <div>
-      <PageHeader
-        icon={Bot}
-        title="Matrix IA"
-        subtitle="Métricas do canal automatizado"
-        actions={
-          result.cachedAt ? <CachedBadge cachedAt={result.cachedAt} /> : null
-        }
-      />
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold tracking-tight">Matrix IA</h2>
+          <p className="text-xs text-muted-foreground">
+            Métricas do canal automatizado.
+          </p>
+        </div>
+        {result.cachedAt ? <CachedBadge cachedAt={result.cachedAt} /> : null}
+      </div>
 
       {result.stale ? <StaleBanner cachedAt={result.cachedAt} /> : null}
 
-      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           icon={MessageSquare}
           label="Total de conversas"
@@ -104,7 +85,7 @@ export default async function Page() {
           label="p50 resposta da IA"
           value={
             m.p50RespostaIaSec === null
-              ? "-"
+              ? "—"
               : formatDuration(m.p50RespostaIaSec)
           }
           hint="Mediana"
@@ -114,7 +95,7 @@ export default async function Page() {
           label="Avg resposta da IA"
           value={
             m.avgRespostaIaSec === null
-              ? "-"
+              ? "—"
               : formatDuration(m.avgRespostaIaSec)
           }
           hint="Média"
@@ -127,9 +108,9 @@ export default async function Page() {
             <ListOrdered className="h-5 w-5 text-violet-400" />
           </div>
           <div>
-            <h2 className="text-sm font-semibold tracking-tight">
+            <h3 className="text-sm font-semibold tracking-tight">
               Últimas 10 conversas da IA
-            </h2>
+            </h3>
             <p className="text-xs text-muted-foreground">
               Conversas mais recentes no inbox Matrix IA.
             </p>
@@ -176,12 +157,14 @@ export default async function Page() {
         )}
       </div>
 
-      <div className="mt-4 rounded-xl border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground">
-        Visível somente para super admin. Métrica
-        <span className="mx-1 font-medium text-foreground">transferidas</span>
-        no período: {m.transferidas.toLocaleString("pt-BR")} (heurística:
-        conversas atribuídas a usuários humanos).
-      </div>
+      {showSuperAdminNote ? (
+        <div className="rounded-xl border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground">
+          Visível somente para super admin. Métrica
+          <span className="mx-1 font-medium text-foreground">transferidas</span>
+          no período: {m.transferidas.toLocaleString("pt-BR")} (heurística:
+          conversas atribuídas a usuários humanos).
+        </div>
+      ) : null}
     </div>
   );
 }

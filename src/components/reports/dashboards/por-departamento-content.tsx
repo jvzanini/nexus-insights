@@ -1,34 +1,16 @@
 import { Building2, Inbox, BarChart3 } from "lucide-react";
-import { redirect } from "next/navigation";
-import { PageHeader } from "@/components/page-header";
+
 import { CachedBadge } from "@/components/reports/cached-badge";
 import { StaleBanner } from "@/components/reports/stale-banner";
-import { PeriodSelectorUrl } from "@/components/reports/period-selector-url";
-import { type PeriodKey } from "@/lib/reports/period";
+import { InteractiveBarChart, EmptyChartState } from "@/components/charts";
 import { resolvePeriod } from "@/lib/reports/resolve-period";
-import { DepartamentoBarChart } from "@/components/reports/departamento-bar-chart";
-import { getCurrentUser } from "@/lib/auth";
 import { porDepartamento } from "@/lib/chatwoot/queries/por-departamento";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
 import { formatDuration } from "@/lib/utils/format-time";
 import { cn } from "@/lib/utils";
-import { getActiveAccountId } from "@/lib/reports/active-account";
+import { CHART_COLORS } from "@/lib/charts/colors";
 
-export const metadata = { title: "Por departamento | Nexus Insights" };
-export const dynamic = "force-dynamic";
-
-const VALID_PERIODS: PeriodKey[] = [
-  "hoje",
-  "ontem",
-  "7d",
-  "30d",
-  "mes_atual",
-  "mes_anterior",
-];
-
-interface PageProps {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}
+import type { DashboardContentProps } from "./types";
 
 interface MiniDistributionBarProps {
   open: number;
@@ -56,10 +38,7 @@ function MiniDistributionBar({
       aria-label="Distribuição open/resolved/pending"
     >
       {pOpen > 0 ? (
-        <div
-          className="h-full bg-blue-500/70"
-          style={{ width: `${pOpen}%` }}
-        />
+        <div className="h-full bg-blue-500/70" style={{ width: `${pOpen}%` }} />
       ) : null}
       {pResolved > 0 ? (
         <div
@@ -77,54 +56,38 @@ function MiniDistributionBar({
   );
 }
 
-export default async function Page({ searchParams }: PageProps) {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-
-  const sp = await searchParams;
-  const periodRaw =
-    typeof sp.period === "string" ? (sp.period as PeriodKey) : null;
-  const period: PeriodKey =
-    periodRaw && VALID_PERIODS.includes(periodRaw) ? periodRaw : "30d";
-
-  const customStart = typeof sp.custom_start === "string" ? sp.custom_start : null;
-  const customEnd = typeof sp.custom_end === "string" ? sp.custom_end : null;
-  const { range } = await resolvePeriod({
-    period,
-    customStart,
-    customEnd,
-  });
+export async function PorDepartamentoContent({
+  accountId,
+  period,
+  customStart,
+  customEnd,
+}: DashboardContentProps) {
+  const { range } = await resolvePeriod({ period, customStart, customEnd });
   const filters: ReportFilters = { period: range };
 
-  const accountId = await getActiveAccountId();
-
-  const result = await porDepartamento({
-    accountId,
-    filters,
-  });
-
+  const result = await porDepartamento({ accountId, filters });
   const rows = result.data;
+
   const chartData = rows.map((r) => ({
     name: r.teamName,
-    volume: r.volume,
+    Volume: r.volume,
   }));
 
   return (
-    <div>
-      <PageHeader
-        icon={Building2}
-        title="Por departamento"
-        subtitle="Métricas por equipe"
-        actions={
-          result.cachedAt ? <CachedBadge cachedAt={result.cachedAt} /> : null
-        }
-      />
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold tracking-tight">
+            Por departamento
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Métricas agrupadas por equipe (team_id).
+          </p>
+        </div>
+        {result.cachedAt ? <CachedBadge cachedAt={result.cachedAt} /> : null}
+      </div>
 
       {result.stale ? <StaleBanner cachedAt={result.cachedAt} /> : null}
-
-      <div className="mb-6">
-        <PeriodSelectorUrl value={period} />
-      </div>
 
       {rows.length === 0 ? (
         <div className="rounded-2xl border border-border bg-muted/30 p-12 text-center">
@@ -135,15 +98,14 @@ export default async function Page({ searchParams }: PageProps) {
             Sem departamentos com atividade no período
           </h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            Conversas sem `team_id` não são contabilizadas. Ajuste o período
-            para ver outros resultados.
+            Conversas sem `team_id` não são contabilizadas.
           </p>
         </div>
       ) : (
         <>
           <div
             className={cn(
-              "mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2",
+              "grid grid-cols-1 gap-4 sm:grid-cols-2",
               rows.length >= 4 ? "lg:grid-cols-4" : "lg:grid-cols-3",
             )}
           >
@@ -208,15 +170,32 @@ export default async function Page({ searchParams }: PageProps) {
                 <BarChart3 className="h-5 w-5 text-violet-400" />
               </div>
               <div>
-                <h2 className="text-sm font-semibold tracking-tight">
+                <h3 className="text-sm font-semibold tracking-tight">
                   Volume por departamento
-                </h2>
+                </h3>
                 <p className="text-xs text-muted-foreground">
                   Comparativo de conversas no período.
                 </p>
               </div>
             </div>
-            <DepartamentoBarChart data={chartData} />
+            {chartData.length === 0 ? (
+              <EmptyChartState message="Sem dados no período" height={320} />
+            ) : (
+              <InteractiveBarChart
+                data={chartData}
+                series={[
+                  {
+                    key: "Volume",
+                    label: "Conversas",
+                    color: CHART_COLORS.violet,
+                  },
+                ]}
+                height={Math.max(320, chartData.length * 40 + 40)}
+                layout="horizontal"
+                yAxisWidth={140}
+                ariaLabel="Volume por departamento"
+              />
+            )}
           </div>
         </>
       )}

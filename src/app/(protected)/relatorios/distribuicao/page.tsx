@@ -1,0 +1,90 @@
+import { Suspense } from "react";
+import { Map } from "lucide-react";
+import { redirect } from "next/navigation";
+
+import { PageHeader } from "@/components/page-header";
+import { PeriodSelectorUrl } from "@/components/reports/period-selector-url";
+import { TabsShell } from "@/components/reports/dashboards/tabs-shell";
+import { PorEstadoContent } from "@/components/reports/dashboards/por-estado-content";
+import { VolumetriaContent } from "@/components/reports/dashboards/volumetria-content";
+import {
+  ChartSkeleton,
+  TableSkeleton,
+} from "@/components/ui/skeleton";
+import { getCurrentUser } from "@/lib/auth";
+import { getActiveAccountId } from "@/lib/reports/active-account";
+import { parseReportSearchParams } from "@/lib/reports/parse-search-params";
+
+export const metadata = { title: "Distribuição | Nexus Insights" };
+export const dynamic = "force-dynamic";
+
+interface PageProps {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+function EstadoFallback() {
+  return (
+    <div className="space-y-6">
+      <ChartSkeleton height="h-[320px]" />
+      <TableSkeleton rows={6} columns={4} />
+    </div>
+  );
+}
+
+function HorarioFallback() {
+  return (
+    <div className="space-y-6">
+      <ChartSkeleton height="h-[260px]" />
+      <ChartSkeleton height="h-[200px]" />
+    </div>
+  );
+}
+
+export default async function Page({ searchParams }: PageProps) {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const sp = await searchParams;
+  const { period, customStart, customEnd, tab } = parseReportSearchParams(sp);
+  const accountId = await getActiveAccountId();
+
+  const contentProps = { accountId, period, customStart, customEnd };
+
+  return (
+    <div>
+      <PageHeader
+        icon={Map}
+        title="Distribuição"
+        subtitle="Estados, inboxes e horários de pico"
+      />
+
+      <div className="mb-6">
+        <PeriodSelectorUrl value={period} />
+      </div>
+
+      <TabsShell
+        activeValue={tab ?? "estado"}
+        tabs={[
+          {
+            value: "estado",
+            label: "Por estado",
+            content: (
+              <Suspense fallback={<EstadoFallback />}>
+                <PorEstadoContent {...contentProps} />
+              </Suspense>
+            ),
+          },
+          {
+            value: "horario",
+            label: "Heatmap horário",
+            content: (
+              <Suspense fallback={<HorarioFallback />}>
+                <VolumetriaContent {...contentProps} />
+              </Suspense>
+            ),
+          },
+        ]}
+      />
+    </div>
+  );
+}
