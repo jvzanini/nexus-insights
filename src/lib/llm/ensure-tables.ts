@@ -3,6 +3,8 @@ import "server-only";
 import { pgPool } from "@/lib/pg-pool";
 import { decrypt } from "@/lib/encryption";
 
+import { backfillUsageCosts } from "./backfill-usage-costs";
+
 /**
  * Garante que as tabelas `llm_configs`, `llm_usage` e `llm_credentials` existem.
  *
@@ -191,6 +193,12 @@ export async function ensureLlmTables(): Promise<void> {
   inflight = (async () => {
     await createTables();
     await migrateExistingConfigs();
+    // Backfill de cost_usd em chamadas anteriores ao v0.12.1 — idempotente.
+    try {
+      await backfillUsageCosts();
+    } catch (err) {
+      console.warn("[ensureLlmTables] backfillUsageCosts falhou:", err);
+    }
   })()
     .then(() => {
       ensured = true;

@@ -112,7 +112,11 @@ export async function deepTestOpenAI(
   apiKey: string,
   model: string,
 ): Promise<DeepTestResult> {
-  // 1. GET /v1/models — valida key + permite checar se modelo existe.
+  // 1. GET /v1/models — usado APENAS para validar a key.
+  // NÃO usamos a lista para checar se o modelo existe porque a OpenAI lista
+  // só snapshots datados (`gpt-5.1-mini-2025-12-01`), não aliases curtos
+  // (`gpt-5.1-mini`). A validação real do modelo acontece no POST abaixo:
+  // se o modelo não existe ou a key não tem acesso, vem HTTP 404.
   let modelsRes: Response;
   try {
     modelsRes = await fetchWithTimeout("https://api.openai.com/v1/models", {
@@ -125,20 +129,6 @@ export async function deepTestOpenAI(
 
   if (modelsRes.status === 401) {
     return { reachable: false, errorKind: "invalid_key" };
-  }
-
-  if (modelsRes.ok) {
-    const body = (await modelsRes.json().catch(() => null)) as
-      | { data?: Array<{ id: string }> }
-      | null;
-    const ids = body?.data?.map((m) => m.id) ?? [];
-    if (ids.length > 0 && !ids.includes(model)) {
-      return {
-        reachable: false,
-        errorKind: "model_not_found",
-        message: `Modelo "${model}" não encontrado neste provedor.`,
-      };
-    }
   }
 
   // 2. POST /v1/chat/completions minimal — confirma que key+modelo funcionam.

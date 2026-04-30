@@ -44,14 +44,39 @@ describe("test-connection", () => {
       expect(r.errorKind).toBe("invalid_key");
     });
 
-    it("modelo fora da lista → model_not_found", async () => {
-      // GET /v1/models OK mas sem o modelo procurado
+    it("POST /chat/completions 404 → model_not_found", async () => {
+      // GET /v1/models OK valida a key (não usado pra checar modelo: a OpenAI
+      // lista snapshots datados, não aliases curtos como `gpt-5.1-mini`).
       fetchMock.mockResolvedValueOnce(
         mockJson({ data: [{ id: "gpt-4o" }, { id: "gpt-4o-mini" }] }, 200),
       );
+      // POST com modelo inexistente → 404.
+      fetchMock.mockResolvedValueOnce(mockJson({}, 404));
       const r = await deepTestOpenAI("k", "gpt-9000");
       expect(r.reachable).toBe(false);
       expect(r.errorKind).toBe("model_not_found");
+    });
+
+    it("modelo não listado em /v1/models mas válido no POST → reachable=true", async () => {
+      // GET /v1/models retorna só snapshots datados, não o alias curto.
+      fetchMock.mockResolvedValueOnce(
+        mockJson(
+          { data: [{ id: "gpt-5.1-mini-2025-12-01" }, { id: "gpt-4o" }] },
+          200,
+        ),
+      );
+      // POST aceita o alias curto.
+      fetchMock.mockResolvedValueOnce(
+        mockJson(
+          {
+            choices: [{ message: { content: "ok" } }],
+            usage: { prompt_tokens: 1, completion_tokens: 1 },
+          },
+          200,
+        ),
+      );
+      const r = await deepTestOpenAI("k", "gpt-5.1-mini");
+      expect(r.reachable).toBe(true);
     });
 
     it("429 com insufficient_quota → no_credit", async () => {

@@ -78,6 +78,7 @@ export async function runNexAgent(args: RunNexInput): Promise<RunNexResult> {
   const start = Date.now();
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
+    const iterStart = Date.now();
     const result = await client.chat({
       messages: conversation,
       tools: NEX_TOOLS,
@@ -87,19 +88,28 @@ export async function runNexAgent(args: RunNexInput): Promise<RunNexResult> {
     totalUsage.tokensOutput += result.usage.tokensOutput;
     totalUsage.costUsd += result.usage.costUsd;
 
+    // Registra UMA row por iteração — alinha com a contagem do dashboard do
+    // provider (cada `client.chat()` é cobrado/contado separadamente). v0.12.2
+    // agregava em 1 row no fim, mascarando chamadas intermediárias de
+    // tool-calling.
+    void logUsage({
+      provider: client.provider,
+      model: client.model,
+      tokensInput: result.usage.tokensInput,
+      tokensOutput: result.usage.tokensOutput,
+      costUsd: result.usage.costUsd,
+      promptChars: i === 0 ? JSON.stringify(args.messages).length : 0,
+      responseChars: result.message.length,
+      userId: args.userId,
+      durationMs: Date.now() - iterStart,
+      errorMessage:
+        i === MAX_ITERATIONS - 1 && result.toolCalls?.length
+          ? "max_iterations_exceeded"
+          : undefined,
+    });
+
     if (!result.toolCalls?.length) {
-      // Resposta final — registra uso e retorna.
-      void logUsage({
-        provider: client.provider,
-        model: client.model,
-        tokensInput: totalUsage.tokensInput,
-        tokensOutput: totalUsage.tokensOutput,
-        costUsd: totalUsage.costUsd,
-        promptChars: JSON.stringify(args.messages).length,
-        responseChars: result.message.length,
-        userId: args.userId,
-        durationMs: Date.now() - start,
-      });
+      // Resposta final.
       return { ok: true, message: result.message, usage: totalUsage };
     }
 
@@ -125,19 +135,9 @@ export async function runNexAgent(args: RunNexInput): Promise<RunNexResult> {
     }
   }
 
-  // Loop esgotou — registra como erro e retorna mensagem amigável.
-  void logUsage({
-    provider: client.provider,
-    model: client.model,
-    tokensInput: totalUsage.tokensInput,
-    tokensOutput: totalUsage.tokensOutput,
-    costUsd: totalUsage.costUsd,
-    promptChars: JSON.stringify(args.messages).length,
-    responseChars: 0,
-    userId: args.userId,
-    durationMs: Date.now() - start,
-    errorMessage: "max_iterations_exceeded",
-  });
+  // Loop esgotou — `logUsage` da última iteração já marcou max_iterations_exceeded.
+  // Tempo total disponível em `start` se precisar.
+  void start;
   return {
     ok: false,
     error: "O agente ficou em loop. Tente reformular a pergunta.",

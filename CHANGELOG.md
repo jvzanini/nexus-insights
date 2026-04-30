@@ -1,5 +1,29 @@
 # Changelog
 
+## [v0.12.3] 2026-04-30 — Hotfix integração: modelo "não encontrado" + custo zerado + chamadas faltando
+
+> Corrige três bugs reportados pelo super_admin após validar o v0.12.2 em produção: (1) modelos novos como `gpt-5.1-mini` apareciam como "não encontrado neste provedor" mesmo existindo, (2) chamadas antigas mostravam custo `$0.000` no relatório, (3) o painel de Consumo contava menos chamadas do que o dashboard oficial da OpenAI.
+
+### Bug fixes
+
+- **"Modelo gpt-5.1-mini não encontrado neste provedor".** `deepTestOpenAI` rejeitava o modelo no pré-check `GET /v1/models` porque a OpenAI lista **snapshots datados** (`gpt-5.1-mini-2025-12-01`) e não aliases curtos (`gpt-5.1-mini`). O alias é válido no `POST /v1/chat/completions`, mas o pré-check fazia `ids.includes(model)` e rejeitava. **Fix:** `GET /v1/models` agora valida apenas a chave (401 = inválida); a validação do modelo fica para o `POST /v1/chat/completions`, que retorna 404 se o modelo realmente não existe — único caminho confiável de validação.
+- **Custos `$0,000` em chamadas antigas no relatório de Consumo.** Antes do v0.12.1, `MODEL_PRICING` não tinha entradas para `gpt-4.1-mini`, `gpt-5.x`, `claude-4.7`, etc., então `calculateCost` retornava 0 e zero foi gravado no banco. **Fix:** nova função `backfillUsageCosts()` chamada automaticamente em `ensureLlmTables()` recalcula `cost_usd` (idempotente: só atualiza rows com `cost_usd = 0` cujos modelos agora têm pricing). `cost_brl` das chamadas antigas continua `NULL` (não dá pra recuperar a cotação histórica) — UI mostra "—".
+- **Discrepância "5 chamadas" no nosso painel vs "7 chamadas" no dashboard da OpenAI.** `runNexAgent` agregava todas as iterações de tool-calling de uma conversa em **uma única row** em `llm_usage`, enquanto a OpenAI conta **cada `POST /v1/chat/completions` separadamente**. Conversa com 3 tool calls = 3 linhas no dashboard deles, 1 linha no nosso. **Fix:** agora registramos `logUsage` **por iteração**, alinhando exatamente com a contagem do provider.
+
+### Como medimos tokens e custo (resposta documentada)
+
+1. **Tokens** vêm do campo `usage` retornado pela API do provider em cada `POST /v1/chat/completions` (OpenAI), `POST /v1/messages` (Anthropic), etc. Não há cálculo local — usamos exatamente o que o provider mediu (mesma fonte que o dashboard deles).
+2. **Custo USD** é calculado localmente: `cost_usd = (tokens_input × input_price + tokens_output × output_price) / 1.000.000`. Os preços vêm da tabela `MODEL_PRICING` em `src/lib/llm/pricing.ts` (atualizada em v0.12.1 para abril/2026 com OpenAI GPT-4.1.x/5.x/o3/o4, Anthropic Claude 4.5/4.7, Gemini 2.5). Os providers **não retornam o custo em dólar diretamente** — cada um expõe só os tokens; o custo é responsabilidade do consumidor.
+3. **Precisão** é `DECIMAL(10, 6)` no banco — 6 casas decimais. Chamadas sub-centavo (ex.: `$0,000838`) preservam todos os dígitos. UI exibe com mínimo 3 e máximo 6 casas.
+4. **Custo BRL** é `cost_usd × usd_to_brl_rate`, onde `usd_to_brl_rate` é a cotação cartão de crédito capturada **no momento da chamada** (commercial × spread, AwesomeAPI cache 4h).
+5. **Por que não usar o endpoint `/v1/organization/usage` da OpenAI?** Ele exige uma chave admin separada (não a project key), tem delay de horas/dias e só funciona pra OpenAI — não pra Anthropic/Gemini/OpenRouter. Capturar `usage` no response da chamada é o padrão de mercado e o único método que cobre todos os providers de forma uniforme e em tempo real.
+
+### Outras coisas
+
+- `npm test` 77 suites / 671 tests PASS, typecheck 0 erros.
+
+---
+
 ## [v0.12.2] 2026-04-30 — Hotfix crítico: "use server" file só pode exportar funções async
 
 > Causa raiz finalmente identificada do crash "This page couldn't load — A server error occurred" reportado pelo super_admin ao trocar modelo, renomear chave, criar nova chave, ou qualquer mutação de credencial. O sintoma era global e persistia mesmo após o hotfix v0.12.1 (que tratou GPT-5.x params, mas não mexia neste vetor).

@@ -1,12 +1,20 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-04-30
-**Versão atual em produção:** v0.12.2
+**Versão atual em produção:** v0.12.3
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.12.2)
+## Em produção (v0.12.3)
+
+### Hotfix v0.12.3 (2026-04-30) — integração com providers + relatório de uso
+
+- **"Modelo não encontrado" para GPT-5.x:** `GET /v1/models` valida só a chave; `POST /v1/chat/completions` valida o modelo (a OpenAI lista snapshots datados, não aliases curtos).
+- **Custo zerado em chamadas antigas:** `backfillUsageCosts()` recalcula `cost_usd` em rows com `cost_usd=0` cujos modelos agora têm pricing.
+- **Discrepância na contagem de chamadas:** `runNexAgent` agora registra `logUsage` **por iteração** de tool-call, alinhando com o dashboard do provider.
+
+## Em produção anteriormente (v0.12.2)
 
 ### Hotfix v0.12.2 (2026-04-30) — root cause "couldn't load"
 
