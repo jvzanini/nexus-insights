@@ -9,6 +9,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   ChevronDown,
   ChevronUp,
@@ -570,6 +571,7 @@ export function ConversasTable({
   const [cursor, setCursor] = useState<string | null>(initialCursor);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const currentSearchParams = useSearchParams();
 
   // ---- Persistências (localStorage) -----
   const [visibleCols, setVisibleCols] = useLocalStorageSet(
@@ -778,6 +780,7 @@ export function ConversasTable({
 
   // Empty state -------------------------------------------------------------
   if (rows.length === 0) {
+    const hasUrlFilters = currentSearchParams.toString().length > 0;
     return (
       <div className="rounded-2xl border border-border bg-card overflow-hidden">
         {toolbar}
@@ -791,6 +794,15 @@ export function ConversasTable({
           <p className="mt-1 text-xs text-muted-foreground">
             Ajuste os filtros para ver mais resultados.
           </p>
+          {hasUrlFilters ? (
+            <a
+              href="?"
+              className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent"
+            >
+              <X className="h-3.5 w-3.5" />
+              Limpar filtros
+            </a>
+          ) : null}
         </div>
       </div>
     );
