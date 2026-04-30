@@ -1,19 +1,20 @@
 /**
- * Dashboard "estilo Roteador":
- *  - 4 KPIs com comparison vs período anterior:
- *      1. Conversas recebidas (created_at no período)
- *      2. Conversas resolvidas (status=1, last_activity_at no período)
- *      3. Em aberto (status=0 — agora, snapshot)
- *      4. Taxa de resolução (resolvidas / recebidas) %
- *  - Chart bucketed (hora se ≤ 2 dias, dia caso contrário) com 2 séries:
- *      Recebidas e Resolvidas.
- *  - Top 5 atendentes mais rápidos (avg first_response no período).
- *  - Top 5 inboxes em aberto (snapshot).
- *  - Top 5 departamentos (teams) com mais resolvidas no período.
- *  - 10 conversas mais recentes (ordenadas por last_activity_at desc).
+ * Dashboard v0.10 — coortes coerentes:
+ *  - 4 KPIs no MESMO recorte (created_at no período):
+ *      1. Conversas recebidas
+ *      2. Conversas resolvidas (status=1)
+ *      3. Conversas abertas (status=0)
+ *      4. Taxa de resolução (resolvidas / recebidas) — sempre ≤ 100%
+ *  - Chart bucketed (hora se ≤ 2 dias, dia caso contrário).
+ *  - Top atendentes mais rápidos (first_response no período).
+ *  - byTeam: contagem por departamento (open+pending+snoozed) com bucket
+ *    "Sem departamento" (team_id IS NULL).
+ *  - byStatus: contagem por status no período (4 fatias).
+ *  - topInboxes: inboxes em aberto no período (status=0).
+ *  - noResponse: total + mais antiga + 5 últimas — status=0 + última msg do contato.
+ *  - 10 conversas mais recentes.
  *
- * Sempre passa pelo filtro base (account_id + exclude Matrix IA inbox 31).
- * Cache pull-through 30s; resilience com fallback ao cache stale.
+ * Cache pull-through 30s. Cache key bumped (v2) — invalida v1 ao subir.
  */
 
 import { getChatwootPool } from "../pool";
@@ -56,10 +57,35 @@ export interface DashboardTopInbox {
   count: number;
 }
 
-export interface DashboardTopTeam {
+export interface DashboardByTeam {
+  /** id null representa o bucket "Sem departamento" (team_id IS NULL). */
   id: number | null;
   name: string;
   count: number;
+}
+
+export type DashboardStatusCode = 0 | 1 | 2 | 3;
+
+export interface DashboardByStatus {
+  status: DashboardStatusCode;
+  label: "Aberto" | "Resolvido" | "Pendente" | "Adiado";
+  count: number;
+}
+
+export interface DashboardNoResponseItem {
+  id: number;
+  displayId: number;
+  contactName: string | null;
+  inboxName: string | null;
+  assigneeName: string | null;
+  waitingSeconds: number;
+  lastIncomingAt: string;
+}
+
+export interface DashboardNoResponse {
+  total: number;
+  oldestSeconds: number;
+  preview: DashboardNoResponseItem[];
 }
 
 export interface DashboardRecentItem {
@@ -77,7 +103,9 @@ export interface DashboardData {
   chart: DashboardChartPoint[];
   topAgents: DashboardTopAgent[];
   topInboxes: DashboardTopInbox[];
-  topTeams: DashboardTopTeam[];
+  byTeam: DashboardByTeam[];
+  byStatus: DashboardByStatus[];
+  noResponse: DashboardNoResponse;
   recent: DashboardRecentItem[];
   granularity: "hour" | "day";
 }
@@ -109,10 +137,27 @@ interface RowInbox {
   name: string | null;
   total: string;
 }
-interface RowTeam {
+interface RowByTeam {
   id: number | null;
-  name: string | null;
+  name: string;
   total: string;
+}
+interface RowByStatus {
+  status: number;
+  total: string;
+}
+interface RowNoResponse {
+  id: number;
+  display_id: number;
+  contact_name: string | null;
+  inbox_name: string | null;
+  assignee_name: string | null;
+  waiting_seconds: number;
+  last_incoming_at: Date;
+}
+interface RowNoResponseAgg {
+  total: number;
+  oldest_seconds: number;
 }
 interface RowRecent {
   id: number;
@@ -128,6 +173,13 @@ function pctDiff(current: number, previous: number): number | null {
   if (previous === 0) return current === 0 ? 0 : null;
   return ((current - previous) / previous) * 100;
 }
+
+const STATUS_LABELS: Record<DashboardStatusCode, DashboardByStatus["label"]> = {
+  0: "Aberto",
+  1: "Resolvido",
+  2: "Pendente",
+  3: "Adiado",
+};
 
 export async function dashboardData(args: DashboardDataInput) {
   const ttl = args.ttlSeconds ?? DEFAULT_TTL_SECONDS;
@@ -147,9 +199,10 @@ export async function dashboardData(args: DashboardDataInput) {
     tz,
   };
 
+  // Cache key v2 — bump força invalidação dos caches v1 que tinham coortes diferentes.
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-data",
+    name: "dashboard-data-v2",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -180,27 +233,29 @@ export async function dashboardData(args: DashboardDataInput) {
               ${matrixClause}
           `;
 
-          // ---------- 2. Resolvidas no período (status=1, last_activity_at) ----------
+          // ---------- 2. Resolvidas — MESMA coorte (created_at no período + status=1 agora) ----------
           const sqlResolved = `
             SELECT COUNT(*)::bigint AS total
             FROM conversations c
             WHERE c.account_id = $1
+              AND c.created_at >= $2
+              AND c.created_at < $3
               AND c.status = 1
-              AND c.last_activity_at >= $2
-              AND c.last_activity_at < $3
               ${matrixClause}
           `;
 
-          // ---------- 3. Em aberto AGORA (snapshot) ----------
+          // ---------- 3. Abertas — MESMA coorte (created_at no período + status=0 agora) ----------
           const sqlOpen = `
             SELECT COUNT(*)::bigint AS total
             FROM conversations c
             WHERE c.account_id = $1
+              AND c.created_at >= $2
+              AND c.created_at < $3
               AND c.status = 0
               ${matrixClause}
           `;
 
-          // ---------- 4. Recebidas no período anterior ----------
+          // ---------- 4. Recebidas/Resolvidas no período anterior ----------
           const sqlReceivedPrev = sqlReceived;
           const sqlResolvedPrev = sqlResolved;
 
@@ -252,35 +307,109 @@ export async function dashboardData(args: DashboardDataInput) {
             LIMIT 5
           `;
 
-          // ---------- 7. Top inboxes em aberto agora ----------
+          // ---------- 7. Inboxes em aberto no período ----------
           const sqlTopInboxes = `
             SELECT i.id, i.name, COUNT(c.id)::bigint AS total
             FROM conversations c
             JOIN inboxes i ON i.id = c.inbox_id
             WHERE c.account_id = $1
+              AND c.created_at >= $2
+              AND c.created_at < $3
               AND c.status = 0
               ${matrixClause}
             GROUP BY i.id, i.name
             ORDER BY total DESC
-            LIMIT 5
+            LIMIT 10
           `;
 
-          // ---------- 8. Top teams (departamentos) resolvidos no período ----------
-          const sqlTopTeams = `
-            SELECT t.id, t.name, COUNT(c.id)::bigint AS total
+          // ---------- 8. byTeam — open/pending/snoozed por departamento (com bucket "Sem departamento") ----------
+          const sqlByTeam = `
+            SELECT
+              t.id,
+              COALESCE(NULLIF(TRIM(t.name), ''), 'Sem departamento') AS name,
+              COUNT(c.id)::bigint AS total
             FROM conversations c
-            JOIN teams t ON t.id = c.team_id
+            LEFT JOIN teams t ON t.id = c.team_id
             WHERE c.account_id = $1
-              AND c.status = 1
-              AND c.last_activity_at >= $2
-              AND c.last_activity_at < $3
+              AND c.created_at >= $2
+              AND c.created_at < $3
+              AND c.status IN (0, 2, 3)
               ${matrixClause}
             GROUP BY t.id, t.name
             ORDER BY total DESC
+          `;
+
+          // ---------- 9. byStatus — distribuição por status no período ----------
+          const sqlByStatus = `
+            SELECT
+              c.status::int AS status,
+              COUNT(*)::bigint AS total
+            FROM conversations c
+            WHERE c.account_id = $1
+              AND c.created_at >= $2
+              AND c.created_at < $3
+              ${matrixClause}
+            GROUP BY c.status
+          `;
+
+          // ---------- 10. noResponse — preview (5) + agg ----------
+          const sqlNoResponse = `
+            WITH last_msg AS (
+              SELECT DISTINCT ON (m.conversation_id)
+                m.conversation_id,
+                m.created_at,
+                m.message_type
+              FROM messages m
+              ORDER BY m.conversation_id, m.created_at DESC
+            )
+            SELECT
+              c.id,
+              c.display_id,
+              ct.name AS contact_name,
+              ix.name AS inbox_name,
+              u.name AS assignee_name,
+              EXTRACT(EPOCH FROM (NOW() - lm.created_at))::int AS waiting_seconds,
+              lm.created_at AS last_incoming_at
+            FROM conversations c
+            JOIN last_msg lm
+              ON lm.conversation_id = c.id
+             AND lm.message_type = 0
+            LEFT JOIN contacts ct ON ct.id = c.contact_id
+            LEFT JOIN inboxes ix ON ix.id = c.inbox_id
+            LEFT JOIN users u ON u.id = c.assignee_id
+            WHERE c.account_id = $1
+              AND c.created_at >= $2
+              AND c.created_at < $3
+              AND c.status = 0
+              ${matrixClause}
+            ORDER BY waiting_seconds DESC
             LIMIT 5
           `;
 
-          // ---------- 9. Conversas recentes (10 últimas) ----------
+          const sqlNoResponseAgg = `
+            WITH last_msg AS (
+              SELECT DISTINCT ON (m.conversation_id)
+                m.conversation_id,
+                m.created_at,
+                m.message_type
+              FROM messages m
+              ORDER BY m.conversation_id, m.created_at DESC
+            )
+            SELECT
+              COUNT(*)::int AS total,
+              COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - lm.created_at))), 0)::int AS oldest_seconds
+            FROM conversations c
+            JOIN last_msg lm
+              ON lm.conversation_id = c.id
+             AND lm.message_type = 0
+            WHERE c.account_id = $1
+              AND c.created_at >= $2
+              AND c.created_at < $3
+              AND c.status = 0
+              ${matrixClause}
+          `;
+
+          // ---------- 11. Conversas recentes (10 últimas) ----------
           const sqlRecent = `
             SELECT
               c.id,
@@ -300,6 +429,17 @@ export async function dashboardData(args: DashboardDataInput) {
             LIMIT 10
           `;
 
+          const periodParams = [
+            args.accountId,
+            args.period.start,
+            args.period.end,
+          ];
+          const prevPeriodParams = [
+            args.accountId,
+            args.prevPeriod.start,
+            args.prevPeriod.end,
+          ];
+
           const [
             receivedRes,
             resolvedRes,
@@ -309,47 +449,29 @@ export async function dashboardData(args: DashboardDataInput) {
             chartRes,
             topAgentsRes,
             topInboxesRes,
-            topTeamsRes,
+            byTeamRes,
+            byStatusRes,
+            noResponseRes,
+            noResponseAggRes,
             recentRes,
           ] = await Promise.all([
-            pool.query<RowCount>(sqlReceived, [
-              args.accountId,
-              args.period.start,
-              args.period.end,
-            ]),
-            pool.query<RowCount>(sqlResolved, [
-              args.accountId,
-              args.period.start,
-              args.period.end,
-            ]),
-            pool.query<RowCount>(sqlOpen, [args.accountId]),
-            pool.query<RowCount>(sqlReceivedPrev, [
-              args.accountId,
-              args.prevPeriod.start,
-              args.prevPeriod.end,
-            ]),
-            pool.query<RowCount>(sqlResolvedPrev, [
-              args.accountId,
-              args.prevPeriod.start,
-              args.prevPeriod.end,
-            ]),
+            pool.query<RowCount>(sqlReceived, periodParams),
+            pool.query<RowCount>(sqlResolved, periodParams),
+            pool.query<RowCount>(sqlOpen, periodParams),
+            pool.query<RowCount>(sqlReceivedPrev, prevPeriodParams),
+            pool.query<RowCount>(sqlResolvedPrev, prevPeriodParams),
             pool.query<RowChart>(sqlChart, [
               args.accountId,
               args.period.start,
               args.period.end,
               tz,
             ]),
-            pool.query<RowAgent>(sqlTopAgents, [
-              args.accountId,
-              args.period.start,
-              args.period.end,
-            ]),
-            pool.query<RowInbox>(sqlTopInboxes, [args.accountId]),
-            pool.query<RowTeam>(sqlTopTeams, [
-              args.accountId,
-              args.period.start,
-              args.period.end,
-            ]),
+            pool.query<RowAgent>(sqlTopAgents, periodParams),
+            pool.query<RowInbox>(sqlTopInboxes, periodParams),
+            pool.query<RowByTeam>(sqlByTeam, periodParams),
+            pool.query<RowByStatus>(sqlByStatus, periodParams),
+            pool.query<RowNoResponse>(sqlNoResponse, periodParams),
+            pool.query<RowNoResponseAgg>(sqlNoResponseAgg, periodParams),
             pool.query<RowRecent>(sqlRecent, [args.accountId]),
           ]);
 
@@ -359,10 +481,16 @@ export async function dashboardData(args: DashboardDataInput) {
           const receivedPrev = Number(receivedPrevRes.rows[0]?.total ?? 0);
           const resolvedPrev = Number(resolvedPrevRes.rows[0]?.total ?? 0);
 
+          // Mesma coorte → resolved sempre ≤ received → rate ≤ 100%.
+          // Clamp defensivo caso uma race condition gere drift mínimo.
           const resolutionRate =
-            received > 0 ? (resolved / received) * 100 : null;
+            received > 0
+              ? Math.min(100, (resolved / received) * 100)
+              : null;
           const resolutionRatePrev =
-            receivedPrev > 0 ? (resolvedPrev / receivedPrev) * 100 : null;
+            receivedPrev > 0
+              ? Math.min(100, (resolvedPrev / receivedPrev) * 100)
+              : null;
 
           const comparison: DashboardComparison = {
             received: pctDiff(received, receivedPrev),
@@ -372,6 +500,20 @@ export async function dashboardData(args: DashboardDataInput) {
                 ? resolutionRate - resolutionRatePrev
                 : null,
           };
+
+          const byStatusCounts = new Map<number, number>();
+          for (const r of byStatusRes.rows) {
+            byStatusCounts.set(Number(r.status), Number(r.total ?? 0));
+          }
+          const byStatus: DashboardByStatus[] = (
+            [0, 1, 2, 3] as DashboardStatusCode[]
+          ).map((status) => ({
+            status,
+            label: STATUS_LABELS[status],
+            count: byStatusCounts.get(status) ?? 0,
+          }));
+
+          const noResponseAggRow = noResponseAggRes.rows[0];
 
           const data: DashboardData = {
             granularity,
@@ -401,13 +543,28 @@ export async function dashboardData(args: DashboardDataInput) {
                 name: r.name ?? "(sem nome)",
                 count: Number(r.total ?? 0),
               })),
-            topTeams: topTeamsRes.rows
-              .filter((r) => r.name)
-              .map((r) => ({
-                id: r.id ?? null,
-                name: r.name ?? "(sem nome)",
-                count: Number(r.total ?? 0),
+            byTeam: byTeamRes.rows.map((r) => ({
+              id: r.id ?? null,
+              name: r.name,
+              count: Number(r.total ?? 0),
+            })),
+            byStatus,
+            noResponse: {
+              total: Number(noResponseAggRow?.total ?? 0),
+              oldestSeconds: Number(noResponseAggRow?.oldest_seconds ?? 0),
+              preview: noResponseRes.rows.map((r) => ({
+                id: r.id,
+                displayId: r.display_id,
+                contactName: r.contact_name,
+                inboxName: r.inbox_name,
+                assigneeName: r.assignee_name,
+                waitingSeconds: Number(r.waiting_seconds ?? 0),
+                lastIncomingAt:
+                  r.last_incoming_at instanceof Date
+                    ? r.last_incoming_at.toISOString()
+                    : String(r.last_incoming_at),
               })),
+            },
             recent: recentRes.rows.map((r) => ({
               id: r.id,
               displayId: r.display_id,
