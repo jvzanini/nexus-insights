@@ -1,5 +1,35 @@
 # Changelog
 
+## [v0.12.1] 2026-04-30 — Hotfix Agente Nex + UX cleanup + visibility/overscroll bugs
+
+> Hotfix imediato sobre v0.12.0. Corrige crash crítico ao trocar para modelos GPT-5.x, atualiza tabela de preços abril/2026 (custos paravam zerados), unifica os cards "Agente Nex" e "Chaves de API" em abas internas, libera o spread cartão (sem limite superior), corrige bug de visibilidade Matrix IA "Ninguém" sendo ignorada para super_admin, remove toggles duplicados do card Visibilidade e elimina a "tarja preta" de overscroll que aparecia em toda a plataforma.
+
+### Bug fixes (críticos)
+
+- **Crash "This page couldn't load" ao trocar modelo (P1).** Modelos da família GPT-5.x e o-series (`o1`, `o3`, `o4`) rejeitam `max_tokens` e `temperature: 0`. `deepTestOpenAI` e `OpenAIClient.chat` agora detectam reasoning models e usam `max_completion_tokens` sem `temperature`. Sintoma do usuário: ao trocar de `gpt-4.1-mini` para `gpt-5.1-mini` e clicar Testar/Salvar → tela de erro full-screen + logout.
+- **Custos zerados no Consumo do Agente Nex (P2).** `MODEL_PRICING` ganhou GPT-4.1.x, GPT-5.x, o3/o4-mini, Claude 4.5/4.7 (Sonnet/Opus/Haiku), Gemini 2.5 (Pro/Flash/Flash-Lite), Gemini 2.0 Pro e aliases OpenRouter. Modelos novos não mapeados continuam retornando 0 (sem regressão), mas todos os modelos do `PROVIDER_CATALOG` 2026 agora têm preço.
+- **Bug visibility "Ninguém" não respeitada (P7).** `shouldExcludeMatrixIA()` ignorava `reports.matrix_ia_visibility = 'none'` para super_admin (sempre incluía). Reescrito para respeitar os 3 níveis: `none` exclui para todos (inclusive super_admin), `super_admin_only` exclui exceto super_admin, `all` inclui para todos.
+- **Tarja preta no overscroll (P8).** Em qualquer rota, ao rolar até o fim e continuar puxando, aparecia uma área preta (#000) além do conteúdo. Causa: `<html>` sem `bg-background` deixava o user-agent pintar a área de elastic-bounce com preto puro do `colorScheme: dark`. Aplicado: `bg-background` no `<html>`, `overscroll-contain` no `<main>` do layout protegido e `overscroll-behavior-y: none` global.
+
+### Mudado
+
+- **Card "Agente Nex" com abas internas Configuração/Chaves (P3).** O card "Chaves de API" foi removido da página `/configuracoes` e seu conteúdo virou uma aba dentro do próprio card "Agente Nex". Segmented control no topo alterna entre a aba "Configuração" (toggle bolha, status, provider/model/chave, spread) e "Chaves de API" (CRUD por provedor). Ao clicar "+ Nova chave" no select, a aba muda automaticamente.
+- **Spread cartão sem limite superior (P4).** Removido o range `[1.00, 1.30]`. Agora aceita qualquer valor positivo (`> 0`). Help text atualizado: "Sem limite superior — escolha o valor real do seu cartão."
+- **Custos exibidos com 3 casas decimais mínimas (P5).** `usdFmt`/`brlFmt` agora têm `minimumFractionDigits: 3` (era 4). `maximumFractionDigits: 6` mantido — valores sub-centavo ainda aparecem com mais casas para não virar zero. Visualmente menos poluído nos KPIs e charts.
+- **Card "Visibilidade" sem toggles Matrix IA duplicados (P6).** Removidos os 2 switches "Matrix IA visível somente para super admin" e "Excluir Matrix IA das métricas globais" — a regra granular já vive no card "Incluir Matrix IA nos relatórios" com select 3-níveis (`all` / `super_admin_only` / `none`). O card "Visibilidade" agora tem apenas CSAT e SLA. Backward-compat: as chaves antigas (`feature_flags.matrix_ia_*`) continuam no banco e `getMatrixIAVisibility()` ainda as lê como fallback.
+
+### Resilência (defensive)
+
+- **Server Actions LLM não vazam mais exceção pro client.** Wrapper `safeAction` em todas as 9 actions de `llm-config.ts` e `llm-credentials.ts`. Qualquer exceção inesperada vira `{ ok: false, error: "Erro inesperado: …" }`, evitando que o Next.js mostre "This page couldn't load" full-screen + deslogue o usuário.
+- **`ALTER TYPE "AuditAction" ADD VALUE` em try/catch isolado.** Se algum ambiente bloquear o ALTER por idiosincrasia (lock, transação implícita), só loga warning e segue — não quebra `ensureLlmTables`.
+
+### Removido
+
+- `src/lib/reports/matrix-ia-setting.ts` — sem consumers após o refactor de `shouldExcludeMatrixIA`.
+- `src/components/settings/llm-credentials-card.tsx` — substituído por `llm-credentials-manager.tsx` (sem wrapper Card; usado dentro do `LlmConfigCard` na aba "Chaves").
+
+---
+
 ## [v0.12.0] 2026-04-30 — Agente Nex: credenciais gerenciáveis + custo BRL com cotação cartão
 
 > Reformulação completa da configuração e do consumo do Agente Nex. Adiciona credenciais (API keys) como recurso de primeira classe com CRUD por provedor, captura cotação USD→BRL cartão de crédito em cada chamada, e padroniza a nomenclatura para "Agente Nex" em todos os call-sites. Trocar modelo ou provedor não exige mais re-digitar a chave.

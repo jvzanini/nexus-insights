@@ -1,12 +1,22 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-04-30
-**Versão atual em produção:** v0.12.0
+**Versão atual em produção:** v0.12.1
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.12.0)
+## Em produção (v0.12.1)
+
+### Hotfix v0.12.1 (2026-04-30)
+
+- **Crash ao trocar modelo (P1):** GPT-5.x / o-series usam `max_completion_tokens` sem `temperature`. Resolve "This page couldn't load" + logout.
+- **Custos zerados no Consumo (P2):** `MODEL_PRICING` atualizado abril/2026 (GPT-4.1.x, GPT-5.x, o3/o4-mini, Claude 4.5/4.7, Gemini 2.5).
+- **Card "Agente Nex" com abas internas (P3):** Configuração / Chaves de API.
+- **Spread cartão sem limite superior (P4)** + custos com 3 casas decimais (P5).
+- **Visibility Matrix IA "Ninguém" agora respeitada inclusive para super_admin (P7)** + remove toggles duplicados do card Visibilidade (P6).
+- **Tarja preta no overscroll eliminada em toda a plataforma (P8).**
+- **Server Actions resilientes** com `safeAction` wrapper — defesa contra crashes futuros.
 
 ### Novidades da release v0.12.0 (2026-04-30)
 
