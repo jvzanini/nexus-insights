@@ -1,78 +1,76 @@
 "use client";
 
-import { Users as UsersIcon, ShieldCheck } from "lucide-react";
-import { PageHeader } from "@/components/page-header";
+import { motion } from "framer-motion";
+import { ShieldCheck, Users as UsersIcon } from "lucide-react";
+
 import {
   Tabs,
+  TabsContent,
   TabsList,
   TabsTrigger,
-  TabsContent,
 } from "@/components/ui/tabs";
-import { UsersTable } from "./users-table";
-import { AuditsTable } from "./audits-table";
-import type { UserListItem } from "@/lib/actions/users";
 import type { AuthUser } from "@/lib/auth-helpers";
 
-interface AccountOption {
-  id: number;
-  name: string;
-}
-interface TeamOption {
-  id: number;
-  name: string;
+import { AuditsTable } from "./audits-table";
+import { UsersContent } from "./users-content";
+
+interface UsersTabsProps {
+  currentUser: AuthUser;
 }
 
-export function UsersTabs({
-  users,
-  currentUser,
-  accountOptions,
-  teamOptions,
-}: {
-  users: UserListItem[];
-  currentUser: AuthUser;
-  accountOptions: AccountOption[];
-  teamOptions: TeamOption[];
-}) {
+export function UsersTabs({ currentUser }: UsersTabsProps) {
   const isSuperAdmin = currentUser.platformRole === "super_admin";
 
   if (!isSuperAdmin) {
     return (
-      <UsersTable
-        users={users}
-        currentUser={currentUser}
-        accountOptions={accountOptions}
-        teamOptions={teamOptions}
-      />
+      <UsersContent isSuperAdmin={false} currentUser={currentUser} />
     );
   }
 
   return (
-    <div>
-      <PageHeader
-        icon={UsersIcon}
-        title="Usuários"
-        subtitle="Gerencie os usuários da plataforma e acompanhe a auditoria"
-      />
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.2 }}
+      className="space-y-6"
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+        className="flex items-center gap-3"
+      >
+        <div
+          className="flex h-10 w-10 items-center justify-center rounded-xl border border-violet-500/20 bg-violet-600/10"
+          aria-hidden="true"
+        >
+          <UsersIcon className="h-5 w-5 text-violet-400" />
+        </div>
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Usuários</h1>
+          <p className="text-sm text-muted-foreground">
+            Gerencie os usuários da plataforma e acompanhe a auditoria
+          </p>
+        </div>
+      </motion.div>
 
       <Tabs defaultValue="users" className="w-full">
-        <TabsList className="mb-6">
+        <TabsList className="mb-4">
           <TabsTrigger value="users">
-            <UsersIcon className="h-3.5 w-3.5" />
+            <UsersIcon className="h-3.5 w-3.5" aria-hidden="true" />
             Usuários
           </TabsTrigger>
           <TabsTrigger value="audits">
-            <ShieldCheck className="h-3.5 w-3.5" />
+            <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
             Auditoria
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="users">
-          <UsersTable
-            users={users}
+          <UsersContent
+            isSuperAdmin
             currentUser={currentUser}
-            accountOptions={accountOptions}
-            teamOptions={teamOptions}
-            hideHeader
+            showHeader={false}
           />
         </TabsContent>
 
@@ -80,6 +78,6 @@ export function UsersTabs({
           <AuditsTable />
         </TabsContent>
       </Tabs>
-    </div>
+    </motion.div>
   );
 }
