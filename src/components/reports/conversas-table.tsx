@@ -729,35 +729,49 @@ export function ConversasTable({
           <span className="font-semibold text-foreground">{rows.length}</span>{" "}
           conversa{rows.length === 1 ? "" : "s"}
         </span>
-        {sortStack.length > 0 ? (
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={clearSort}
-            className="h-7 gap-1 text-[11px]"
-            aria-label="Limpar ordenação"
-          >
-            <X className="h-3 w-3" />
-            Limpar ordenação
-            <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-bold text-primary tabular-nums">
-              {sortStack.length}
+        <div data-tour="sorting-chip" className="inline-flex items-center">
+          {sortStack.length > 0 ? (
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={clearSort}
+              className="h-7 gap-1 text-[11px]"
+              aria-label="Limpar ordenação"
+              title="Click no cabeçalho ordena · Shift+click adiciona critério"
+            >
+              <X className="h-3 w-3" />
+              Ordenação
+              <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-bold text-primary tabular-nums">
+                {sortStack.length}
+              </span>
+            </Button>
+          ) : (
+            <span
+              className="hidden items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground/70 sm:inline-flex"
+              title="Click no cabeçalho ordena · Shift+click adiciona critério"
+            >
+              Ordenar: click no cabeçalho
             </span>
-          </Button>
-        ) : null}
+          )}
+        </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <CustomSelect
-          value={pageSize}
-          onChange={handlePageSizeChange}
-          options={PAGE_SIZE_OPTIONS}
-          className="min-w-[160px]"
-          triggerClassName="h-9 text-xs"
-        />
-        <ColumnsToggle
-          columns={toggleColumns}
-          visible={visibleCols}
-          onChange={setVisibleCols}
-        />
+        <div data-tour="page-size">
+          <CustomSelect
+            value={pageSize}
+            onChange={handlePageSizeChange}
+            options={PAGE_SIZE_OPTIONS}
+            className="min-w-[160px]"
+            triggerClassName="h-9 text-xs"
+          />
+        </div>
+        <div data-tour="columns">
+          <ColumnsToggle
+            columns={toggleColumns}
+            visible={visibleCols}
+            onChange={setVisibleCols}
+          />
+        </div>
       </div>
     </div>
   );
@@ -864,6 +878,11 @@ export function ConversasTable({
                       col.align === "right" && "text-right",
                       col.align === "center" && "text-center",
                     )}
+                    data-tour={
+                      col.key === "actions" && idx === 0
+                        ? "open-action"
+                        : undefined
+                    }
                   >
                     {col.render(row)}
                   </TableCell>

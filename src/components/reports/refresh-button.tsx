@@ -32,6 +32,7 @@ export function RefreshButton({
       disabled={isPending}
       aria-label={ariaLabel}
       title={ariaLabel}
+      data-tour="refresh"
       className={cn(
         "h-9 w-9 rounded-lg border-border bg-card/80 text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-foreground",
         className,
