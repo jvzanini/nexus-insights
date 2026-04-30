@@ -209,15 +209,15 @@ export function BadgeSelect<T extends string = string>({
               top: fixedPos.top,
               left: fixedPos.left,
               width: fixedPos.width,
-              zIndex: 200,
+              zIndex: 1000,
             }
           : { minWidth }
       }
       className={cn(
         "overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-xl ring-1 ring-foreground/10",
-        "origin-top scale-95 opacity-0 animate-in fade-in-0 zoom-in-95",
-        "duration-150 ease-out fill-mode-forwards",
-        !useFixed && "absolute left-0 top-full z-[200] mt-1",
+        "origin-top animate-in fade-in-0 zoom-in-95",
+        "duration-150 ease-out",
+        !useFixed && "absolute left-0 top-full z-[1000] mt-1",
       )}
       data-state={open ? "open" : "closed"}
     >

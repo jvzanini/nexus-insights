@@ -330,15 +330,17 @@ export function UsersContent({
             <TableBody>
               {users.map((u, index) => {
                 const isSelf = u.id === currentUser.id;
-                const isOwner = u.isOwner;
                 const editAllowed = canEditUser(currentUser, u);
                 const deactAllowed = canDeactivateUser(currentUser, u);
                 const delAllowed = canDeleteUser(currentUser, u);
 
-                const lockRole = isOwner || isSelf || !editAllowed.allowed;
-                const lockStatus = isOwner || isSelf || !deactAllowed.allowed;
-                const showEdit = (editAllowed.allowed && !isOwner) || isSelf;
-                const showDelete = !isOwner && !isSelf && delAllowed.allowed;
+                // canEditUser/canDeactivateUser/canDeleteUser já bloqueiam
+                // owner e self — refletem a regra suprema: owner é imutável e
+                // o próprio usuário se edita via /perfil, não pela tabela.
+                const lockRole = !editAllowed.allowed;
+                const lockStatus = !deactAllowed.allowed;
+                const showEdit = editAllowed.allowed;
+                const showDelete = delAllowed.allowed;
 
                 const roleStyle = getRoleStyle(u.platformRole);
                 const RoleIcon = roleStyle.icon;

@@ -26,6 +26,11 @@ export const UpdateUserInput = z.object({
   id: z.string().uuid(),
   name: z.string().min(2).max(120).optional(),
   platformRole: PlatformRoleEnum.optional(),
+  password: z
+    .string()
+    .min(8, "Senha deve ter ao menos 8 caracteres")
+    .max(72)
+    .optional(),
   accountIds: z.array(z.number().int().positive()).optional(),
   teamIds: z.array(z.number().int().positive()).optional(),
 });

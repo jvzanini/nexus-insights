@@ -178,6 +178,19 @@ describe("BadgeSelect", () => {
     expect(document.body.contains(listbox)).toBe(true);
   });
 
+  it("listbox aberto NÃO carrega classes que zerariam o estado final (opacity-0 / scale-95)", () => {
+    // Regressão: classes estáticas de estado inicial mantinham o popover invisível
+    // após a animação devido a fill-mode-forwards.
+    render(<ControlledHarness initial="viewer" />);
+    fireEvent.click(screen.getByRole("combobox"));
+
+    const listbox = screen.getByRole("listbox");
+    const cls = listbox.className;
+    expect(cls).not.toMatch(/(^|\s)opacity-0(\s|$)/);
+    expect(cls).not.toMatch(/(^|\s)scale-95(\s|$)/);
+    expect(cls).not.toContain("fill-mode-forwards");
+  });
+
   it("ArrowDown + Enter seleciona via teclado", () => {
     const onChange = jest.fn();
     render(<ControlledHarness initial="super_admin" onChange={onChange} />);

@@ -19,6 +19,8 @@ import {
   CreateUserInput,
   UpdateUserInput,
 } from "@/lib/validations/user";
+import { getKnownAccounts } from "@/lib/tenant";
+import { getTeams } from "@/lib/chatwoot/queries/meta-cache";
 import type { PlatformRole } from "@/generated/prisma/client";
 
 type ActionResult<T = unknown> = {
@@ -94,6 +96,47 @@ export async function getUserDetails(
   } catch (err) {
     console.error("[users.getDetails]", err);
     return { success: false, error: "Erro ao carregar usuário" };
+  }
+}
+
+export interface UserFormOptions {
+  accounts: Array<{ id: number; name: string }>;
+  teamsByAccount: Record<number, Array<{ id: number; name: string }>>;
+}
+
+/**
+ * Carrega contas conhecidas + times de cada conta para popular o wizard.
+ * Falha silenciosamente em times (read-only Chatwoot pode estar offline) — devolve {} para a conta.
+ */
+export async function getUserFormOptions(): Promise<
+  ActionResult<UserFormOptions>
+> {
+  try {
+    const me = await getCurrentUser();
+    if (!me) return { success: false, error: "Não autenticado" };
+    if (me.platformRole === "viewer") {
+      return { success: false, error: "Acesso negado" };
+    }
+
+    const accounts = await getKnownAccounts();
+    const teamsEntries = await Promise.all(
+      accounts.map(async (a) => {
+        try {
+          const result = await getTeams(a.id);
+          return [a.id, result.data ?? []] as const;
+        } catch {
+          return [a.id, [] as Array<{ id: number; name: string }>] as const;
+        }
+      }),
+    );
+    const teamsByAccount: Record<number, Array<{ id: number; name: string }>> = {};
+    for (const [id, teams] of teamsEntries) {
+      teamsByAccount[id] = teams;
+    }
+    return { success: true, data: { accounts, teamsByAccount } };
+  } catch (err) {
+    console.error("[users.getUserFormOptions]", err);
+    return { success: false, error: "Erro ao carregar opções" };
   }
 }
 
@@ -279,6 +322,10 @@ export async function updateUser(rawInput: unknown): Promise<ActionResult> {
       const data: Record<string, unknown> = {};
       if (input.name) data.name = input.name;
       if (input.platformRole) data.platformRole = input.platformRole;
+      if (input.password) {
+        data.password = await bcrypt.hash(input.password, 10);
+        data.mustChangePassword = true;
+      }
       if (Object.keys(data).length > 0) {
         await tx.user.update({ where: { id: input.id }, data });
       }
