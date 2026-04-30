@@ -113,6 +113,50 @@ export interface ResolutionRateDrillDownData {
   topAgents: DrillDownAgentRate[];
 }
 
+export interface NoResponseDrillDownItem {
+  id: number;
+  displayId: number;
+  contactName: string | null;
+  inboxName: string | null;
+  assigneeName: string | null;
+  waitingSeconds: number;
+  lastIncomingAt: string;
+  snippet: string | null;
+}
+
+export interface NoResponseDrillDownAggregation {
+  id: number | null;
+  name: string;
+  count: number;
+}
+
+export interface NoResponseDrillDownData {
+  total: number;
+  oldestSeconds: number;
+  items: NoResponseDrillDownItem[];
+  byInbox: NoResponseDrillDownAggregation[];
+  byAssignee: NoResponseDrillDownAggregation[];
+}
+
+export interface ByTeamDrillDownItem {
+  id: number;
+  displayId: number;
+  contactName: string | null;
+  inboxName: string | null;
+  assigneeName: string | null;
+  status: number;
+  createdAt: string;
+  lastActivityAt: string;
+}
+
+export interface ByTeamDrillDownData {
+  teamId: number | null;
+  teamName: string;
+  total: number;
+  byStatus: DrillDownByStatus[];
+  items: ByTeamDrillDownItem[];
+}
+
 interface RowCount {
   total: string;
 }
@@ -375,41 +419,43 @@ export async function getResolvedDrillDown(args: DrillDownPeriodInput) {
           const pool = getChatwootPool();
           const matrixClause = excludeMatrixIA ? " AND c.inbox_id <> 31" : "";
 
+          // v0.10: coorte = created_at ∈ período (mesma de Recebidas/Abertas)
+          // garantindo que Recebidas, Resolvidas e Abertas falem da mesma coorte.
           const sqlTotal = `
             SELECT COUNT(*)::bigint AS total
             FROM conversations c
             WHERE c.account_id = $1
+              AND c.created_at >= $2
+              AND c.created_at < $3
               AND c.status = 1
-              AND c.last_activity_at >= $2
-              AND c.last_activity_at < $3
               ${matrixClause}
           `;
           const sqlChart =
             granularity === "hour"
               ? `
               SELECT
-                date_trunc('hour', c.last_activity_at AT TIME ZONE $4)::timestamp AS bucket,
+                date_trunc('hour', c.created_at AT TIME ZONE $4)::timestamp AS bucket,
                 0::bigint AS received,
                 COUNT(*)::bigint AS resolved
               FROM conversations c
               WHERE c.account_id = $1
+                AND c.created_at >= $2
+                AND c.created_at < $3
                 AND c.status = 1
-                AND c.last_activity_at >= $2
-                AND c.last_activity_at < $3
                 ${matrixClause}
               GROUP BY bucket
               ORDER BY bucket ASC
             `
               : `
               SELECT
-                date_trunc('day', c.last_activity_at AT TIME ZONE $4)::timestamp AS bucket,
+                date_trunc('day', c.created_at AT TIME ZONE $4)::timestamp AS bucket,
                 0::bigint AS received,
                 COUNT(*)::bigint AS resolved
               FROM conversations c
               WHERE c.account_id = $1
+                AND c.created_at >= $2
+                AND c.created_at < $3
                 AND c.status = 1
-                AND c.last_activity_at >= $2
-                AND c.last_activity_at < $3
                 ${matrixClause}
               GROUP BY bucket
               ORDER BY bucket ASC
@@ -419,22 +465,22 @@ export async function getResolvedDrillDown(args: DrillDownPeriodInput) {
             FROM conversations c
             JOIN inboxes i ON i.id = c.inbox_id
             WHERE c.account_id = $1
+              AND c.created_at >= $2
+              AND c.created_at < $3
               AND c.status = 1
-              AND c.last_activity_at >= $2
-              AND c.last_activity_at < $3
               ${matrixClause}
             GROUP BY i.id, i.name
             ORDER BY total DESC
             LIMIT 10
           `;
           const sqlByHour = `
-            SELECT EXTRACT(HOUR FROM c.last_activity_at AT TIME ZONE $4)::int AS hour,
+            SELECT EXTRACT(HOUR FROM c.created_at AT TIME ZONE $4)::int AS hour,
                    COUNT(*)::bigint AS total
             FROM conversations c
             WHERE c.account_id = $1
+              AND c.created_at >= $2
+              AND c.created_at < $3
               AND c.status = 1
-              AND c.last_activity_at >= $2
-              AND c.last_activity_at < $3
               ${matrixClause}
             GROUP BY hour
             ORDER BY hour ASC
@@ -452,9 +498,9 @@ export async function getResolvedDrillDown(args: DrillDownPeriodInput) {
             LEFT JOIN inboxes i ON i.id = c.inbox_id
             LEFT JOIN users u ON u.id = c.assignee_id
             WHERE c.account_id = $1
+              AND c.created_at >= $2
+              AND c.created_at < $3
               AND c.status = 1
-              AND c.last_activity_at >= $2
-              AND c.last_activity_at < $3
               ${matrixClause}
             ORDER BY c.last_activity_at DESC NULLS LAST
             LIMIT 20
@@ -527,20 +573,25 @@ export async function getResolvedDrillDown(args: DrillDownPeriodInput) {
 }
 
 /**
- * Drill-down "Em aberto agora" — snapshot.
+ * Drill-down "Abertas no período" — coorte: created_at ∈ período + status=0.
+ *
+ * v0.10: deixou de ser snapshot global; aceita `period` igual aos demais
+ * drill-downs para ser coerente com o KPI.
  */
-export async function getOpenDrillDown(args: {
-  accountId: number;
-  excludeMatrixIA?: boolean;
-  ttlSeconds?: number;
-}) {
+export async function getOpenDrillDown(args: DrillDownPeriodInput) {
   const ttl = args.ttlSeconds ?? DEFAULT_TTL_SECONDS;
   const excludeMatrixIA = args.excludeMatrixIA !== false;
 
-  const filtersForHash = { excludeMatrixIA };
+  const filtersForHash = {
+    period: {
+      start: args.period.start.toISOString(),
+      end: args.period.end.toISOString(),
+    },
+    excludeMatrixIA,
+  };
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-drill-open",
+    name: "dashboard-drill-open-v2",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -558,15 +609,18 @@ export async function getOpenDrillDown(args: {
             SELECT COUNT(*)::bigint AS total
             FROM conversations c
             WHERE c.account_id = $1
+              AND c.created_at >= $2
+              AND c.created_at < $3
               AND c.status = 0
               ${matrixClause}
           `;
-          // Aqui mostramos a distribuição completa por status (não só "open"),
-          // pra dar contexto: aberto / pendente / adiada.
+          // Distribuição por status no recorte do período (open/pending/snoozed).
           const sqlByStatus = `
             SELECT c.status, COUNT(*)::bigint AS total
             FROM conversations c
             WHERE c.account_id = $1
+              AND c.created_at >= $2
+              AND c.created_at < $3
               AND c.status IN (0, 2, 3)
               ${matrixClause}
             GROUP BY c.status
@@ -577,6 +631,8 @@ export async function getOpenDrillDown(args: {
             FROM conversations c
             JOIN inboxes i ON i.id = c.inbox_id
             WHERE c.account_id = $1
+              AND c.created_at >= $2
+              AND c.created_at < $3
               AND c.status = 0
               ${matrixClause}
             GROUP BY i.id, i.name
@@ -596,18 +652,26 @@ export async function getOpenDrillDown(args: {
             LEFT JOIN inboxes i ON i.id = c.inbox_id
             LEFT JOIN users u ON u.id = c.assignee_id
             WHERE c.account_id = $1
+              AND c.created_at >= $2
+              AND c.created_at < $3
               AND c.status = 0
               ${matrixClause}
             ORDER BY c.last_activity_at ASC NULLS LAST
             LIMIT 20
           `;
 
+          const periodParams = [
+            args.accountId,
+            args.period.start,
+            args.period.end,
+          ];
+
           const [totalRes, byStatusRes, byInboxRes, openRes] =
             await Promise.all([
-              pool.query<RowCount>(sqlTotal, [args.accountId]),
-              pool.query<RowStatus>(sqlByStatus, [args.accountId]),
-              pool.query<RowInbox>(sqlByInbox, [args.accountId]),
-              pool.query<RowConversation>(sqlOpen, [args.accountId]),
+              pool.query<RowCount>(sqlTotal, periodParams),
+              pool.query<RowStatus>(sqlByStatus, periodParams),
+              pool.query<RowInbox>(sqlByInbox, periodParams),
+              pool.query<RowConversation>(sqlOpen, periodParams),
             ]);
 
           return {
@@ -821,6 +885,374 @@ export async function getResolutionRateDrillDown(args: DrillDownPeriodInput) {
                     received > 0 ? (resolved / received) * 100 : 0,
                 };
               }),
+          };
+        },
+        { fallbackKey: key },
+      ),
+  });
+}
+
+/* ----------------------------- noResponse ----------------------------- */
+
+interface RowNoResponseFull {
+  id: number;
+  display_id: number;
+  contact_name: string | null;
+  inbox_name: string | null;
+  assignee_name: string | null;
+  waiting_seconds: number;
+  last_incoming_at: Date;
+  snippet: string | null;
+}
+interface RowNoResponseAggLocal {
+  total: number;
+  oldest_seconds: number;
+}
+interface RowNoResponseGroup {
+  id: number | null;
+  name: string;
+  total: string;
+}
+
+/**
+ * Drill-down "Conversas sem resposta no período".
+ *
+ * Definição: status=0 + última mensagem da conversa é do contato (message_type=0).
+ * Coorte: created_at ∈ período.
+ */
+export async function getNoResponseDrillDown(args: DrillDownPeriodInput) {
+  const ttl = args.ttlSeconds ?? DEFAULT_TTL_SECONDS;
+  const excludeMatrixIA = args.excludeMatrixIA !== false;
+
+  const filtersForHash = {
+    period: {
+      start: args.period.start.toISOString(),
+      end: args.period.end.toISOString(),
+    },
+    excludeMatrixIA,
+  };
+  const key = cacheKey({
+    scope: "report",
+    name: "dashboard-drill-no-response",
+    accountId: args.accountId,
+    filtersHash: hashFilters(filtersForHash),
+  });
+
+  return withCache<NoResponseDrillDownData>({
+    key,
+    ttlSeconds: ttl,
+    fetcher: () =>
+      withChatwootResilience<NoResponseDrillDownData>(
+        async () => {
+          const pool = getChatwootPool();
+          const matrixClause = excludeMatrixIA ? " AND c.inbox_id <> 31" : "";
+
+          const sqlAgg = `
+            WITH last_msg AS (
+              SELECT DISTINCT ON (m.conversation_id)
+                m.conversation_id,
+                m.created_at,
+                m.message_type
+              FROM messages m
+              ORDER BY m.conversation_id, m.created_at DESC
+            )
+            SELECT
+              COUNT(*)::int AS total,
+              COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - lm.created_at))), 0)::int AS oldest_seconds
+            FROM conversations c
+            JOIN last_msg lm
+              ON lm.conversation_id = c.id
+             AND lm.message_type = 0
+            WHERE c.account_id = $1
+              AND c.created_at >= $2
+              AND c.created_at < $3
+              AND c.status = 0
+              ${matrixClause}
+          `;
+
+          const sqlList = `
+            WITH last_msg AS (
+              SELECT DISTINCT ON (m.conversation_id)
+                m.conversation_id,
+                m.created_at,
+                m.message_type,
+                m.content
+              FROM messages m
+              ORDER BY m.conversation_id, m.created_at DESC
+            )
+            SELECT
+              c.id,
+              c.display_id,
+              ct.name AS contact_name,
+              ix.name AS inbox_name,
+              u.name AS assignee_name,
+              EXTRACT(EPOCH FROM (NOW() - lm.created_at))::int AS waiting_seconds,
+              lm.created_at AS last_incoming_at,
+              lm.content AS snippet
+            FROM conversations c
+            JOIN last_msg lm
+              ON lm.conversation_id = c.id
+             AND lm.message_type = 0
+            LEFT JOIN contacts ct ON ct.id = c.contact_id
+            LEFT JOIN inboxes ix ON ix.id = c.inbox_id
+            LEFT JOIN users u ON u.id = c.assignee_id
+            WHERE c.account_id = $1
+              AND c.created_at >= $2
+              AND c.created_at < $3
+              AND c.status = 0
+              ${matrixClause}
+            ORDER BY waiting_seconds DESC
+            LIMIT 100
+          `;
+
+          const sqlByInbox = `
+            WITH last_msg AS (
+              SELECT DISTINCT ON (m.conversation_id)
+                m.conversation_id,
+                m.message_type
+              FROM messages m
+              ORDER BY m.conversation_id, m.created_at DESC
+            )
+            SELECT
+              ix.id,
+              COALESCE(NULLIF(TRIM(ix.name), ''), '(sem inbox)') AS name,
+              COUNT(c.id)::bigint AS total
+            FROM conversations c
+            JOIN last_msg lm
+              ON lm.conversation_id = c.id
+             AND lm.message_type = 0
+            LEFT JOIN inboxes ix ON ix.id = c.inbox_id
+            WHERE c.account_id = $1
+              AND c.created_at >= $2
+              AND c.created_at < $3
+              AND c.status = 0
+              ${matrixClause}
+            GROUP BY ix.id, ix.name
+            ORDER BY total DESC
+          `;
+
+          const sqlByAssignee = `
+            WITH last_msg AS (
+              SELECT DISTINCT ON (m.conversation_id)
+                m.conversation_id,
+                m.message_type
+              FROM messages m
+              ORDER BY m.conversation_id, m.created_at DESC
+            )
+            SELECT
+              u.id,
+              COALESCE(NULLIF(TRIM(u.name), ''), 'Sem atendente') AS name,
+              COUNT(c.id)::bigint AS total
+            FROM conversations c
+            JOIN last_msg lm
+              ON lm.conversation_id = c.id
+             AND lm.message_type = 0
+            LEFT JOIN users u ON u.id = c.assignee_id
+            WHERE c.account_id = $1
+              AND c.created_at >= $2
+              AND c.created_at < $3
+              AND c.status = 0
+              ${matrixClause}
+            GROUP BY u.id, u.name
+            ORDER BY total DESC
+          `;
+
+          const periodParams = [
+            args.accountId,
+            args.period.start,
+            args.period.end,
+          ];
+
+          const [aggRes, listRes, byInboxRes, byAssigneeRes] = await Promise.all([
+            pool.query<RowNoResponseAggLocal>(sqlAgg, periodParams),
+            pool.query<RowNoResponseFull>(sqlList, periodParams),
+            pool.query<RowNoResponseGroup>(sqlByInbox, periodParams),
+            pool.query<RowNoResponseGroup>(sqlByAssignee, periodParams),
+          ]);
+
+          const agg = aggRes.rows[0];
+          return {
+            total: Number(agg?.total ?? 0),
+            oldestSeconds: Number(agg?.oldest_seconds ?? 0),
+            items: listRes.rows.map((r) => ({
+              id: r.id,
+              displayId: r.display_id,
+              contactName: r.contact_name,
+              inboxName: r.inbox_name,
+              assigneeName: r.assignee_name,
+              waitingSeconds: Number(r.waiting_seconds ?? 0),
+              lastIncomingAt:
+                r.last_incoming_at instanceof Date
+                  ? r.last_incoming_at.toISOString()
+                  : String(r.last_incoming_at),
+              snippet: r.snippet,
+            })),
+            byInbox: byInboxRes.rows.map((r) => ({
+              id: r.id ?? null,
+              name: r.name,
+              count: Number(r.total ?? 0),
+            })),
+            byAssignee: byAssigneeRes.rows.map((r) => ({
+              id: r.id ?? null,
+              name: r.name,
+              count: Number(r.total ?? 0),
+            })),
+          };
+        },
+        { fallbackKey: key },
+      ),
+  });
+}
+
+/* ------------------------------ byTeam ------------------------------ */
+
+interface RowByTeamItem {
+  id: number;
+  display_id: number;
+  contact_name: string | null;
+  inbox_name: string | null;
+  assignee_name: string | null;
+  status: number;
+  created_at: Date;
+  last_activity_at: Date;
+}
+
+/**
+ * Drill-down de departamento (incluindo bucket "Sem departamento" quando teamId=null).
+ *
+ * Coorte: created_at ∈ período + status IN (0, 2, 3) (mesmo recorte do card).
+ */
+export async function getByTeamDrillDown(args: {
+  accountId: number;
+  period: { start: Date; end: Date };
+  /** null = bucket "Sem departamento" */
+  teamId: number | null;
+  excludeMatrixIA?: boolean;
+  ttlSeconds?: number;
+}) {
+  const ttl = args.ttlSeconds ?? DEFAULT_TTL_SECONDS;
+  const excludeMatrixIA = args.excludeMatrixIA !== false;
+
+  const filtersForHash = {
+    period: {
+      start: args.period.start.toISOString(),
+      end: args.period.end.toISOString(),
+    },
+    teamId: args.teamId,
+    excludeMatrixIA,
+  };
+  const key = cacheKey({
+    scope: "report",
+    name: "dashboard-drill-by-team",
+    accountId: args.accountId,
+    filtersHash: hashFilters(filtersForHash),
+  });
+
+  return withCache<ByTeamDrillDownData>({
+    key,
+    ttlSeconds: ttl,
+    fetcher: () =>
+      withChatwootResilience<ByTeamDrillDownData>(
+        async () => {
+          const pool = getChatwootPool();
+          const matrixClause = excludeMatrixIA ? " AND c.inbox_id <> 31" : "";
+          const teamClause =
+            args.teamId === null
+              ? " AND c.team_id IS NULL"
+              : " AND c.team_id = $4::int";
+
+          const baseParams: unknown[] = [
+            args.accountId,
+            args.period.start,
+            args.period.end,
+          ];
+          const params =
+            args.teamId === null ? baseParams : [...baseParams, args.teamId];
+
+          const sqlTotalAndName = `
+            SELECT
+              COUNT(c.id)::bigint AS total,
+              MAX(COALESCE(NULLIF(TRIM(t.name), ''), 'Sem departamento')) AS team_name
+            FROM conversations c
+            LEFT JOIN teams t ON t.id = c.team_id
+            WHERE c.account_id = $1
+              AND c.created_at >= $2
+              AND c.created_at < $3
+              AND c.status IN (0, 2, 3)
+              ${teamClause}
+              ${matrixClause}
+          `;
+
+          const sqlByStatus = `
+            SELECT c.status, COUNT(*)::bigint AS total
+            FROM conversations c
+            WHERE c.account_id = $1
+              AND c.created_at >= $2
+              AND c.created_at < $3
+              AND c.status IN (0, 2, 3)
+              ${teamClause}
+              ${matrixClause}
+            GROUP BY c.status
+            ORDER BY total DESC
+          `;
+
+          const sqlList = `
+            SELECT
+              c.id, c.display_id,
+              ct.name AS contact_name,
+              i.name AS inbox_name,
+              u.name AS assignee_name,
+              c.status,
+              c.created_at,
+              c.last_activity_at
+            FROM conversations c
+            LEFT JOIN contacts ct ON ct.id = c.contact_id
+            LEFT JOIN inboxes i ON i.id = c.inbox_id
+            LEFT JOIN users u ON u.id = c.assignee_id
+            WHERE c.account_id = $1
+              AND c.created_at >= $2
+              AND c.created_at < $3
+              AND c.status IN (0, 2, 3)
+              ${teamClause}
+              ${matrixClause}
+            ORDER BY c.last_activity_at DESC NULLS LAST
+            LIMIT 100
+          `;
+
+          const [totalRes, byStatusRes, listRes] = await Promise.all([
+            pool.query<{ total: string; team_name: string | null }>(
+              sqlTotalAndName,
+              params,
+            ),
+            pool.query<RowStatus>(sqlByStatus, params),
+            pool.query<RowByTeamItem>(sqlList, params),
+          ]);
+
+          const totalRow = totalRes.rows[0];
+          const teamName =
+            args.teamId === null
+              ? "Sem departamento"
+              : (totalRow?.team_name ?? "(sem nome)");
+
+          return {
+            teamId: args.teamId,
+            teamName,
+            total: Number(totalRow?.total ?? 0),
+            byStatus: byStatusRes.rows.map((r) => ({
+              status: Number(r.status),
+              label: STATUS_LABELS[Number(r.status)] ?? "—",
+              count: Number(r.total ?? 0),
+            })),
+            items: listRes.rows.map((r) => ({
+              id: r.id,
+              displayId: r.display_id,
+              contactName: r.contact_name,
+              inboxName: r.inbox_name,
+              assigneeName: r.assignee_name,
+              status: r.status,
+              createdAt: new Date(r.created_at).toISOString(),
+              lastActivityAt: new Date(r.last_activity_at).toISOString(),
+            })),
           };
         },
         { fallbackKey: key },
