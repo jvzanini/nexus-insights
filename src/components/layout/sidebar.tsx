@@ -273,6 +273,15 @@ export function Sidebar({
           Sair
         </Button>
       </div>
+
+      <footer className="mt-auto border-t border-border/50 px-3 py-2">
+        <p className="text-[10px] text-muted-foreground/60 text-center leading-tight">
+          Nexus AI © 2026
+        </p>
+        <p className="text-[10px] text-muted-foreground/60 text-center leading-tight">
+          Todos os direitos reservados
+        </p>
+      </footer>
     </div>
   );
 
