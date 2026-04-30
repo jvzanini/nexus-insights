@@ -186,7 +186,7 @@ export function Sidebar({
             Nexus Insights
           </h1>
           <p className="text-[11px] text-muted-foreground leading-none">
-            Relatórios e insights
+            Relatórios Inteligentes
           </p>
         </div>
       </div>
