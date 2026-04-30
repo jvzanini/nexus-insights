@@ -11,6 +11,7 @@ import {
   UsersRound,
   Map,
   Sparkles,
+  Database,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { PlatformRole } from "@/generated/prisma/client";
@@ -114,6 +115,12 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Sparkles,
     superAdminOnly: true,
     section: "admin",
+  },
+  {
+    label: "Jobs de pré-agregação",
+    href: "/configuracoes/jobs",
+    icon: Database,
+    superAdminOnly: true,
   },
   { label: "Perfil", href: "/perfil", icon: User },
 ];
