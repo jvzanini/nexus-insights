@@ -372,7 +372,32 @@ describe("LlmConfigCard", () => {
     expect(setCardSpreadAction).toHaveBeenCalledWith(1.15);
   });
 
-  it("spread fora do range exibe erro e não chama setCardSpreadAction", async () => {
+  it("spread negativo exibe erro e não chama setCardSpreadAction", async () => {
+    render(
+      <LlmConfigCard
+        initial={null}
+        initialNexEnabled={false}
+        initialCredentials={[cred()]}
+        initialSpread={1.1}
+      />,
+    );
+
+    const spreadInput = screen.getByLabelText(
+      /Spread cartão \(multiplicador USD\/BRL\)/i,
+    ) as HTMLInputElement;
+    fireEvent.change(spreadInput, { target: { value: "-1" } });
+
+    await act(async () => {
+      jest.advanceTimersByTime(600);
+    });
+
+    expect(setCardSpreadAction).not.toHaveBeenCalled();
+    expect(toastMock.error).toHaveBeenCalled();
+  });
+
+  it("spread positivo qualquer (2.5) é aceito sem upper bound", async () => {
+    setCardSpreadAction.mockResolvedValue({ ok: true });
+
     render(
       <LlmConfigCard
         initial={null}
@@ -391,8 +416,8 @@ describe("LlmConfigCard", () => {
       jest.advanceTimersByTime(600);
     });
 
-    expect(setCardSpreadAction).not.toHaveBeenCalled();
-    expect(toastMock.error).toHaveBeenCalled();
+    await waitFor(() => expect(setCardSpreadAction).toHaveBeenCalledTimes(1));
+    expect(setCardSpreadAction).toHaveBeenCalledWith(2.5);
   });
 
   it("trocar modelo (sem trocar credencial) dispara save com mesmo credentialId", async () => {

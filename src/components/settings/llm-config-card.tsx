@@ -59,8 +59,6 @@ interface LlmConfigCardProps {
 
 const CUSTOM_MODEL_VALUE = "__custom__";
 const NEW_CREDENTIAL_VALUE = "__new__";
-const SPREAD_MIN = 1.0;
-const SPREAD_MAX = 1.3;
 const SPREAD_DEBOUNCE_MS = 500;
 
 const PROVIDER_OPTIONS: SelectOption[] = (
@@ -405,10 +403,8 @@ export function LlmConfigCard({
       setSpreadInput(lastSavedSpreadRef.current.toFixed(2));
       return;
     }
-    if (parsed < SPREAD_MIN || parsed > SPREAD_MAX) {
-      toast.error(
-        `Spread fora do range [${SPREAD_MIN.toFixed(2)}, ${SPREAD_MAX.toFixed(2)}]`,
-      );
+    if (parsed <= 0) {
+      toast.error("Spread deve ser maior que zero");
       setSpreadInput(lastSavedSpreadRef.current.toFixed(2));
       return;
     }
@@ -813,8 +809,6 @@ export function LlmConfigCard({
                 id="llm-card-spread"
                 type="number"
                 step="0.01"
-                min={SPREAD_MIN}
-                max={SPREAD_MAX}
                 value={spreadInput}
                 onChange={handleSpreadChange}
                 onBlur={handleSpreadBlur}
@@ -832,7 +826,8 @@ export function LlmConfigCard({
               className="text-xs text-muted-foreground"
             >
               Multiplicador aplicado sobre a cotação comercial USD/BRL (default
-              1.10 ≈ IOF + spread Visa/Master). Range permitido: 1.00 a 1.30.
+              1.10 ≈ IOF + spread Visa/Master). Sem limite superior — escolha o
+              valor real do seu cartão.
             </p>
           </div>
 

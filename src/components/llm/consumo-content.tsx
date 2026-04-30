@@ -188,13 +188,13 @@ const numberFmt = new Intl.NumberFormat("pt-BR");
 const usdFmt = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
-  minimumFractionDigits: 4,
+  minimumFractionDigits: 3,
   maximumFractionDigits: 6,
 });
 const brlFmt = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
-  minimumFractionDigits: 4,
+  minimumFractionDigits: 3,
   maximumFractionDigits: 6,
 });
 const dateTimeFmt = new Intl.DateTimeFormat("pt-BR", {

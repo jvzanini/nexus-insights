@@ -37,12 +37,22 @@ describe("getCurrentRateAction", () => {
 });
 
 describe("setCardSpreadAction", () => {
-  it("rejeita spread fora de [1.0, 1.3]", async () => {
-    const r = await setCardSpreadAction(0.5);
+  it("rejeita spread ≤ 0", async () => {
+    const r = await setCardSpreadAction(0);
+    expect(r.ok).toBe(false);
+    const r2 = await setCardSpreadAction(-1);
+    expect(r2.ok).toBe(false);
+  });
+  it("rejeita NaN", async () => {
+    const r = await setCardSpreadAction(Number.NaN);
     expect(r.ok).toBe(false);
   });
   it("aceita 1.10", async () => {
     const r = await setCardSpreadAction(1.1);
+    expect(r.ok).toBe(true);
+  });
+  it("aceita 2.50 (sem upper bound)", async () => {
+    const r = await setCardSpreadAction(2.5);
     expect(r.ok).toBe(true);
   });
   it("rejeita não-super_admin", async () => {

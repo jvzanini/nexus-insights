@@ -103,14 +103,34 @@ describe("getUsdBrlRate", () => {
     expect(r.rate).toBeCloseTo(FALLBACK_COMMERCIAL_RATE * 1.1, 4);
   });
 
-  it("clamping de spread fora do range [1.00, 1.30]", async () => {
-    mockSettings({ cache: null, spread: 99 }); // fora
+  it("spread positivo fora do range antigo é aceito sem clamp", async () => {
+    mockSettings({ cache: null, spread: 1.5 });
     (global.fetch as jest.Mock).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ USDBRL: { bid: "5.00" } }),
     });
     const r = await getUsdBrlRate();
-    expect(r.rate).toBeCloseTo(5.0 * 1.3, 4); // clamp em 1.30
+    expect(r.rate).toBeCloseTo(5.0 * 1.5, 4);
+  });
+
+  it("spread alto (2.50) é aceito sem clamp", async () => {
+    mockSettings({ cache: null, spread: 2.5 });
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ USDBRL: { bid: "5.00" } }),
+    });
+    const r = await getUsdBrlRate();
+    expect(r.rate).toBeCloseTo(5.0 * 2.5, 4);
+  });
+
+  it("spread inválido (≤ 0) cai pro default 1.10", async () => {
+    mockSettings({ cache: null, spread: 0 });
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ USDBRL: { bid: "5.00" } }),
+    });
+    const r = await getUsdBrlRate();
+    expect(r.rate).toBeCloseTo(5.0 * DEFAULT_CARD_SPREAD, 4);
   });
 
   it("default spread 1.10 quando setting ausente", async () => {

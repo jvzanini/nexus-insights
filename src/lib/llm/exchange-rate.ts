@@ -6,8 +6,6 @@ const CACHE_KEY = "llm.usd_brl.rate_cache";
 const SPREAD_KEY = "llm.usd_brl.card_spread";
 const TTL_MS = 4 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 5_000;
-const SPREAD_MIN = 1.0;
-const SPREAD_MAX = 1.3;
 const AWESOMEAPI_URL = "https://economia.awesomeapi.com.br/last/USD-BRL";
 
 export const DEFAULT_CARD_SPREAD = 1.1;
@@ -34,9 +32,9 @@ export function __resetUsdBrlCache(): void {
 
 function clampSpread(value: unknown): number {
   const n = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(n)) return DEFAULT_CARD_SPREAD;
-  if (n < SPREAD_MIN) return SPREAD_MIN;
-  if (n > SPREAD_MAX) return SPREAD_MAX;
+  // Aceita qualquer valor positivo finito — sem limite superior. Inválidos
+  // (NaN, ≤ 0) caem para o default.
+  if (!Number.isFinite(n) || n <= 0) return DEFAULT_CARD_SPREAD;
   return n;
 }
 

@@ -59,9 +59,6 @@ export async function getCurrentRateAction(): Promise<
   }
 }
 
-const SPREAD_MIN = 1.0;
-const SPREAD_MAX = 1.3;
-
 export async function setCardSpreadAction(
   spread: number,
 ): Promise<ActionResult> {
@@ -70,12 +67,11 @@ export async function setCardSpreadAction(
   if (
     typeof spread !== "number" ||
     !Number.isFinite(spread) ||
-    spread < SPREAD_MIN ||
-    spread > SPREAD_MAX
+    spread <= 0
   ) {
     return {
       ok: false,
-      error: `Spread fora do range [${SPREAD_MIN}, ${SPREAD_MAX}]`,
+      error: "Spread deve ser maior que zero",
     };
   }
   try {
