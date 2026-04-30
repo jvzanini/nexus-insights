@@ -1,5 +1,30 @@
 # Changelog
 
+## [v0.10.4] 2026-04-30 — Conversas: scroll interno + 100/Todos infinite scroll + remove colunas WhatsApp/Atributos
+
+> Hotfix em resposta a feedback do João sobre v0.10.3: page header + toolbar + thead realmente fixos (só linhas da tabela rolam internamente); page size simplificado pra 2 opções com infinite scroll automático no "100"; colunas WhatsApp e Atributos removidas da grade e do `<ColumnsToggle>` (continuam disponíveis no drill-down ao clicar na linha — esse comportamento NÃO mudou).
+
+### Mudou
+
+- **Scroll interno da tabela** — container do `<tbody>` ganhou `max-h: calc(100dvh - var(--page-header-h, 96px) - var(--toolbar-h, 200px) - 64px)` + `overflow-y-auto`. `<thead>` agora é `sticky top-0` LOCAL ao container (não mais ao viewport). Toolbar de filtros perdeu `position: sticky` — vive no fluxo natural acima da tabela. Resultado: rolar a página rola só as linhas da tabela; page header + toolbar + thead ficam estáticos.
+- **`<PageHeader>` mede a própria altura** via `useLayoutEffect` + `ResizeObserver` e exporta `--page-header-h` no `<html>`. Permite o cálculo de altura da tabela respeitar headers customizados (ex.: subtítulo longo).
+- **Page size simplificado** — opções reduzidas de 3 (`50/100/Todos`) para 2 (`100/Todos`). Default `100`. Usuários antigos com `"50"` em localStorage migram automaticamente para `"100"`.
+- **Infinite scroll** quando `pageSize === "100"` — sentinela invisível no fim do `<tbody>` dispara `loadMore` via `IntersectionObserver` (`rootMargin: 200px`). Usuário não precisa mais clicar "Carregar mais" — rola e a tabela cresce. Botão "Carregar mais" mantido como fallback (browsers sem IntersectionObserver e/ou estado de erro).
+- **Colunas removidas** — `phone` ("WhatsApp") e `custom_attributes` ("Atributos") deletadas do array `COLUMNS` em `<ConversasTable>`. Saem da grade e do `<ColumnsToggle>` (que era 15/15, agora reflete o novo total). `phone` também sai de `SORT_OPTIONS` em `<AdvancedFilters>` (não há mais coluna pra ordenar).
+
+### Não mudou (importante)
+
+- **Drill-down `<ConversaDrillDown>`** — continua mostrando WhatsApp formatado completo + atributos chave:valor sem reticências + botão "Abrir no Chatwoot". Click na linha continua expandindo do mesmo jeito.
+- **Mobile cards** (`lg:hidden`) — continuam mostrando WhatsApp via `<Field label="WhatsApp">`. Layout mobile não muda nessa release.
+
+### Verificação
+
+- `npx tsc --noEmit` → exit 0
+- `npx jest src/components/reports` → 44/44 passing
+- `npm run build` → OK
+
+---
+
 ## [v0.10.3] 2026-04-30 — Conversas: hotfix UI (toolbar + sticky + filtros + tour)
 
 > Hotfix em resposta a feedback do João sobre v0.10.1: toolbar com cantos retos destoava do card da tabela, sticky thead "pulava" para baixo na carga inicial, FiltersDialog Modo Simples sem mutex inflava sem fim, Modo Avançado com label duplicada, sem scroll interno; "Limpar filtros/ordenação" só link de texto sem ícone; tour com botão "Próximo" e "1 de 11" quebrando linha.
