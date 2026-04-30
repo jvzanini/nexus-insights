@@ -50,10 +50,8 @@ import {
   nullableStringCompare,
   nullableDateCompare,
 } from "@/lib/utils/null-compare";
-import {
-  useLocalStorageSet,
-  useLocalStorageState,
-} from "@/lib/hooks/use-local-storage-state";
+import { useLocalStorageState } from "@/lib/hooks/use-local-storage-state";
+import { useMigratedLocalStorageSet } from "@/lib/hooks/use-migrated-local-storage";
 import {
   applyConditions,
   type ConditionGroup,
@@ -91,7 +89,18 @@ const PAGE_SIZE_LIMITS: Record<PageSizeOption, number> = {
   all: 10000,
 };
 
-const STORAGE_COLS = "conversas-table-cols";
+const STORAGE_COLS = "conversas-table-cols-v2";
+const STORAGE_COLS_LEGACY = "conversas-table-cols";
+// Colunas que migraram para o drill-down em v0.9.0 — devem ser removidas do
+// set persistido pra usuários antigos não verem WhatsApp etc. na grade.
+const MIGRATED_TO_DRILL_DOWN = new Set([
+  "phone",
+  "document",
+  "labels",
+  "custom_attributes",
+  "created_at",
+  "last_activity_at",
+]);
 const STORAGE_PAGE_SIZE = "conversas-table-page-size";
 // STORAGE_SORT: persistência da ordenação foi promovida ao parent
 // (ConversasPageClient) para permitir cabeamento bidirecional com o
@@ -603,8 +612,10 @@ export function ConversasTable({
   }, [initialRows, initialCursor]);
 
   // ---- Persistências (localStorage) -----
-  const [visibleCols, setVisibleCols] = useLocalStorageSet(
+  const [visibleCols, setVisibleCols] = useMigratedLocalStorageSet(
     STORAGE_COLS,
+    STORAGE_COLS_LEGACY,
+    (old) => new Set([...old].filter((k) => !MIGRATED_TO_DRILL_DOWN.has(k))),
     DEFAULT_VISIBLE_KEYS,
   );
   const [pageSize, setPageSize] = useLocalStorageState<PageSizeOption>(
