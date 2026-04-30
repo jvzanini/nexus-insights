@@ -27,3 +27,16 @@ export async function getMatrixIAIncluded(): Promise<boolean> {
     return true;
   }
 }
+
+import { isMatrixIAVisibleForUser } from "./visibility";
+
+/**
+ * @deprecated Use `isMatrixIAVisibleForUser(userRole)` ou `getMatrixIAVisibility`.
+ * Mantido para callers legados — equivale a "Matrix IA é incluída por default
+ * para super_admin"; comportamento exato passa pela nova função.
+ */
+export async function getMatrixIAIncludedForRole(
+  userRole: string | null | undefined,
+): Promise<boolean> {
+  return isMatrixIAVisibleForUser(userRole);
+}

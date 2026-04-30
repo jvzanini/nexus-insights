@@ -54,3 +54,14 @@ export async function getEnabledReportKeys(): Promise<Set<string>> {
 export function invalidateEnabledReports(): void {
   cache.clear();
 }
+
+import { getVisibleReportKeys } from "./visibility";
+
+/**
+ * @deprecated Use `getVisibleReportKeys(userRole)` em src/lib/reports/visibility.ts.
+ * Mantido apenas para callers legados. Equivale a `getVisibleReportKeys("super_admin")`
+ * (i.e., "todos os relatórios não marcados como `none`").
+ */
+export async function getVisibleReportKeysGlobal(): Promise<Set<string>> {
+  return getVisibleReportKeys("super_admin");
+}
