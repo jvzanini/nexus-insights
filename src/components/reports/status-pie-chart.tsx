@@ -8,7 +8,7 @@ export interface StatusPiePoint {
 }
 
 const STATUS_META: Record<number, { label: string; color: string }> = {
-  0: { label: "Em aberto", color: "#f59e0b" },
+  0: { label: "Abertas", color: "#f59e0b" },
   1: { label: "Resolvidas", color: "#10b981" },
   2: { label: "Pendentes", color: "#7c3aed" },
   3: { label: "Adiadas", color: "#71717a" },

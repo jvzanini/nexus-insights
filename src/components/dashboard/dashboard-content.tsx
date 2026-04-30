@@ -358,7 +358,7 @@ export function DashboardContent({
           icon={MessageSquare}
           iconBg="bg-amber-500/10"
           iconColor="text-amber-400"
-          label="Em aberto"
+          label="Abertas"
           sublabel="(agora)"
           value={stats.open.toLocaleString("pt-BR")}
           badge="agora"

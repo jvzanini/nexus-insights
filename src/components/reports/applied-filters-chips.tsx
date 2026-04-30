@@ -39,10 +39,10 @@ interface Props {
 }
 
 const STATUS_LABELS: Record<number, string> = {
-  0: "Aberto",
-  1: "Resolvido",
+  0: "Aberta",
+  1: "Resolvida",
   2: "Pendente",
-  3: "Adiado",
+  3: "Adiada",
 };
 
 const PRIORITY_LABELS: Record<number, string> = {

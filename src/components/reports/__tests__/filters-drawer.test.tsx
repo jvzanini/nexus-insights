@@ -99,8 +99,8 @@ describe("FiltersDrawer", () => {
 
     // Abre seção Status
     fireEvent.click(screen.getByRole("button", { name: /^Status/ }));
-    // Marca "Aberto"
-    fireEvent.click(screen.getByText("Aberto"));
+    // Marca "Aberta"
+    fireEvent.click(screen.getByText("Aberta"));
 
     const apply = screen.getByRole("button", { name: /Aplicar filtros/ });
     expect(apply).not.toBeDisabled();
@@ -137,7 +137,7 @@ describe("FiltersDrawer", () => {
 
     // Modifica draft
     fireEvent.click(screen.getByRole("button", { name: /^Status/ }));
-    fireEvent.click(screen.getByText("Aberto"));
+    fireEvent.click(screen.getByText("Aberta"));
 
     // ESC
     fireEvent.keyDown(document.body, { key: "Escape" });

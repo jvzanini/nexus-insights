@@ -14,7 +14,7 @@ import { CHART_COLORS } from "@/lib/charts/colors";
 import type { DashboardContentProps } from "./types";
 
 const STATUS_LABEL: Record<number, string> = {
-  0: "Em aberto",
+  0: "Abertas",
   1: "Resolvidas",
   2: "Pendentes",
   3: "Adiadas",
@@ -84,7 +84,7 @@ export async function StatusPieContent({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           icon={Inbox}
-          label="Em aberto"
+          label="Abertas"
           value={open.toLocaleString("pt-BR")}
           tone="warning"
         />

@@ -144,6 +144,6 @@ describe("AppliedFiltersChips", () => {
         onClearAll={() => {}}
       />,
     );
-    expect(screen.getByText(/Status: Resolvido/)).toBeInTheDocument();
+    expect(screen.getByText(/Status: Resolvida/)).toBeInTheDocument();
   });
 });

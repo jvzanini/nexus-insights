@@ -42,10 +42,10 @@ import type { MetaItem } from "@/lib/chatwoot/queries/meta-cache";
  */
 
 const STATUS_OPTIONS: MetaItem[] = [
-  { id: 0, name: "Aberto" },
-  { id: 1, name: "Resolvido" },
+  { id: 0, name: "Aberta" },
+  { id: 1, name: "Resolvida" },
   { id: 2, name: "Pendente" },
-  { id: 3, name: "Adiado" },
+  { id: 3, name: "Adiada" },
 ];
 
 const PRIORITY_OPTIONS: MetaItem[] = [

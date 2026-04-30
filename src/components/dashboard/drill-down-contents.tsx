@@ -460,7 +460,7 @@ export function OpenDrillDownContent({
         >
           <DonutWithCenter
             data={pieData}
-            centerLabel="Em aberto"
+            centerLabel="Abertas"
             centerValue={data.total.toLocaleString("pt-BR")}
             height={280}
             emptyMessage="Sem conversas em aberto"
