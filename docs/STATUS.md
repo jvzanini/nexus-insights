@@ -1,12 +1,23 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-04-30
-**Versão atual em produção:** v0.8.0
+**Versão atual em produção:** v0.11.0
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.8.0)
+## Em produção (v0.11.0)
+
+### Novidades desta release (v0.11.0)
+
+- **Visibilidade granular por relatório** — dropdown de 3 níveis (Todos / Somente super admin / Ninguém) por cada um dos 7 relatórios, com aplicação global em sidebar, páginas e dropdowns.
+- **Visibilidade granular do Matrix IA** — mesma lógica para o inbox 31 (Matrix IA): some de tabelas, charts, KPIs, drill-downs e dropdowns conforme a regra escolhida.
+- **Catálogo LLM atualizado (cutoff abril/2026)** — OpenAI ganha família GPT-5 (5/5.1/5.2/5.4/5.5 + minis); Anthropic Sonnet 4.7 + Opus 4.7; Gemini 2.0 Pro; OpenRouter expandido para 40 modelos curados em 4 tiers.
+- **Bugs UI corrigidos no card Agente Nex**: dropdown de Modelo agora usa Popover.Portal (não fica preso em containers); ícone Eye da API key visualmente centralizado.
+
+---
+
+## Em produção anteriormente (v0.8.0)
 
 ### Novidades desta release
 

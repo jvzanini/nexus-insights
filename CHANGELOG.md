@@ -1,5 +1,48 @@
 # Changelog
 
+## [v0.11.0] 2026-04-30 — Visibilidade granular + catálogo LLM atualizado
+
+> Substitui os toggles boolean dos relatórios e do Matrix IA por dropdowns de **3 níveis** (Todos / Somente super admin / Ninguém) com aplicação **global** em sidebar, páginas, queries, filtros e dropdowns. Inclui também o catálogo LLM atualizado (cutoff abril/2026) com famílias GPT-5.x, Claude 4.7, Gemini 2.5 e OpenRouter expandido. Corrige 2 bugs no card Agente Nex.
+
+### Visibilidade granular
+
+- **Tipo `Visibility`** em `src/lib/reports/visibility.ts` (`"all" | "super_admin_only" | "none"`) com helpers servidor-side: `resolveVisibility`, `getReportVisibility`, `getMatrixIAVisibility`, `isReportVisibleForUser`, `isMatrixIAVisibleForUser`, `getVisibleReportKeys`. Cache TTL 30s.
+- **Backward-compat** transparente para deployments existentes: lê `platform.enabled_reports` e `reports.include_matrix_ia` quando as chaves novas não existem.
+- **Persistência:** chaves novas em `app_settings` (sem migration de schema):
+  - `reports.visibility.<report-key>` (7 chaves: visao-geral, performance, equipe, distribuicao, origem-ia, conversas, mensagens-nao-respondidas).
+  - `reports.matrix_ia_visibility`.
+- **UI primitivo** `<VisibilitySelect>` (3 opções com ícones lucide Users/Shield/EyeOff). Usa o `<CustomSelect>` (base-ui Popover.Portal) — sem o bug de "preso em container".
+- **Cards refatorados** (`enabled-reports-card`, `matrix-ia-toggle-card`): switches → VisibilitySelect; footer mostra distribuição all/super_admin/none.
+- **Aplicação global**:
+  - **Sidebar** filtra links por role via `getVisibleReportKeys(role)`.
+  - **7 páginas `relatorios/<key>/page.tsx`** com guard `redirect("/dashboard")` quando o role não tem acesso.
+  - **`getInboxesForUser`** esconde inbox 31 (Matrix IA) automaticamente quando `isMatrixIAVisibleForUser(role) === false` — afeta dropdowns de filtros, drill-downs e queries derivadas.
+- **Seed** (`prisma/seed.ts`) ganha 8 entradas com defaults `"all"` (relatórios) e `"super_admin_only"` (Matrix IA).
+
+### Catálogo LLM (cutoff abril/2026)
+
+- **OpenAI**: 18 modelos. Família **GPT-5.5 / 5.4 / 5.4 mini / 5.2 / 5.1 / 5.1 mini / 5 / 5 mini** + reasoning (o4-mini, o3, o3-mini, o1, o1-mini) + GPT-4.1 family + GPT-4o family. Atualmente mais novo: GPT-5.5.
+- **Anthropic**: 9 modelos. **Claude Opus 4.7** (atual mais novo) + **Sonnet 4.7** (novo) + Sonnet 4.6 / 4.5 / Opus 4.5 + Haiku 4.5 + 3.5 family (Sonnet/Haiku) + Opus 3.
+- **Google Gemini**: 9 modelos. **2.5 Pro / Flash / Flash Lite** no topo + **2.0 Pro** (novo) + 2.0 Flash / Flash Lite + 1.5 Pro/Flash/Flash-8B.
+- **OpenRouter**: 40 modelos curados, cobrindo Free (Llama 3.3 70B free, DeepSeek R1 free, Qwen 2.5 7B free, Phi-3 Mini free), Low (todos os mini do top tier), Medium (4o, 5, Sonnet 4.5/4.6/4.7, DeepSeek R1), High (o3, GPT-5.4/5.5, Opus 4.5/4.7, Gemini 2.5 Pro, Llama 3.1 405B, Mistral Large, Cohere R+).
+- `allowCustomModel: true` cobre o long-tail (digitação manual de IDs).
+
+### Bug fixes UI
+
+- **Dropdown de Modelo no card Agente Nex** estava preso visualmente dentro do container — `<SearchableSelect>` migrado de `<div absolute>` custom para `<Popover>` da base-ui (Portal automático via `PopoverContent`).
+- **Olhinho da API key descentralizado** — `<PasswordInput>` trocou `top-1/2 + translate-y(-50%) + h-6 w-6` por `inset-y-0 + flex items-center justify-center + w-10`. Centraliza em qualquer altura de input.
+
+### Testes
+
+- **+17 novos** testes (14 visibility helpers + 3 VisibilitySelect). Total da suite: 551/551 verdes.
+
+### Out of scope
+
+- Permissões mais granulares por persona (manager vs viewer) — fica para v0.12.
+- Botão "redefinir defaults" no settings — YAGNI.
+
+---
+
 ## [v0.10.4] 2026-04-30 — Conversas: scroll interno + 100/Todos infinite scroll + remove colunas WhatsApp/Atributos
 
 > Hotfix em resposta a feedback do João sobre v0.10.3: page header + toolbar + thead realmente fixos (só linhas da tabela rolam internamente); page size simplificado pra 2 opções com infinite scroll automático no "100"; colunas WhatsApp e Atributos removidas da grade e do `<ColumnsToggle>` (continuam disponíveis no drill-down ao clicar na linha — esse comportamento NÃO mudou).
