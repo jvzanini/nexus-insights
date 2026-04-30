@@ -1,9 +1,14 @@
 # Spec — Dashboard v0.13.0: Polish & Configurabilidade
 
-**Status:** Aprovada (modo autônomo) · **Data:** 2026-04-30 · **Versão alvo:** v0.13.0
+**Status:** v3 final pós double-check · **Data:** 2026-04-30 · **Versão alvo:** v0.13.0
 **Agente:** `claude-dashboard-v013`
 
-> Esta spec consolidou as v1 → v2 → v3 num único arquivo. As iterações foram feitas inline durante a redação (pente fino #1 e pente fino #2 já aplicados). Mudanças relevantes durante a passagem v2→v3 estão marcadas como `[v3]`.
+> Esta spec passou por **dois pente-finos reais** após a v1 inicial:
+>
+> - **Pente #1** — encontrou 12 achados concretos (enum AuditAction não-extensível, gramática de `formatRelativeShort`, divergência donut↔retângulo entre spec/plan, `InteractiveAreaChart` não aceita tooltip per-ponto, `byHour` query não precisa mudar, função `expandFullDay` com hack de offset, §11 não cita Pacote H, ambiguidade em `open_prev`, métrica "< 2s" sem baseline, "hoje" sem mode configurável, cache invalidation cross-container, cap de pageSize). Marcados como `[v2]`.
+> - **Pente #2** — análise mais profunda (race conditions, edge cases de virada de mês, granularity="day" com buckets vazios, mobile resize, localStorage residual, acessibilidade). Decisões finais marcadas como `[v3]`.
+>
+> Marcações `[v2]`/`[v3]` indicam pontos onde a spec mudou após review.
 
 ---
 
@@ -78,20 +83,20 @@ Após uso, João reportou (via 10 screenshots e descrição em áudio) **9 probl
 
 ### D2 — Variação relativa em **`%`** para todos os KPIs (inclusive taxa de resolução)
 
-**Decisão:** unificar `comparison` para usar `pctDiff(current, previous)` em **todos** os cards (incluindo `resolutionRate`). O suffix exibido é sempre `%`.
+**Decisão:** unificar `comparison` para usar `pctDiff(current, previous)` em **todos** os cards (incluindo `resolutionRate`). O suffix exibido é sempre `%` e o subtitle do drill-down de Resolução deixa explícito que é variação relativa.
 
 **Why:** João rejeitou explicitamente `pp` ("não tem nada a ver"). Variação relativa também é mais intuitiva ("a taxa subiu 20%" lê-se direto). A consequência inevitável é que pequenas oscilações em pontos percentuais aparecem amplificadas em variação relativa (ex.: 10% → 12% = +20%, não +2pp), mas é exatamente o que ele pediu.
 
 **How to apply:**
 - `dashboardData` ⇒ `comparison.resolutionRate` passa a ser `pctDiff(rate, ratePrev)` em vez de `rate - ratePrev`.
-- `getResolutionRateDrillDown` ⇒ campo renomeado `diffPp` → `diffPct`. Subtitle do card no drill-down passa a mostrar `Variação: +12.3%`.
+- `getResolutionRateDrillDown` ⇒ campo renomeado `diffPp` → `diffPct`. Subtitle do card no drill-down: `Variação relativa: +12.3% (anterior 8.2% → atual 9.2%)`. **[v2]** Adicionar referência aos valores absolutos para evitar leitura ambígua.
 - `KpiClickableCard` ⇒ chamada `trendFor(stats.comparison.resolutionRate, "%")` (sufixo "%").
 
 ### D3 — KPI "Abertas" passa a ter comparação coerente
 
-**Decisão:** adicionar `comparison.open` em `dashboardData` calculado como `pctDiff(open_current, open_prev)` onde `open_prev` é a contagem de **conversas criadas no período anterior que estão com status=0 agora** (mesma coorte).
+**Decisão:** adicionar `comparison.open` em `dashboardData` calculado como `pctDiff(open_current, open_prev)` onde `open_prev` é a contagem de conversas que satisfazem **simultaneamente** `created_at ∈ período_anterior` **E** `status = 0` no instante exato em que a query roda (não snapshot histórico). **[v2]**
 
-**Why:** snapshot de "abertas em algum momento do passado" é frágil (depende de quando a query rodaria); usar mesma coorte das outras 3 métricas mantém a uniformidade conceitual da v0.10.0 ("a métrica fala da coorte criada no período").
+**Why:** snapshot histórico de "abertas em algum momento do passado" é frágil (depende de quando a query rodaria); usar mesma coorte das outras 3 métricas mantém a uniformidade conceitual da v0.10.0 ("a métrica fala da coorte criada no período"). A leitura é "quantas das criadas no período anterior ainda estão abertas hoje, vs. quantas das criadas no período atual estão abertas hoje".
 
 **How to apply:**
 - Backend: query `sqlOpenPrev` análoga a `sqlOpen` mas com params do `prev`.
@@ -103,20 +108,20 @@ Após uso, João reportou (via 10 screenshots e descrição em áudio) **9 probl
 **Decisão:** substituir `LIMIT 20` por paginação `?page=N&pageSize=50` controlada por novo componente `<DrillDownPagination>`.
 
 - Server actions ganham parâmetros opcionais: `getReceivedDrillDownAction({ accountId, period, page, pageSize })`.
-- Backend (`getReceivedDrillDown`, `getResolvedDrillDown`) retorna `{ ..., page, pageSize, totalConversations }`.
+- Backend (`getReceivedDrillDown`, `getResolvedDrillDown`) retorna `{ ..., page, pageSize, total }`.
 - Frontend mantém estados separados de paginação (não muda estado do filtro de período).
 
 **Why:** João pediu "todas". Mas renderizar tudo causa freeze no browser com volume real (sai 5–15k conversas no mês). Paginação 50/pg é o padrão de outras telas de relatório (ex.: Conversas Poderoso). Mantém UX previsível.
 
 **How to apply:**
-- Página inicial = 1, `pageSize = 50`.
+- Página inicial = 1, `pageSize = 50`. **[v2] Cap de `pageSize` no backend = 200** para evitar abuso e OFFSET extremo em consultas read-only ao Chatwoot DB (que pode não ter índice ideal).
 - Quando volume total fica < `pageSize`, esconder paginador.
-- Paginador no rodapé da seção "Conversas recebidas" do drill-down. Componente `<DrillDownPagination current={n} total={t} pageSize={ps} onChange={(p)=>...} />`.
-- Spinner local na tabela enquanto a página seguinte carrega (não relaod do dialog inteiro).
+- Paginador no rodapé da seção. Componente `<DrillDownPagination page={n} total={t} pageSize={ps} loading={bool} onChange={(p)=>...} />`.
+- Spinner local na tabela enquanto a página seguinte carrega (não reload do dialog inteiro).
 
 ### D5 — Tempo relativo formatado curto e estável
 
-**Decisão:** trocar `formatDistanceToNow(addSuffix=true)` (ptBR) por uma função `formatRelativeShort(date)` que devolve `agora`, `há 5min`, `há 2h`, `há 3d`, `há 2 mês`.
+**Decisão:** trocar `formatDistanceToNow(addSuffix=true)` (ptBR) por uma função `formatRelativeShort(date)` que devolve `agora`, `há 5min`, `há 2h`, `há 3d`, `há 2m` (meses), `há 2a` (anos). **[v2]** Evita gramática esquisita do plural ("há 2 mês" não existe; "há 2 meses" é longo demais para tabelas densas). Padrão é abreviação curta consistente.
 
 **Why:** o "cerca de 2 horas / cerca de 1 hora" é fruto do wording padrão do `date-fns` em ptBR (limiar de 30min arredonda pra cima, então 00:31 → "cerca de 1h" e 02:00 → "cerca de 2h", causando aparência de "fora de ordem"). Texto curto desambígua e diminui ruído visual.
 
@@ -129,19 +134,21 @@ Após uso, João reportou (via 10 screenshots e descrição em áudio) **9 probl
 **Decisão:** generalizar `getOpenDrillDown` em `getStatusDrillDown(args, status)` que aceita 0/1/2/3.
 
 - Hoje, `getOpenDrillDown` filtra `c.status = 0`. Vai virar parametrizado.
-- `byStatus` chart ainda mostra os 4 status; quando filtrado por um status específico, é dispensado (já está no centro).
+- Layout do drill-down: **retângulo central com total grande + label do status** (não donut), porque o drill-down já trata de UM único status — donut com 100% de uma fatia só é cosmético/confuso. **[v2]**
+- Distribuição por inbox (top 10) à direita do total.
+- Lista paginada de conversas abaixo.
 - Frontend: `StatusDrillDownContent({ status })` substitui `OpenDrillDownContent`.
 
-**Why:** João quer paridade entre os 4 status no drill-down de pizza. Replicar 3× o código é trash; um helper único é trivial.
+**Why:** João quer paridade entre os 4 status no drill-down de pizza. Replicar 3× o código é trash; um helper único é trivial. Retângulo com número grande é mais legível e elimina o uso questionável de `<DonutWithCenter>` para visualizar uma única categoria.
 
 **How to apply:**
 - `dashboard-drill-down.ts` ⇒ rename + adiciona `status: 0|1|2|3` no input.
-- Chamadas existentes (`OpenDrillDownContent` no drill-down de "Abertas no período" do KPI) passam `status=0`.
+- Chamadas existentes (`OpenDrillDownContent` no drill-down de "Abertas no período" do KPI) passam `status=0` via wrapper de compat.
 - Cache key bump de `dashboard-drill-open-v2` → `dashboard-drill-status-v3`.
 
 ### D7 — Configurações de dashboard em `/configuracoes`
 
-**Decisão:** novo card `<DashboardSettingsCard />` em `/configuracoes` (super_admin only) com:
+**Decisão:** novo card `<DashboardSettingsCard initial={...} />` em `/configuracoes` (super_admin only) com:
 
 - Select "Início da semana" (Domingo, Segunda, …, Sábado).
 - Select "Modo da semana" (Semana atual, Últimos 7 dias).
@@ -156,7 +163,9 @@ Após uso, João reportou (via 10 screenshots e descrição em áudio) **9 probl
   - `dashboard.month_mode` — "current"|"rolling", default "current".
 - Cache pull-through 60s (igual aos outros settings, em `lib/dashboard-settings.ts`).
 - Server action `saveDashboardSettings({ weekStartsOn, weekMode, monthMode })` em `lib/actions/settings.ts`.
-- Audit log: `audit.action = "dashboard.settings.update"`.
+- **[v2]** **Audit log usa `AuditAction.setting_updated` (enum existente do Prisma)** com `details = { section: "dashboard", weekStartsOn, weekMode, monthMode }`. **NÃO criar novo enum** — exigiria migration Prisma fora de escopo. O enum `AuditAction` é tipo PostgreSQL gerado pelo Prisma e não aceita valores arbitrários.
+- Card recebe `initial` lido em SSR via `getDashboardSettings()` chamado dentro da page server component.
+- "Hoje" não tem mode configurável (sempre dia atual; `week_mode`/`month_mode` só afetam Semana e Mês). **[v2]**
 
 ### D8 — Layout do KpiClickableCard sem overlap
 
@@ -174,19 +183,19 @@ Após uso, João reportou (via 10 screenshots e descrição em áudio) **9 probl
 
 `Hoje` (mantém) · `Semana` (era "7 dias") · `Mês` (era "30 dias").
 
-**How to apply:** apenas mudar `label` em `DashboardFilters.periods`. O `value` muda também: `"today" | "semana" | "mes"` (era `"today" | "7d" | "30d"`).
+**How to apply:** mudar `label` em `DashboardFilters.periods`. O `value` muda também: `"hoje" | "semana" | "mes"` (era `"today" | "7d" | "30d"`).
 
-**Backward compat:** existe um único caller (DashboardContent) e nenhum URL persiste isso, então não há migration de data.
+**Backward compat:** existe um único caller (DashboardContent) e nenhum URL/localStorage persiste isso (default `useState("hoje")` no remount). **[v2]** Caches Redis com keys derivadas dos antigos `"7d"|"30d"` ficarão stale e expirar em 30s (TTL de `dashboardData`). Nenhum vazamento de schema porque também bumpamos `dashboard-data-v2` → `v3`.
 
 ### D10 — Tooltip e ariaLabel do gráfico por hora
 
-**Decisão:** rótulos das horas e tooltip exibem `HH:00 – HH:59` em vez do bare `HHh`.
+**Decisão:** deixar explícito que `14h` cobre a janela `14:00 – 14:59`. **[v2]** Mecanismo difere por componente:
 
-**Why:** João perguntou diretamente ("quando coloco em 14h, é de 14:00 a 14:59?"). Sim, é. Vamos deixar isso explícito na UI.
+- **`ConversationsLineChart`** (Pacote H — `LineChart` direto do recharts com `<CustomTooltip>`): adicionar `windowLabel` no payload do dado e renderizar no tooltip ("Janela: 14:00 – 14:59"). Eixo X mantém `14:00` curto.
+- **`drill-down-contents.tsx` `byHour`** (usa `<InteractiveAreaChart>` genérico que **NÃO aceita** label custom por ponto): usar `name = "14:00 – 14:59"` no próprio dado. Recharts auto-deduplica labels longos quando o eixo fica apertado, então densidade fica aceitável; em mobile, recharts já reduz ticks naturalmente.
 
-**How to apply:**
-- `formatBucketLabel(iso, "hour", tz)` continua devolvendo `14h` no eixo X (curto).
-- Tooltip do `InteractiveAreaChart` adiciona linha "Janela: HH:00 – HH:59" quando granularity="hour" — passamos `formatTooltipLabel?: (raw, granularity) => string` opcional.
+**Why:** o `InteractiveAreaChart` é compartilhado por outros relatórios. Estender o `<ChartTooltip>` com prop opcional só pra essa feature do dashboard seria over-engineering. Solução do `name` é puxa-saco mas funcional.
+
 - `aria-label` do gráfico passa a incluir "intervalo de hora cheia (HH:00 a HH:59)".
 
 ---
@@ -366,10 +375,10 @@ Tooltip ou microcopy explicando:
 ## 10. Métricas de sucesso
 
 1. **Visual**: prints depois do deploy comparados aos prints reportados → todos os 9 problemas visualmente endereçados.
-2. **Funcional**: `/api/health` mantém status `ok`. Dashboard carrega em < 2s mesmo no mês inteiro.
-3. **Tests**: 100% das suites passam (`npm test`). Coverage não regride.
+2. **Funcional**: `/api/health` mantém status `ok` (`db < 100ms`, `redis < 50ms`). **[v2]** Sem regressão perceptível na carga inicial do dashboard (sem cronômetro formal, mas o subagent valida via `npm run build` e checagem manual de carga após o deploy).
+3. **Tests**: 100% das suites passam (`npm test`). Coverage não regride mais que 1pp.
 4. **Build**: GitHub Actions verde + Portainer redeploy registra `version=v0.13.0` em `/api/health`.
-5. **Sem incidentes** nas 24h pós-deploy (curl do health a cada 5min como sanity check no fim do trabalho).
+5. **Sem incidentes** nas 24h pós-deploy. (Verificação manual pelo João — não há monitoramento automatizado neste projeto.)
 
 ---
 
@@ -382,10 +391,11 @@ Tooltip ou microcopy explicando:
 3. **Pacote 3 — backend dashboard** (`dashboardData` com `comparison.open` + variação relativa em rate, `periodRanges` substituído).
 4. **Pacote 4 — backend drill-down** (`getStatusDrillDown` genérico, paginação received/resolved, rename `diffPp`→`diffPct` mantendo compat).
 5. **Pacote 5 — frontend dashboard-content** (consumir mudanças backend, novos tipos, pills renomeadas).
-6. **Pacote 6 — frontend drill-down-contents** (paginador, status genérico, formatRelativeShort, tooltip de hora).
+6. **Pacote 6 — frontend drill-down-contents** (paginador, status genérico, formatRelativeShort, `name` enriquecido em `byHour`).
 7. **Pacote 7 — Settings UI** (`DashboardSettingsCard` + integração com page).
-8. **Pacote 8 — Polish e auditoria final** (Matrix IA, double-check de cache keys, type-check).
-9. **Pacote 9 — Release** (CHANGELOG, STATUS, package.json bump, push, Portainer redeploy, watch).
+8. **Pacote H — ConversationsLineChart** **[v2]** (TZ explícita no SQL bucket, eixo cheio 0–24h, scroll horizontal centralizado, sem toggle linha/barra). Vai na sequência **antes** do Pacote 8 para que a auditoria final cubra também esse componente.
+9. **Pacote 8 — Polish e auditoria final** (Matrix IA confirmada em todos os queries, double-check de cache keys, full typecheck).
+10. **Pacote 9 — Release** (CHANGELOG, STATUS, package.json bump, push, Portainer redeploy, watch, smoke `/api/health`).
 
 ---
 
@@ -418,15 +428,18 @@ Após escrita da spec inicial, João reportou problemas adicionais no `<Conversa
 
 **D11 — SQL de bucket retorna `timestamptz` UTC explícito**
 - Trocar `date_trunc('hour', c.created_at AT TIME ZONE $tz)::timestamp` por `(date_trunc('hour', c.created_at AT TIME ZONE $tz) AT TIME ZONE $tz)`. O segundo `AT TIME ZONE` reinterpreta o `timestamp without TZ` como horário no `tz` informado e devolve `timestamptz` (UTC). pg-node parseia consistentemente como `Date` UTC. Frontend formata com `Intl.DateTimeFormat({ timeZone })` — uma única conversão.
-- Aplicar mesma fix em `dashboard-data.ts`, `dashboard-drill-down.ts` (received/resolved/resolution-rate history) e qualquer outro `date_trunc('hour', ... AT TIME ZONE ...)::timestamp`.
+- Aplicar mesma fix em `dashboard-data.ts` (`sqlChart` hora e dia), `dashboard-drill-down.ts` (`sqlChart` em received/resolved e `sqlHistory` em resolution-rate).
+- **[v2]** **NÃO mexer em queries `byHour`** — elas usam `EXTRACT(HOUR FROM c.created_at AT TIME ZONE $tz)::int AS hour` que retorna `int 0..23` puro, sem timestamp ambíguo. Já estão corretas.
 - **Why:** elimina dependência da TZ do processo Node.js (atual default UTC, mas frágil — qualquer mudança de container quebra silenciosamente a leitura de hora no frontend).
 
 **D12 — Eixo X cheio e centralizado**
 - No filtro "Hoje" (granularity=hour): preencher buckets de 0h a 23h no client (gerar 24 entradas; quando bucket sem dado, `received=0, resolved=0`).
+- **[v2]** A função de preenchimento `expandFullDay(data, granularity, tz)` deve usar `date-fns-tz` (`fromZonedTime`) para construir o ISO de cada hora local — **sem hack** com `getTimezoneOffset()` do navegador (que usa TZ local do device, não do tz da plataforma).
 - Em mobile (`< 640px`), janela visível = 6h centradas em "agora". Scroll horizontal usando `<div class="overflow-x-auto">` envolvendo o chart com `width` mínimo calculado por `numHours * 60px`.
 - Em desktop, janela visível = 12h centradas em "agora"; resto acessível via scroll horizontal.
 - Tick `interval={0}` força mostrar todos os ticks; em mobile aplicar `interval="preserveStartEnd"` ou tick custom para reduzir densidade.
 - Centralizar via `useEffect` que dispara `scrollLeft = anchor - viewport/2` ao montar.
+- **[v3]** Quando `granularity === "day"` (Semana/Mês), eixo X **não preenche dias vazios** — fica como hoje (gaps na linha quando dia sem volume). YAGNI nessa release; pode entrar em v0.14 se reportado.
 
 **D13 — Tick/label spacing**
 - Adicionar `tickMargin={12}` ou `dy={8}` na `XAxis` do recharts para descer os labels.
@@ -463,6 +476,64 @@ expect(formatBucketLabel(bucketUtc, "hour", "America/Sao_Paulo")).toBe("14:00");
 
 | Risco | Mitigação |
 |-------|-----------|
-| Mudar o SQL pode invalidar caches que tinham bucket sem TZ | Bump cache key v3 → v4 nas queries afetadas. |
+| Mudar o SQL pode invalidar caches que tinham bucket sem TZ | Bump cache key v3 → v4 nas queries afetadas (já bumpado em D11). |
 | Container Node em produção pode estar em BRT (não UTC) por config legada — mudar SQL inverte o sentido do shift | Testar em staging antes do push. Como não há staging, validar com curl + comparação de prints depois do deploy. |
 | Scroll horizontal pode atrapalhar acessibilidade | Adicionar `tabIndex={0}` no container scrollável + setas-reactivas (default do navegador atende). |
+
+---
+
+## 14. Pente fino #2 — riscos e edge cases adicionais **[v3]**
+
+Após corrigir os 12 achados do pente #1, esta seção captura uma análise mais profunda. Cada item foi avaliado quanto a impacto e mitigação.
+
+### 14.1 Edge cases confirmados
+
+| # | Edge case | Comportamento esperado | Coberto por |
+|---|-----------|------------------------|-------------|
+| EC1 | Hoje é o 1º dia da semana (segunda) e usuário clica "Semana" | Janela = `00:00 hoje → fim do dia hoje` (igual a "Hoje") | Test em `dashboard-period.test.ts` |
+| EC2 | Hoje é o 1º dia do mês (dia 1) e usuário clica "Mês" | Janela = `00:00 hoje → fim do dia hoje` | Test |
+| EC3 | Virada de mês na semana (semana atravessa fim/início de mês) | `startOfWeek` do date-fns lida; semana pode começar em 27/abril e cobrir até 3/maio | Inerente ao date-fns |
+| EC4 | `weekStartsOn=6` (sábado) e hoje é domingo | Semana começou ontem (sábado); janela = sáb_00:00 → dom 23:59 | Helper trata via date-fns |
+| EC5 | `pctDiff(curr, 0)` quando curr > 0 | Retorna `null` (frontend mostra "—") | Já implementado em `pctDiff` |
+| EC6 | `comparison.open === null` (período anterior sem volume) | Frontend trata via `trendFor` que retorna `null` → KPI sem trend visual | Já no `KpiClickableCard` |
+| EC7 | Drill-down de status com `total === 0` | Mostra retângulo central com "0" + tabela com empty state + paginador escondido (`< pageSize`) | Lógica do `<DrillDownPagination>` |
+| EC8 | "Hoje" + `mode = "rolling"` (impossible: hoje não tem mode) | Helper ignora mode; sempre dia atual | `if (period === "hoje")` short-circuita antes de checar mode |
+| EC9 | `pageSize > 200` no input | Backend caps em 200 | `Math.min(200, pageSize)` no helper |
+| EC10 | Scroll horizontal em desktop com 24h × 64px = 1536px largura, container ~1200px | `overflow-x-auto` ativa scroll; usuário pode arrastar | Implementação direta |
+
+### 14.2 Riscos não-funcionais aceitos
+
+| # | Risco | Decisão |
+|---|-------|---------|
+| RA1 | Mobile resize (rotacionar celular) não recalcula janela visível do scroll | Aceitável — `useEffect` corre uma vez no mount. v0.14 se reportado. |
+| RA2 | localStorage residual `dashboard.chartType.conversations` (preferência antiga linha/barra) | Aceitável — apenas overhead de bytes; sem efeito funcional. |
+| RA3 | Cache invalidation cross-container do `getDashboardSettings()` | Aceitável — settings mudam raramente; outros settings (`polling`, `visibility`) têm o mesmo padrão e não causaram problema em produção. |
+| RA4 | `OFFSET 5000 LIMIT 50` em paginação muito profunda | Cap de pageSize=200 + UX desencoraja navegar 100+ páginas. Keyset pagination fica para quando reportado. |
+| RA5 | Acessibilidade do scroll horizontal para leitores de tela | `tabIndex={0}` + `aria-label` no container. Usuário com leitor pode acessar tabela paginada (alternativa via teclado já cobre). |
+| RA6 | i18n hardcoded pt-BR (`"agora"`, `"há Xh"`, `"Janela: …"`) | Plataforma é single-tenant pt-BR; não há requisito de i18n. |
+
+### 14.3 Mudança de contrato — checklist final
+
+Resumo do que muda no payload que clientes (browsers de João e equipe) recebem:
+
+| Endpoint / Server Action | Antes | Depois (v0.13.0) | Compat |
+|--------------------------|-------|------------------|--------|
+| `getDashboardData → comparison` | `{ received, resolved, resolutionRate }` (rate em pp) | `{ received, resolved, open, resolutionRate }` (todos em %) | ❗ `resolutionRate` semântica muda |
+| `getOpenDrillDownAction` payload | `{ total, byStatus[], byInbox[], open[] }` | wrapper para `getStatusDrillDownAction({status:0})` que retorna `{ status, total, byInbox[], items[], page, pageSize }`. **`byStatus` removido** porque a coorte é única (status fixado). | ❗ campo `byStatus` removido. Frontend antigo no browser do user pode quebrar até hard-refresh. Bump de cache key é suficiente (server respeita schema atual; browser carrega novo bundle no hard-refresh). |
+| `getResolutionRateDrillDownAction → diffPp` | sempre presente | mantido + `diffPct` adicional | ✅ |
+| `getReceivedDrillDownAction` | `{ ..., recent[] }` (até 20) | `{ ..., items[], page, pageSize, total, recent[] (alias) }` | ✅ |
+
+**[v3]** Todo deploy de Next.js 16 com client components serve novos chunks no build; após o redeploy, hard-refresh do browser garante client compatível. Como o ServerAction roda server-side e o payload é JSON, o browser apenas precisa do novo client bundle — caching de assets do Next gerencia automaticamente.
+
+### 14.4 Auditoria final
+
+Ao final da implementação, antes do release, validar:
+
+- [ ] `grep -rn '"7d"\|"30d"\|"today"' src/` retorna apenas comentários ou strings explicitamente literais (nenhum tipo nominal).
+- [ ] `grep -rn "diffPp" src/components/dashboard/` retorna 0 (frontend só usa `diffPct`).
+- [ ] `grep -rn "useLineBarStorage\|ChartLineBarToggle" src/` retorna 0.
+- [ ] `grep -rn "shouldExcludeMatrixIA\|excludeMatrixIA" src/lib/chatwoot/queries/` mostra que toda query relevante respeita o filtro.
+- [ ] `npm run typecheck` 0 erros.
+- [ ] `npm test` 100% PASS.
+- [ ] `npm run build` verde.
+- [ ] `/api/health` retorna `version=v0.13.0` após o deploy.

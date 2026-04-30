@@ -454,6 +454,8 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 - [ ] **Step 1: Tests**
 
+> **[v2 — pente fino do plan]** Spec D5 padronizou em abreviações curtas (`min`/`h`/`d`/`m`/`a`) para evitar gramática inconsistente do plural. Testes refletem isso.
+
 ```ts
 // src/lib/format/__tests__/relative-time.test.ts
 import { formatRelativeShort } from "@/lib/format/relative-time";
@@ -477,11 +479,11 @@ describe("formatRelativeShort", () => {
   it("há Xd", () => {
     expect(formatRelativeShort(new Date("2026-04-27T18:00:00Z"))).toBe("há 3d");
   });
-  it("há X mês", () => {
-    expect(formatRelativeShort(new Date("2026-02-28T18:00:00Z"))).toBe("há 2 mês");
+  it("há Xm (meses, abreviado)", () => {
+    expect(formatRelativeShort(new Date("2026-02-28T18:00:00Z"))).toBe("há 2m");
   });
-  it("há X ano", () => {
-    expect(formatRelativeShort(new Date("2024-04-30T18:00:00Z"))).toBe("há 2 anos");
+  it("há Xa (anos, abreviado)", () => {
+    expect(formatRelativeShort(new Date("2024-04-30T18:00:00Z"))).toBe("há 2a");
   });
 });
 ```
@@ -512,9 +514,9 @@ export function formatRelativeShort(date: Date | string): string {
   const day = Math.floor(hr / 24);
   if (day < 30) return `há ${day}d`;
   const mon = Math.floor(day / 30);
-  if (mon < 12) return mon === 1 ? "há 1 mês" : `há ${mon} mês`;
+  if (mon < 12) return `há ${mon}m`;
   const yr = Math.floor(mon / 12);
-  return yr === 1 ? "há 1 ano" : `há ${yr} anos`;
+  return `há ${yr}a`;
 }
 ```
 
@@ -1813,6 +1815,10 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 - Modify: `src/lib/actions/settings.ts`
 - Modify: `src/app/(protected)/configuracoes/page.tsx`
 
+> **[v2 — pente fino do plan]** Duas correções vs. versão original:
+> 1. `audit.action` **deve** usar enum existente do Prisma (`setting_updated`) com `details.section: "dashboard"` — `"dashboard.settings.update"` não compila porque o enum é tipo PostgreSQL gerado pelo Prisma.
+> 2. **Não tocar** `getAllSettings`. Ler `getDashboardSettings()` direto no SSR da page e passar como `initial` ao card. Mantém superfície da função estável.
+
 - [ ] **Step 1: Server Action `saveDashboardSettings`**
 
 Em `src/lib/actions/settings.ts`, adicionar:
@@ -1846,8 +1852,13 @@ export async function saveDashboardSettings(args: {
     invalidateDashboardSettings();
     await logAudit({
       userId: user.id,
-      action: "dashboard.settings.update",
-      details: { weekStartsOn: ws, weekMode: wm, monthMode: mm },
+      action: "setting_updated", // enum Prisma — usar valor existente
+      details: {
+        section: "dashboard",
+        weekStartsOn: ws,
+        weekMode: wm,
+        monthMode: mm,
+      },
     });
     revalidatePath("/dashboard");
     revalidatePath("/configuracoes");
@@ -1861,7 +1872,7 @@ export async function saveDashboardSettings(args: {
 
 (Imports: `getCurrentUser`, `pgPool`, `invalidateDashboardSettings`, `logAudit`, `revalidatePath`. Usar imports existentes no arquivo.)
 
-E expandir `getAllSettings` para retornar as 3 chaves novas (apenas para alimentar o estado inicial do form).
+**NÃO modificar `getAllSettings`** — leitura inicial das chaves vai via `getDashboardSettings()` direto na page server component (Step 3).
 
 - [ ] **Step 2: Componente DashboardSettingsCard**
 
@@ -1982,13 +1993,24 @@ import { DashboardSettingsCard } from "@/components/settings/dashboard-settings-
 import { getDashboardSettings } from "@/lib/dashboard-settings";
 ```
 
-2. Adicionar `getDashboardSettings()` no Promise.all que carrega settings.
+2. Adicionar `getDashboardSettings()` no `Promise.all` que carrega settings (entre os outros já existentes), e desestruturar:
+```tsx
+const [
+  ...,
+  dashboardSettings,
+] = await Promise.all([
+  ...,
+  getDashboardSettings(),
+]);
+```
 
 3. Renderizar o card próximo aos outros (antes de `MatrixIAToggleCard` ou após `EnabledReportsCard`):
 
 ```tsx
 <DashboardSettingsCard initial={dashboardSettings} />
 ```
+
+**Nota:** isso adiciona a leitura ao SSR sem mexer em `getAllSettings`. As 3 chaves novas (`dashboard.*`) ficam isoladas em seu próprio helper.
 
 - [ ] **Step 4: typecheck**
 
@@ -2017,14 +2039,30 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 **Files:**
 - Various.
 
-- [ ] **Step 1: Verificar visibility Matrix IA em todos os drill-downs**
+- [ ] **Step 1: Auditoria final (checklist §14.4 da spec)**
+
+> **[v3 — pente fino #2 do plan]** Auditoria automatizada cobrindo o checklist da spec §14.4.
 
 ```bash
+# 1. Tipos antigos eliminados
+grep -rn '"7d"\|"30d"\|"today"' src/ --include='*.ts' --include='*.tsx' | grep -v -E '\.(test|spec)\.' | grep -v '//'
+# Esperado: 0 matches (apenas comentários ou tests de migração).
+
+# 2. diffPp não usado no frontend
+grep -rn "diffPp" src/components/dashboard/ --include='*.ts' --include='*.tsx'
+# Esperado: 0 matches.
+
+# 3. Toggle linha/barra removido
+grep -rn "useLineBarStorage\|ChartLineBarToggle" src/ --include='*.ts' --include='*.tsx'
+# Esperado: 0 matches.
+
+# 4. Visibilidade Matrix IA aplicada em todos os queries do dashboard
 grep -n "shouldExcludeMatrixIA\|excludeMatrixIA" src/lib/chatwoot/queries/dashboard-drill-down.ts
 grep -n "shouldExcludeMatrixIA\|excludeMatrixIA" src/lib/chatwoot/queries/dashboard-data.ts
+# Esperado: cada SQL relevante tem `inbox_id <> 31` quando `excludeMatrixIA=true`.
 ```
 
-Esperado: todos os queries fazem `inbox_id <> 31` quando `excludeMatrixIA=true`. Já é o caso. Sem mudança necessária — só validar.
+Se algum check falhar, voltar à task que introduziu a regressão antes de prosseguir.
 
 - [ ] **Step 2: Rodar typecheck completo**
 
@@ -2038,7 +2076,15 @@ Expected: 0 erros.
 ```bash
 npm test
 ```
-Expected: 100% PASS. Se algum test antigo de drill-down esperava `recent` em vez de `items` ou `diffPp` em vez de `diffPct`, atualizar pra usar os novos nomes (mantendo compat dos aliases).
+Expected: 100% PASS.
+
+> **[v3 — pente fino #2 do plan]** Se test antigo falhar:
+> - **`recent` vs `items`**: payload mantém `recent` como alias por compat — test antigo que lê `data.recent` deve continuar funcionando.
+> - **`diffPp` vs `diffPct`**: payload mantém ambos por uma versão; test antigo continua válido.
+> - **`byStatus` removido em status drill-down**: se algum test verificava `byStatus[]` em `OpenDrillDownData`, atualizar para o novo schema (`items`, `byInbox`, sem `byStatus`).
+> - **Testes de helpers em `dashboard.ts` antigo (`periodRanges`)**: a função foi removida; test correspondente deve ter sido removido em T6 também.
+>
+> Não silenciar via `.skip` — corrigir e re-rodar.
 
 - [ ] **Step 4: Build local**
 
@@ -2111,7 +2157,9 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 ---
 
-## Tarefa 11.5 — Pacote H: ConversationsLineChart (TZ audit + scroll + sem toggle)
+## Tarefa 11 — Pacote H: ConversationsLineChart (TZ audit + scroll + sem toggle)
+
+> **[v3 — pente fino #2 do plan]** Renumerada de "Tarefa 11.5" para "Tarefa 11" para que a leitura linear do plan seja contínua. A "Tarefa 11 — Push" original virou Tarefa 12.
 
 **Files:**
 - Modify: `src/components/dashboard/conversations-line-chart.tsx`
@@ -2173,7 +2221,14 @@ Fazer mesma mudança em `dashboard-drill-down.ts`:
 - `sqlChart` em `getResolvedDrillDown`
 - `sqlHistory` em `getResolutionRateDrillDown`
 
-Bump cache key adicional para v4 (já bumpado em T7 — verificar se v3/v4 está coerente). Se já é v3, deixar v3 ok pois mudança de SQL não muda o tipo retornado, só elimina ambiguidade no Node-pg.
+> **[v2 — pente fino do plan]** **NÃO mexer em `byHour` queries** — usam `EXTRACT(HOUR FROM ... AT TIME ZONE $4)::int AS hour` e retornam `int 0..23` puro, sem timestamp ambíguo.
+
+> **[v2 — pente fino do plan]** **Bump de cache key obrigatório**: caches `dashboard-data-v3`, `dashboard-drill-received-v2`, `dashboard-drill-resolved-v2`, `dashboard-drill-resolution-v2` podem ter dados serializados com bucket sem TZ. Bump em 1 versão cada:
+> - `dashboard-data-v3` → `dashboard-data-v4`
+> - `dashboard-drill-received-v2` → `dashboard-drill-received-v3`
+> - `dashboard-drill-resolved-v2` → `dashboard-drill-resolved-v3`
+> - `dashboard-drill-resolution-v2` → `dashboard-drill-resolution-v3`
+> - `dashboard-drill-status-v3` permanece (não tem bucket cacheado).
 
 - [ ] **Step 4: Refactor ConversationsLineChart — eixo cheio + scroll + sem toggle**
 
@@ -2241,13 +2296,16 @@ function CustomTooltip(props: TooltipContentProps<ValueType, NameType>) {
 }
 
 /**
- * Preenche todas as 24 horas do dia com 0/0 quando não há dado, mantendo a
- * data do bucket coerente com tz local.
+ * Preenche todas as 24 horas do dia com 0/0 quando não há dado.
  *
- * Heurística: se algum ponto de `data` tem timezone "today" no `tz`,
- * mostra eixo de 00:00 a 23:00 daquele dia. Senão, retorna data como veio
- * (semana/mês — eixo já cheio com buckets diários).
+ * - granularity="hour" + `data` tem ≥ 1 ponto: retorna 24 entradas (00..23).
+ * - granularity="day" ou data vazia: retorna data como veio (sem mexer).
+ *
+ * Usa date-fns-tz `fromZonedTime` para construir o ISO de cada hora local
+ * no tz da plataforma — sem hack de offset do navegador.
  */
+import { fromZonedTime } from "date-fns-tz";
+
 function expandFullDay(
   data: DashboardChartPoint[],
   granularity: "hour" | "day",
@@ -2255,44 +2313,38 @@ function expandFullDay(
 ): Array<DashboardChartPoint & { hourOfDay?: number }> {
   if (granularity !== "hour" || data.length === 0) return data;
 
-  // Identifica "qual dia" (em tz) o primeiro bucket pertence
+  // Identifica "qual dia" (em tz) o primeiro bucket pertence (YYYY-MM-DD).
   const sample = new Date(data[0]!.bucket);
   const dayKey = new Intl.DateTimeFormat("en-CA", {
     timeZone: tz,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(sample); // YYYY-MM-DD
+  }).format(sample);
+
+  // Index dos buckets existentes por hora-do-dia (em tz).
+  const existingByHour = new Map<number, DashboardChartPoint>();
+  for (const d of data) {
+    const hourLocal = parseInt(
+      new Intl.DateTimeFormat("en-GB", {
+        timeZone: tz,
+        hour: "2-digit",
+        hour12: false,
+      }).format(new Date(d.bucket)),
+      10,
+    );
+    existingByHour.set(hourLocal, d);
+  }
 
   const filled: Array<DashboardChartPoint & { hourOfDay: number }> = [];
   for (let h = 0; h < 24; h++) {
-    // Constrói "YYYY-MM-DDTHH:00:00" em tz e converte pra UTC.
-    // Truque: cria com "+00:00" depois extrai offset do tz.
     const hh = String(h).padStart(2, "0");
-    // Date local (em tz) → UTC pelo offset.
-    const localISO = `${dayKey}T${hh}:00:00`;
-    // Aproximação: usa a TZ atual do navegador como referência. Para usuários
-    // do Brasil é coerente. (Caso contrário, refinar com date-fns-tz.)
-    const local = new Date(`${localISO}Z`); // UTC
-    // Ajusta pra o offset BRT (-03:00) — assumindo tz fixo America/Sao_Paulo.
-    // Esta é uma aproximação ok porque o eixo só rotula horas.
-    const tzOffsetMin = new Date(localISO).getTimezoneOffset();
-    const adjusted = new Date(local.getTime() + tzOffsetMin * 60_000);
-
-    const existing = data.find((d) => {
-      const bucketHour = parseInt(
-        new Intl.DateTimeFormat("en-GB", {
-          timeZone: tz,
-          hour: "2-digit",
-          hour12: false,
-        }).format(new Date(d.bucket)),
-        10,
-      );
-      return bucketHour === h;
-    });
+    // Construir Date no tz local e converter pra UTC explicitamente.
+    const utcDate = fromZonedTime(`${dayKey}T${hh}:00:00`, tz);
+    const existing = existingByHour.get(h);
 
     filled.push({
-      bucket: existing?.bucket ?? adjusted.toISOString(),
+      bucket: existing?.bucket ?? utcDate.toISOString(),
       received: existing?.received ?? 0,
       resolved: existing?.resolved ?? 0,
       hourOfDay: h,
@@ -2431,7 +2483,21 @@ export function ConversationsLineChart({
 
 - [ ] **Step 5: Limpar `chart-type-toggle.tsx` — remover ChartLineBarToggle**
 
-Se nenhum outro caller usa `ChartLineBarToggle` ou `useLineBarStorage` (já confirmamos `grep` mostra só `conversations-line-chart.tsx` que vai parar de usar), apagar essas exports do arquivo. Manter `ChartTypeToggle` e `useChartTypeStorage` (usados por outros componentes).
+> **[v2 — pente fino do plan]** Confirmar com grep antes de apagar:
+>
+> ```bash
+> grep -rn "ChartLineBarToggle\|useLineBarStorage" src/ --include='*.ts' --include='*.tsx'
+> ```
+>
+> Esperado: zero matches após o refactor de `conversations-line-chart.tsx` no Step 4. Se houver algum remanescente, atualize esse caller também.
+
+Apagar essas exports do `chart-type-toggle.tsx`:
+- `export type LineBarChartType`
+- `export interface ChartLineBarToggleProps`
+- `export function ChartLineBarToggle`
+- `export function useLineBarStorage`
+
+Manter `ChartTypeToggle`, `ChartTypeToggleProps`, `ChartType`, `useChartTypeStorage` (usados por outros componentes).
 
 - [ ] **Step 6: typecheck e tests**
 
@@ -2460,7 +2526,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 ---
 
-## Tarefa 11 — Push, watch CI e validar deploy
+## Tarefa 12 — Push, watch CI e validar deploy
 
 - [ ] **Step 1: Verificar CI alheio antes de push**
 
@@ -2468,6 +2534,15 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 gh run list --limit 5
 ```
 Expected: nada queued/in-progress; se houver, esperar.
+
+> **[v2 — pente fino do plan]** **Verificar também `docs/agents/active/`**: outro agente trabalhando em paralelo pode estar a 1 commit de pushar. Se houver active file alheio < 24h:
+>
+> ```bash
+> ls docs/agents/active/
+> tail -10 docs/agents/HISTORY.md
+> ```
+>
+> Se outro agente tiver acabado de pushar (commit recente em main que não é seu), `git pull --rebase origin main` e re-rodar o `npm run typecheck` antes de prosseguir.
 
 - [ ] **Step 2: Atualizar HISTORY.md**
 
@@ -2508,9 +2583,11 @@ gh run watch <id>
 - [ ] **Step 6: Smoke-test produção**
 
 ```bash
-curl -s https://nexus-insights.nexus-ai.com/api/health | jq
+curl -s https://insights.nexusai360.com/api/health | jq .
 ```
-Expected: `{"status":"ok","version":"v0.13.0",...}`.
+Expected: `{"status":"ok","version":"v0.13.0", "db":"<...ms", "redis":"<...ms"}`.
+
+> **[v3 — pente fino #2 do plan]** Host correto confirmado pelo `docker-compose.production.yml` (Traefik label) e `docs/runbooks/deploy.md`.
 
 - [ ] **Step 7: Append em HISTORY.md o status LIVE**
 
@@ -2541,23 +2618,40 @@ git push origin main
 
 ---
 
-## Self-review do plan
+## Self-review do plan (v3 final pós double-check)
 
-- ✅ **Cobertura da spec:** todos os 11 problemas (P1–P11) têm task explícita:
-  - P1 → T4
-  - P2 → T6 (comparison.open) + T4 (sem fallback "Novo")
-  - P3 → T6 (variação relativa em rate) + T7 (diffPct no drill-down)
-  - P4 → T5
-  - P5 → T1 + T6 + T7 (período baseado em settings)
-  - P6 → T2 + T9 (settings backend + UI)
-  - P7 → T7 + T8 (paginação)
-  - P8 → T3 + T8 (formatRelativeShort)
-  - P9 → T7 + T8 (status genérico)
-  - P10 → T8 (tooltip)
-  - P11 → T10 (auditoria)
+### Cobertura da spec
+- ✅ Todos os 11 problemas reportados (P1–P11) e os 5 do Pacote H (P12–P16) têm task explícita:
+  - P1 → T4 · P2 → T6 (comparison.open) + T4 (sem fallback "Novo") · P3 → T6 (variação relativa em rate) + T7 (diffPct no drill-down)
+  - P4 → T5 · P5 → T1 + T6 + T7 · P6 → T2 + T9 · P7 → T7 + T8 (paginação)
+  - P8 → T3 + T8 (formatRelativeShort) · P9 → T7 + T8 (status genérico) · P10 → T8 + T11 · P11 → T10
+  - P12 → T11 (TZ explícita SQL) · P13 → T11 (tickMargin) · P14 → T11 (interval=0)
+  - P15 → T11 (eixo cheio + scroll) · P16 → T11 (sem toggle linha/barra)
+
+### Pente fino #1 (achados corrigidos inline)
+- ✅ **B1** T3 testes "há X mês" → "há Xm" (consistente com `min`/`h`/`d`).
+- ✅ **B2** T9 audit `setting_updated` (enum existente) com `details.section: "dashboard"` (era `"dashboard.settings.update"` que não compila).
+- ✅ **B3** T9 não toca `getAllSettings`; lê via `getDashboardSettings()` no SSR.
+- ✅ **B4** T11 `expandFullDay` usa `fromZonedTime` de date-fns-tz (era hack com `getTimezoneOffset()`).
+- ✅ **B5** T11 bumpa cache keys (v2/v3 → v3/v4) após mudança SQL.
+- ✅ **B6** T11 step 5 inclui grep explícito antes de remover exports.
+
+### Pente fino #2 (achados corrigidos inline)
+- ✅ **C1** T11.5 → T11; T11 → T12 (numeração linear).
+- ✅ **C2** T10 step 1 inclui auditoria automatizada do checklist §14.4 da spec.
+- ✅ **C3** T12 host `/api/health` confirmado via `docker-compose.production.yml`: `insights.nexusai360.com`.
+- ✅ **C4** `StatusDrillDownData` sem `byStatus` (alinhado com spec D6 corrigida).
+- ✅ **C5** T10 step 3 explicita estratégia de regressão: corrigir, nunca silenciar via `.skip`.
+
+### Outros critérios
 - ✅ **Sem placeholders:** todo código é concreto.
-- ✅ **Tipos consistentes:** `DashboardPeriod = "hoje"|"semana"|"mes"`, `DashboardMode = "current"|"rolling"`, `WeekStartsOn = 0..6`. Repetidos exatamente nos arquivos que importam.
-- ✅ **Bite-sized:** cada step é 2–5min de trabalho.
-- ✅ **TDD onde faz sentido:** T1, T2, T3 têm tests-first; demais são UI/refactor onde tests não dão valor proporcional ao esforço.
+- ✅ **Tipos consistentes:** `DashboardPeriod = "hoje"|"semana"|"mes"`, `DashboardMode = "current"|"rolling"`, `WeekStartsOn = 0..6`.
+- ✅ **Bite-sized:** cada step é 2–5min.
+- ✅ **TDD onde faz sentido:** T1, T2, T3 têm tests-first; demais são UI/refactor.
 - ✅ **Comandos exatos:** `npx jest`, `npm run typecheck`, `gh run watch`, `curl`.
-- ✅ **Frequent commits:** 11 commits ao longo do release (1 por task + release prep + push history + LIVE history + session-end).
+- ✅ **Frequent commits:** 12 commits ao longo do release.
+
+### Correções no que já foi commitado
+Os subagents implementaram T1–T6 antes do double-check. Após o pente:
+- 🔧 **T3 (`relative-time.ts` + tests)** precisa **commit corretivo**: trocar `"há X mês"` → `"há Xm"` e `"há X anos"` → `"há Xa"` para alinhar com a spec corrigida. Isso vira o primeiro passo da retomada da execução.
+- ✅ T1, T2, T4, T5, T6 já estão alinhados — sem rework necessário.
