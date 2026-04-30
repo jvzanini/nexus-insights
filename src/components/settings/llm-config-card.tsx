@@ -23,6 +23,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
+import { Switch } from "@/components/ui/switch";
 import {
   PROVIDER_LABELS,
   PROVIDER_MODELS,
@@ -30,8 +31,10 @@ import {
 import type { LlmProvider } from "@/lib/llm/types";
 import {
   saveLlmConfig,
+  setNexBubbleEnabled,
   testLlmConnection,
 } from "@/lib/actions/llm-config";
+import { cn } from "@/lib/utils";
 
 interface LlmConfigCardProps {
   initial: {
@@ -39,6 +42,7 @@ interface LlmConfigCardProps {
     model: string;
     apiKeyMasked: string;
   } | null;
+  initialNexEnabled: boolean;
 }
 
 const PROVIDER_OPTIONS: SelectOption[] = (
@@ -61,7 +65,10 @@ interface TestState {
   message?: string;
 }
 
-export function LlmConfigCard({ initial }: LlmConfigCardProps) {
+export function LlmConfigCard({
+  initial,
+  initialNexEnabled,
+}: LlmConfigCardProps) {
   const router = useRouter();
   const [provider, setProvider] = useState<LlmProvider>(
     initial?.provider ?? "openai",
@@ -73,6 +80,8 @@ export function LlmConfigCard({ initial }: LlmConfigCardProps) {
   const [test, setTest] = useState<TestState>({ status: "idle" });
   const [isSaving, startSave] = useTransition();
   const [isTesting, startTest] = useTransition();
+  const [nexEnabled, setNexEnabled] = useState<boolean>(initialNexEnabled);
+  const [isTogglingNex, startNexToggle] = useTransition();
 
   const modelOptions = useMemo(() => modelOptionsFor(provider), [provider]);
   const isConfigured = Boolean(initial);
@@ -128,6 +137,29 @@ export function LlmConfigCard({ initial }: LlmConfigCardProps) {
     });
   }
 
+  function handleNexToggle(checked: boolean) {
+    if (!isConfigured) {
+      toast.error("Configure um provedor antes de ativar o Agente Nex");
+      return;
+    }
+    const previous = nexEnabled;
+    setNexEnabled(checked);
+    startNexToggle(async () => {
+      const result = await setNexBubbleEnabled(checked);
+      if (!result.ok) {
+        setNexEnabled(previous);
+        toast.error(result.error ?? "Erro ao salvar preferência");
+        return;
+      }
+      toast.success(
+        checked
+          ? "Agente Nex ativado — bolha visível em todas as páginas"
+          : "Agente Nex desativado — bolha oculta",
+      );
+      router.refresh();
+    });
+  }
+
   function handleSave() {
     const err = validateBeforeAction();
     if (err) {
@@ -174,6 +206,67 @@ export function LlmConfigCard({ initial }: LlmConfigCardProps) {
 
       <CardContent>
         <div className="space-y-6">
+          {/* Toggle global da bolha do Agente Nex. */}
+          <div
+            className="flex items-center justify-between gap-4 rounded-xl border border-border bg-background/40 px-4 py-3"
+            role="group"
+            aria-labelledby="nex-bubble-toggle-title"
+          >
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <span
+                aria-hidden
+                className={cn(
+                  "h-2.5 w-2.5 shrink-0 rounded-full transition-[background-color,box-shadow] duration-200",
+                  nexEnabled
+                    ? "bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.6)]"
+                    : "bg-zinc-400 dark:bg-zinc-600",
+                )}
+              />
+              <div className="min-w-0">
+                <p
+                  id="nex-bubble-toggle-title"
+                  className="text-sm font-medium text-foreground"
+                >
+                  {nexEnabled ? "Agente Nex ativo" : "Agente Nex desativado"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {!isConfigured
+                    ? "Configure um provedor abaixo para liberar a bolha flutuante."
+                    : nexEnabled
+                      ? "A bolha flutuante aparece em todas as páginas autenticadas."
+                      : "A bolha flutuante está oculta para todos os usuários."}
+                </p>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              {isTogglingNex ? (
+                <Loader2
+                  className="h-4 w-4 animate-spin text-muted-foreground"
+                  aria-hidden="true"
+                />
+              ) : null}
+              <span
+                className="relative inline-flex h-11 w-11 items-center justify-center"
+                title={
+                  !isConfigured
+                    ? "Configure um provedor para ativar"
+                    : undefined
+                }
+              >
+                <Switch
+                  checked={nexEnabled}
+                  onCheckedChange={handleNexToggle}
+                  disabled={isTogglingNex || !isConfigured}
+                  aria-label={
+                    nexEnabled
+                      ? "Desativar Agente Nex"
+                      : "Ativar Agente Nex"
+                  }
+                />
+              </span>
+            </div>
+          </div>
+
           <div
             className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs ${
               isConfigured

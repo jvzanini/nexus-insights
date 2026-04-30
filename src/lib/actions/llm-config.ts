@@ -7,12 +7,15 @@
  * via `@/lib/encryption` antes de persistir em `llm_configs`.
  */
 
+import { revalidatePath } from "next/cache";
+
 import { auth } from "@/auth";
 import { logAudit } from "@/lib/audit";
 import { encrypt } from "@/lib/encryption";
 import { ensureLlmTables } from "@/lib/llm/ensure-tables";
 import { buildLlmClient } from "@/lib/llm/get-client";
 import { getPublicActiveLlmConfig } from "@/lib/llm/get-active-config";
+import { invalidateNexBubbleEnabled } from "@/lib/llm/get-nex-bubble-enabled";
 import { PROVIDER_MODELS } from "@/lib/llm/pricing";
 import type { LlmProvider } from "@/lib/llm/types";
 import { pgPool } from "@/lib/pg-pool";
@@ -180,4 +183,41 @@ export async function getActiveLlmConfigSummary(): Promise<
 
   const summary = await getPublicActiveLlmConfig();
   return { ok: true, data: summary };
+}
+
+/**
+ * Liga/desliga globalmente a bolha flutuante do Agente Nex. Persistido em
+ * `app_settings` sob a chave `nex.bubble_enabled`. Apenas super_admin.
+ */
+export async function setNexBubbleEnabled(
+  enabled: boolean,
+): Promise<ActionResult> {
+  const guard = await requireSuperAdmin();
+  if (!guard.ok) return { ok: false, error: guard.error };
+
+  try {
+    await pgPool.query(
+      `INSERT INTO app_settings (key, value, category, updated_at)
+       VALUES ('nex.bubble_enabled', $1::jsonb, 'platform', NOW())
+       ON CONFLICT (key) DO UPDATE
+         SET value = $1::jsonb, updated_at = NOW()`,
+      [JSON.stringify(enabled)],
+    );
+  } catch (err) {
+    console.error("[setNexBubbleEnabled] Falha ao persistir setting:", err);
+    return { ok: false, error: "Erro ao salvar configuração" };
+  }
+
+  invalidateNexBubbleEnabled();
+  revalidatePath("/", "layout");
+
+  await logAudit({
+    userId: guard.userId,
+    action: "setting_updated",
+    targetType: "platform_settings",
+    targetId: "nex_bubble_enabled",
+    details: { enabled },
+  });
+
+  return { ok: true };
 }
