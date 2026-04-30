@@ -54,86 +54,33 @@ jobs:
       GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
     steps:
       - name: Trigger Portainer redeploy (Swarm-aware)
-        shell: bash
         run: |
-          set -uo pipefail
-          if [ -z "${PORTAINER_STACK_ID:-}" ]; then
+          set -e
+          if [ -z "$PORTAINER_STACK_ID" ]; then
             echo "PORTAINER_STACK_ID não configurado — pulando."
             exit 0
           fi
-
           AUTH=$(printf '{"username":"jvzanini","password":"%s"}' "$GHCR_TOKEN" | base64 | tr -d '\n')
-
-          # 1) Pull da imagem nova no endpoint
-          curl --silent --insecure -X POST \
-            -H "X-API-Key: ${PORTAINER_TOKEN}" \
-            -H "X-Registry-Auth: ${AUTH}" \
-            "${PORTAINER_URL}/api/endpoints/${PORTAINER_ENDPOINT_ID}/docker/images/create?fromImage=ghcr.io/jvzanini/nexus-insights&tag=latest" \
-            -o /tmp/pull.log -w "Pull image: HTTP %{http_code}\n" || true
-
-          # 2) Descobre nome do stack
-          STACK_JSON=$(curl --silent --insecure -H "X-API-Key: ${PORTAINER_TOKEN}" \
-            "${PORTAINER_URL}/api/stacks/${PORTAINER_STACK_ID}")
-          STACK_NAME=$(echo "$STACK_JSON" | python3 - <<'PY'
-import json, sys
-data=json.load(sys.stdin)
-print(data.get("Name",""))
-PY
-)
-          if [ -z "$STACK_NAME" ]; then
-            echo "Falha ao ler stack:"; echo "$STACK_JSON" | head -c 500; exit 1
-          fi
+          curl --silent --insecure -X POST -H "X-API-Key: $PORTAINER_TOKEN" -H "X-Registry-Auth: $AUTH" "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/images/create?fromImage=ghcr.io/jvzanini/nexus-insights&tag=latest" -o /tmp/pull.log -w "Pull image: HTTP %{http_code}\n" || true
+          STACK_NAME=$(curl --silent --insecure -H "X-API-Key: $PORTAINER_TOKEN" "$PORTAINER_URL/api/stacks/$PORTAINER_STACK_ID" | jq -r '.Name')
           SERVICE_NAME="${STACK_NAME}_app"
-          echo "Stack: ${STACK_NAME} | Service alvo: ${SERVICE_NAME}"
-
-          # 3) Lista todos os services e filtra pelo nome
-          SVC=$(curl --silent --insecure \
-            -H "X-API-Key: ${PORTAINER_TOKEN}" \
-            "${PORTAINER_URL}/api/endpoints/${PORTAINER_ENDPOINT_ID}/docker/services")
-
-          SVC_ID=$(echo "$SVC" | SERVICE_NAME="$SERVICE_NAME" python3 - <<'PY'
-import json, os, sys
-target=os.environ["SERVICE_NAME"]
-data=json.load(sys.stdin)
-hit=next((s for s in data if s.get("Spec",{}).get("Name")==target), None)
-print(hit["ID"] if hit else "")
-PY
-)
+          echo "Stack: $STACK_NAME | Service alvo: $SERVICE_NAME"
+          curl --silent --insecure -H "X-API-Key: $PORTAINER_TOKEN" "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/services" > /tmp/svc.json
+          SVC_ID=$(jq -r --arg n "$SERVICE_NAME" '[.[] | select(.Spec.Name==$n)][0].ID // empty' /tmp/svc.json)
           if [ -z "$SVC_ID" ]; then
-            echo "Service ${SERVICE_NAME} não encontrado."; exit 1
+            echo "Service $SERVICE_NAME não encontrado:"
+            jq -r '[.[].Spec.Name]' /tmp/svc.json
+            exit 1
           fi
-
-          SVC_VER=$(echo "$SVC" | SERVICE_NAME="$SERVICE_NAME" python3 - <<'PY'
-import json, os, sys
-target=os.environ["SERVICE_NAME"]
-data=json.load(sys.stdin)
-hit=next((s for s in data if s.get("Spec",{}).get("Name")==target), None)
-print(hit["Version"]["Index"] if hit else "")
-PY
-)
-          NEW_SPEC=$(echo "$SVC" | SERVICE_NAME="$SERVICE_NAME" python3 - <<'PY'
-import json, os, sys
-target=os.environ["SERVICE_NAME"]
-data=json.load(sys.stdin)
-hit=next((s for s in data if s.get("Spec",{}).get("Name")==target), None)
-spec=hit["Spec"]
-tt=spec.setdefault("TaskTemplate", {})
-tt["ForceUpdate"]=tt.get("ForceUpdate", 0) + 1
-print(json.dumps(spec))
-PY
-)
-
-          echo "Service ID: ${SVC_ID} version: ${SVC_VER} — forçando atualização"
-          echo "$NEW_SPEC" > /tmp/spec.json
-          HTTP=$(curl --silent --insecure -o /tmp/upd.log -w "%{http_code}" -X POST \
-            -H "X-API-Key: ${PORTAINER_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -H "X-Registry-Auth: ${AUTH}" \
-            "${PORTAINER_URL}/api/endpoints/${PORTAINER_ENDPOINT_ID}/docker/services/${SVC_ID}/update?version=${SVC_VER}" \
-            --data-binary @/tmp/spec.json)
-          echo "Service update: HTTP ${HTTP}"
+          SVC_VER=$(jq -r --arg n "$SERVICE_NAME" '[.[] | select(.Spec.Name==$n)][0].Version.Index' /tmp/svc.json)
+          jq --arg n "$SERVICE_NAME" '[.[] | select(.Spec.Name==$n)][0].Spec | .TaskTemplate.ForceUpdate = ((.TaskTemplate.ForceUpdate // 0) + 1)' /tmp/svc.json > /tmp/spec.json
+          echo "Service ID: $SVC_ID version: $SVC_VER — forçando atualização"
+          HTTP=$(curl --silent --insecure -o /tmp/upd.log -w "%{http_code}" -X POST -H "X-API-Key: $PORTAINER_TOKEN" -H "Content-Type: application/json" -H "X-Registry-Auth: $AUTH" "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/services/$SVC_ID/update?version=$SVC_VER" --data-binary @/tmp/spec.json)
+          echo "Service update: HTTP $HTTP"
           if [ "$HTTP" != "200" ]; then
-            echo "--- response ---"; cat /tmp/upd.log; echo ""
+            echo "--- response ---"
+            cat /tmp/upd.log
+            echo ""
             exit 1
           fi
           echo "Redeploy disparado com sucesso."
