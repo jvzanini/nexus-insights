@@ -41,6 +41,11 @@ export interface InteractivePieChartProps {
   showPercentInTooltip?: boolean;
   className?: string;
   ariaLabel?: string;
+  /**
+   * Callback disparado ao clicar numa fatia. Recebe o `name` (label) e o
+   * índice na lista filtrada.
+   */
+  onSliceClick?: (name: string, index: number) => void;
 }
 
 /**
@@ -64,6 +69,7 @@ export function InteractivePieChart({
   showPercentInTooltip = true,
   className,
   ariaLabel = "Gráfico de pizza",
+  onSliceClick,
 }: InteractivePieChartProps) {
   const prefersReducedMotion = useReducedMotion();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -140,8 +146,17 @@ export function InteractivePieChart({
             isAnimationActive={!prefersReducedMotion}
             animationBegin={0}
             animationDuration={800}
+            cursor={onSliceClick ? "pointer" : "default"}
             onMouseEnter={(_, i) => setActiveIndex(i)}
             onMouseLeave={() => setActiveIndex(null)}
+            onClick={
+              onSliceClick
+                ? (_, i) => {
+                    const item = filtered[i];
+                    if (item) onSliceClick(item.name, i);
+                  }
+                : undefined
+            }
           >
             {filtered.map((entry, i) => (
               <Cell

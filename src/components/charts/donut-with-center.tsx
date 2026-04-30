@@ -36,6 +36,11 @@ export interface DonutWithCenterProps {
   showPercentInTooltip?: boolean;
   className?: string;
   ariaLabel?: string;
+  /**
+   * Callback opcional quando o usuário clica numa fatia.
+   * Recebe `name` (label da fatia) e `index` na lista filtrada.
+   */
+  onSliceClick?: (name: string, index: number) => void;
 }
 
 /**
@@ -63,6 +68,7 @@ export function DonutWithCenter({
   showPercentInTooltip = true,
   className,
   ariaLabel = "Donut chart",
+  onSliceClick,
 }: DonutWithCenterProps) {
   const prefersReducedMotion = useReducedMotion();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -127,8 +133,17 @@ export function DonutWithCenter({
             isAnimationActive={!prefersReducedMotion}
             animationBegin={0}
             animationDuration={800}
+            cursor={onSliceClick ? "pointer" : "default"}
             onMouseEnter={(_, i) => setActiveIndex(i)}
             onMouseLeave={() => setActiveIndex(null)}
+            onClick={
+              onSliceClick
+                ? (_, i) => {
+                    const item = filtered[i];
+                    if (item) onSliceClick(item.name, i);
+                  }
+                : undefined
+            }
           >
             {filtered.map((entry, i) => (
               <Cell

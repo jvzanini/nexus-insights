@@ -54,6 +54,11 @@ export interface InteractiveBarChartProps {
    * Ajuste se as labels forem longas.
    */
   yAxisWidth?: number;
+  /**
+   * Callback disparado ao clicar numa barra. Recebe o `name` da categoria
+   * (eixo categórico) e o `seriesKey` clicado.
+   */
+  onBarClick?: (name: string, seriesKey: string) => void;
 }
 
 const defaultFormat = (v: number) =>
@@ -82,6 +87,7 @@ export function InteractiveBarChart({
   className,
   ariaLabel = "Gráfico de barras",
   yAxisWidth = 80,
+  onBarClick,
 }: InteractiveBarChartProps) {
   const prefersReducedMotion = useReducedMotion();
   const [activeKey, setActiveKey] = useState<string | null>(null);
@@ -221,9 +227,21 @@ export function InteractiveBarChart({
                 isAnimationActive={!prefersReducedMotion}
                 animationBegin={0}
                 animationDuration={800}
-                style={{ transition: "fill-opacity 200ms ease" }}
+                style={{
+                  transition: "fill-opacity 200ms ease",
+                  cursor: onBarClick ? "pointer" : "default",
+                }}
                 onMouseEnter={() => setActiveKey(s.key)}
                 onMouseLeave={() => setActiveKey(null)}
+                onClick={
+                  onBarClick
+                    ? (entry) => {
+                        const payload = entry as { payload?: { name?: string } };
+                        const name = payload.payload?.name;
+                        if (typeof name === "string") onBarClick(name, s.key);
+                      }
+                    : undefined
+                }
               />
             );
           })}
