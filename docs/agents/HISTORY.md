@@ -56,6 +56,7 @@ YYYY-MM-DD HH:MM | agent=<agent-id> | commit=<sha7> | scope=<feat|fix|docs|infra
 2026-04-30 17:25 | agent=claude-visibility-models | scope=release | summary=Release v0.11.0 — visibilidade granular (3 níveis) + catálogo LLM 2024+ + bugs UI. CHANGELOG/STATUS atualizados, package.json bumpado.
 2026-04-30 17:30 | agent=claude-visibility-models | observation=session-end | summary=Sessão encerrada. Active file deletado.
 2026-04-30 19:50 | agent=claude-conversas-v0.10.4-fix | observation=session-end | summary=Sessão encerrada. v0.10.4 consolidada na release v0.11.0 (CHANGELOG/package.json controlados pelo claude-visibility-models). Active file removido. portainer-fix será disparado pelo agente da v0.11.0.
+2026-04-30 20:05 | agent=claude-pageheader-hotfix | observation=incident | summary=Páginas internas (configurações + todos relatorios) caíram com "This page couldn't load". Causa: commit 0a3bfab (claude-conversas-v0.10.4-fix) marcou PageHeader como "use client" mas recebe LucideIcon (função) — proibido em RSC → Client. Logs do app mostram "Error: Functions cannot be passed directly to Client Components".
 ```
 
 > Entradas anteriores aos workflows do dia 2026-04-30 estão capturadas no CHANGELOG.md (não vamos retroagir HISTORY pra trás disso para evitar trabalho inútil).

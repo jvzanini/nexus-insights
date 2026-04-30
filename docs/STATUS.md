@@ -1,14 +1,18 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-04-30
-**Versão atual em produção:** v0.11.0
+**Versão atual em produção:** v0.11.1
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.11.0)
+## Em produção (v0.11.1)
 
-### Novidades desta release (v0.11.0)
+### Hotfix v0.11.1 (2026-04-30)
+
+- Páginas internas estavam quebradas com "This page couldn't load" desde o deploy do v0.10.4 (commit `0a3bfab`). PageHeader fora marcado como Client Component mas recebia ícone Lucide (função). Refatoração: PageHeader volta a ser Server Component; medição via filho `<PageHeaderHeightProbe>`.
+
+### Novidades da release v0.11.0
 
 - **Visibilidade granular por relatório** — dropdown de 3 níveis (Todos / Somente super admin / Ninguém) por cada um dos 7 relatórios, com aplicação global em sidebar, páginas e dropdowns.
 - **Visibilidade granular do Matrix IA** — mesma lógica para o inbox 31 (Matrix IA): some de tabelas, charts, KPIs, drill-downs e dropdowns conforme a regra escolhida.

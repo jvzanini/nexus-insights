@@ -1,5 +1,29 @@
 # Changelog
 
+## [v0.11.1] 2026-04-30 — Hotfix: página de configurações e relatórios não carregavam
+
+> "This page couldn't load — A server error occurred" em todas as páginas internas (`/configuracoes`, todos os `/relatorios/*`, perfil, etc).
+
+### Causa raiz
+
+O commit `0a3bfab` (`fix(conversas): page-header mede altura + toolbar fluid (v0.10.4 prep)` — agente `claude-conversas-v0.10.4-fix`) marcou `src/components/page-header.tsx` como `"use client"` para usar `useLayoutEffect`. Mas o componente recebe `icon: LucideIcon` (função/forwardRef), e funções **não podem ser passadas** de Server Component para Client Component (regra do Next.js RSC). Resultado: toda página interna que renderizava `<PageHeader icon={Settings} ... />` quebrava no SSR com `Error: Functions cannot be passed directly to Client Components`.
+
+### Fix
+
+Refatoração interna sem mudar a API pública:
+
+- **`src/components/page-header.tsx`** — volta a ser Server Component, **mantém os mesmos props** (`icon: LucideIcon`, `title`, `subtitle`, `actions`). O ícone é renderizado no servidor e o JSX resultante é entregue como `children` para o filho client.
+- **`src/components/page-header-height-probe.tsx`** (novo) — Client Component pequeno (`"use client"`) que recebe `children` já renderizado e ata o `useLayoutEffect + ResizeObserver` que mede a altura e exporta a CSS var `--page-header-h`. Recebe ReactNode (não funções), atravessa a fronteira sem problema.
+
+13 call-sites continuam usando exatamente a mesma API. Sem mudanças nas páginas.
+
+### Lições / processo
+
+- O agente que fez `0a3bfab` deveria ter testado uma página com PageHeader antes de pushar — `npm run build` teria capturado o erro.
+- O protocolo de coordenação multi-agente já tem checklist "antes de push: gh run list + curl /api/health". Não capturou esse caso porque `/api/health` continuava verde (Server Component só falha quando renderiza). Adicionar ao checklist: **abrir uma página interna logada antes de declarar deploy bem-sucedido**.
+
+---
+
 ## [v0.11.0] 2026-04-30 — Visibilidade granular + catálogo LLM atualizado
 
 > Substitui os toggles boolean dos relatórios e do Matrix IA por dropdowns de **3 níveis** (Todos / Somente super admin / Ninguém) com aplicação **global** em sidebar, páginas, queries, filtros e dropdowns. Inclui também o catálogo LLM atualizado (cutoff abril/2026) com famílias GPT-5.x, Claude 4.7, Gemini 2.5 e OpenRouter expandido. Corrige 2 bugs no card Agente Nex.
