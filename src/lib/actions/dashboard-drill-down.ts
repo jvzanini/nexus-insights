@@ -9,10 +9,14 @@ import {
   getReceivedDrillDown,
   getResolutionRateDrillDown,
   getResolvedDrillDown,
+  getNoResponseDrillDown,
+  getByTeamDrillDown,
   type OpenDrillDownData,
   type ReceivedDrillDownData,
   type ResolutionRateDrillDownData,
   type ResolvedDrillDownData,
+  type NoResponseDrillDownData,
+  type ByTeamDrillDownData,
 } from "@/lib/chatwoot/queries/dashboard-drill-down";
 
 export type DashboardPeriod = "today" | "7d" | "30d";
@@ -134,17 +138,62 @@ export async function getResolvedDrillDownAction(args: {
 
 export async function getOpenDrillDownAction(args: {
   accountId: number;
+  period: DashboardPeriod;
 }): Promise<DrillDownActionResult<OpenDrillDownData>> {
   try {
     const auth = await authorize(args.accountId);
     if (!auth.ok) return { success: false, error: auth.error };
+    const { current } = periodRanges(args.period);
     const result = await getOpenDrillDown({
       accountId: args.accountId,
+      period: current,
       excludeMatrixIA: auth.excludeMatrixIA,
     });
     return { success: true, data: result.data };
   } catch (err) {
     console.error("[getOpenDrillDownAction]", err);
+    return { success: false, error: "Erro ao carregar drill-down" };
+  }
+}
+
+export async function getNoResponseDrillDownAction(args: {
+  accountId: number;
+  period: DashboardPeriod;
+}): Promise<DrillDownActionResult<NoResponseDrillDownData>> {
+  try {
+    const auth = await authorize(args.accountId);
+    if (!auth.ok) return { success: false, error: auth.error };
+    const { current } = periodRanges(args.period);
+    const result = await getNoResponseDrillDown({
+      accountId: args.accountId,
+      period: current,
+      excludeMatrixIA: auth.excludeMatrixIA,
+    });
+    return { success: true, data: result.data };
+  } catch (err) {
+    console.error("[getNoResponseDrillDownAction]", err);
+    return { success: false, error: "Erro ao carregar drill-down" };
+  }
+}
+
+export async function getByTeamDrillDownAction(args: {
+  accountId: number;
+  period: DashboardPeriod;
+  teamId: number | null;
+}): Promise<DrillDownActionResult<ByTeamDrillDownData>> {
+  try {
+    const auth = await authorize(args.accountId);
+    if (!auth.ok) return { success: false, error: auth.error };
+    const { current } = periodRanges(args.period);
+    const result = await getByTeamDrillDown({
+      accountId: args.accountId,
+      period: current,
+      teamId: args.teamId,
+      excludeMatrixIA: auth.excludeMatrixIA,
+    });
+    return { success: true, data: result.data };
+  } catch (err) {
+    console.error("[getByTeamDrillDownAction]", err);
     return { success: false, error: "Erro ao carregar drill-down" };
   }
 }
