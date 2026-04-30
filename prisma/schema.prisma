@@ -160,13 +160,29 @@ model LlmConfig {
   id              String   @id @default(uuid()) @db.Uuid
   provider        String
   model           String
-  encryptedApiKey String   @map("encrypted_api_key")
+  encryptedApiKey String?  @map("encrypted_api_key")
   isActive        Boolean  @default(true) @map("is_active")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
   createdById     String?  @db.Uuid @map("created_by_id")
+  credentialId    String?  @db.Uuid @map("credential_id")
 
   @@map("llm_configs")
+}
+
+model LlmCredential {
+  id              String   @id @default(uuid()) @db.Uuid
+  provider        String
+  label           String
+  encryptedApiKey String   @map("encrypted_api_key")
+  last4           String
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdById     String?  @db.Uuid @map("created_by_id")
+
+  @@unique([provider, label], name: "llm_credentials_provider_label_idx")
+  @@index([provider, updatedAt(sort: Desc)], name: "llm_credentials_provider_updated_idx")
+  @@map("llm_credentials")
 }
 
 model LlmUsage {
@@ -181,6 +197,8 @@ model LlmUsage {
   userId        String?  @db.Uuid @map("user_id")
   durationMs    Int?     @map("duration_ms")
   errorMessage  String?  @map("error_message")
+  costBrl       Decimal? @map("cost_brl") @db.Decimal(12, 6)
+  usdToBrlRate  Decimal? @map("usd_to_brl_rate") @db.Decimal(10, 4)
   createdAt     DateTime @default(now()) @map("created_at")
 
   @@index([createdAt])
