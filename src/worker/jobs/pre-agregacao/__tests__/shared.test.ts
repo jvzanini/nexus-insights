@@ -2,6 +2,7 @@
  * Testes do módulo `shared.ts` (T3 — utilitários compartilhados).
  *
  * Mocka `@/lib/pg-pool` para simular queries no banco interno.
+ * Mocka `@/lib/realtime` para verificar publicação de eventos SSE (T13).
  */
 
 jest.mock("@/lib/pg-pool", () => ({
@@ -12,7 +13,12 @@ jest.mock("@/lib/datetime", () => ({
   getPlatformTz: jest.fn().mockResolvedValue("America/Sao_Paulo"),
 }));
 
+jest.mock("@/lib/realtime", () => ({
+  publishRealtimeEvent: jest.fn().mockResolvedValue(undefined),
+}));
+
 import { pgPool } from "@/lib/pg-pool";
+import { publishRealtimeEvent } from "@/lib/realtime";
 import {
   getAccountsToRefresh,
   rollingDates,
@@ -20,9 +26,14 @@ import {
 } from "../shared";
 
 const mockedQuery = pgPool.query as jest.MockedFunction<typeof pgPool.query>;
+const mockedPublish = publishRealtimeEvent as jest.MockedFunction<
+  typeof publishRealtimeEvent
+>;
 
 beforeEach(() => {
   mockedQuery.mockReset();
+  mockedPublish.mockReset();
+  mockedPublish.mockResolvedValue(undefined);
 });
 
 describe("getAccountsToRefresh", () => {
@@ -128,6 +139,14 @@ describe("withMetaUpdate", () => {
     expect(postSql).toMatch(/INSERT INTO chatwoot_facts_meta/);
     expect(postSql).toMatch(/last_refresh_at/);
     expect(postSql).toMatch(/last_error/);
+
+    // T13: deve publicar facts:refreshed após sucesso
+    expect(mockedPublish).toHaveBeenCalledTimes(1);
+    expect(mockedPublish).toHaveBeenCalledWith({
+      type: "facts:refreshed",
+      dimension: "by_account",
+      accountId: 9,
+    });
   });
 
   it("usa tabela hourly_by_account quando dimension = hourly_by_account", async () => {
@@ -156,5 +175,27 @@ describe("withMetaUpdate", () => {
     // params devem conter a mensagem de erro
     const errParams = mockedQuery.mock.calls[1][1] as unknown[];
     expect(errParams).toContain("boom");
+
+    // T13: NÃO deve publicar evento em caso de erro
+    expect(mockedPublish).not.toHaveBeenCalled();
+  });
+
+  it("publica facts:refreshed com dimension correta (hourly_by_account)", async () => {
+    setupMetaUpsertHappyPath();
+    await withMetaUpdate("hourly_by_account", 2, jest.fn().mockResolvedValueOnce("x"));
+    expect(mockedPublish).toHaveBeenCalledWith({
+      type: "facts:refreshed",
+      dimension: "hourly_by_account",
+      accountId: 2,
+    });
+  });
+
+  it("não lança erro quando publishRealtimeEvent falha (best-effort)", async () => {
+    setupMetaUpsertHappyPath();
+    mockedPublish.mockRejectedValueOnce(new Error("redis down"));
+    // Não deve propagar o erro
+    await expect(
+      withMetaUpdate("by_agent", 5, jest.fn().mockResolvedValueOnce("ok")),
+    ).resolves.toBe("ok");
   });
 });

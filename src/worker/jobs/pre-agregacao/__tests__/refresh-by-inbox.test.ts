@@ -23,6 +23,10 @@ jest.mock("@/lib/datetime", () => ({
   getPlatformTz: jest.fn().mockResolvedValue("America/Sao_Paulo"),
 }));
 
+jest.mock("@/lib/realtime", () => ({
+  publishRealtimeEvent: jest.fn().mockResolvedValue(undefined),
+}));
+
 import { pgPool } from "@/lib/pg-pool";
 import { chatwootQuery } from "@/lib/chatwoot/pool";
 import type { Job } from "bullmq";

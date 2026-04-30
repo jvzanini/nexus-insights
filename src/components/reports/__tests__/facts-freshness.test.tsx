@@ -9,6 +9,11 @@ jest.mock("@/lib/actions/freshness", () => ({
   getFreshnessForAccount: jest.fn(),
 }));
 
+// useFactsRealtime abre EventSource — mockar para evitar efeito colateral no teste.
+jest.mock("../use-facts-realtime", () => ({
+  useFactsRealtime: jest.fn(),
+}));
+
 import { FactsFreshness } from "../facts-freshness";
 
 const { getFreshnessForAccount } = jest.requireMock("@/lib/actions/freshness");

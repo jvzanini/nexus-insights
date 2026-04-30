@@ -11,6 +11,7 @@
 
 import { pgPool } from "@/lib/pg-pool";
 import { getPlatformTz } from "@/lib/datetime";
+import { publishRealtimeEvent } from "@/lib/realtime";
 
 export type FactsDimension =
   | "by_account"
@@ -155,6 +156,16 @@ export async function withMetaUpdate<T>(
        updated_at = NOW()`,
     [dimension, accountId, oldest, newest],
   );
+
+  // Pub/Sub: notifica clientes SSE (best-effort — falha não rola back).
+  try {
+    await publishRealtimeEvent({ type: "facts:refreshed", dimension, accountId });
+  } catch (pubErr) {
+    console.warn(
+      "[withMetaUpdate] Falha ao publicar facts:refreshed (ignorado):",
+      (pubErr as Error).message,
+    );
+  }
 
   return result;
 }

@@ -32,6 +32,7 @@ import {
   getFreshnessForAccount,
   type FreshnessSummary,
 } from "@/lib/actions/freshness";
+import { useFactsRealtime } from "@/components/reports/use-facts-realtime";
 
 const POLL_INTERVAL_MS = 30_000;
 
@@ -94,6 +95,9 @@ export function FactsFreshness({
 }: FactsFreshnessProps) {
   const [summary, setSummary] = useState<FreshnessSummary | null>(null);
   const mounted = useRef(true);
+
+  // SSE: ao receber facts:refreshed para esta conta, refaz o page refresh (soft).
+  useFactsRealtime({ accountId });
 
   useEffect(() => {
     mounted.current = true;
