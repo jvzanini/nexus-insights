@@ -92,3 +92,4 @@ id_dsa
 next-env.d.ts
 
 /src/generated/prisma
+.claude/
