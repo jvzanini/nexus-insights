@@ -29,6 +29,8 @@ interface Meta {
   inboxes: MetaItem[];
   teams: MetaItem[];
   assignees: MetaItem[];
+  /** Etiquetas (labels) — opcional para preservar compatibilidade. */
+  labels?: MetaItem[];
 }
 
 interface Props {
@@ -105,6 +107,14 @@ export function AppliedFiltersChips({
     chips.push({
       key: "priorities",
       label: summarize("Prioridade", applied.priorities, PRIORITY_LABELS),
+    });
+  }
+  if (applied.labelIds.length) {
+    // Mostra apenas a contagem porque os nomes das etiquetas podem ser
+    // longos e poluir o toolbar — o detalhamento é visto no <FiltersDialog>.
+    chips.push({
+      key: "labelIds",
+      label: `Etiquetas (${applied.labelIds.length})`,
     });
   }
 

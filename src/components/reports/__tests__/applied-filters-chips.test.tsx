@@ -146,4 +146,19 @@ describe("AppliedFiltersChips", () => {
     );
     expect(screen.getByText(/Status: Resolvida/)).toBeInTheDocument();
   });
+
+  it("renderiza chip de Etiquetas com contagem quando há labelIds", () => {
+    const onRemove = jest.fn();
+    render(
+      <AppliedFiltersChips
+        meta={META}
+        applied={makeApplied({ labelIds: [1, 2, 3] })}
+        onRemove={onRemove}
+        onClearAll={() => {}}
+      />,
+    );
+    expect(screen.getByText(/Etiquetas \(3\)/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Remover Etiquetas/ }));
+    expect(onRemove).toHaveBeenCalledWith("labelIds");
+  });
 });

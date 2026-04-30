@@ -1,8 +1,8 @@
 "use client";
 
 // FiltersDialog — Modal centralizado de filtros avançados (R2 da release Conversas Poderoso).
-// Modo Simples (paridade com FiltersDrawer): CollapsibleSections para inbox, team,
-// assignee, status, prioridade e etiquetas, com Apply explícito.
+// Modo Simples: CollapsibleSections para inbox, team, assignee, status, prioridade e
+// etiquetas, com Apply explícito. Modo Avançado: query builder via <ConditionalFilters>.
 
 import { useEffect, useState } from "react";
 import {

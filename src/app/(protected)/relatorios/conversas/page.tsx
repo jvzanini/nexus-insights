@@ -3,11 +3,9 @@ import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { CachedBadge } from "@/components/reports/cached-badge";
 import { StaleBanner } from "@/components/reports/stale-banner";
-import { AdvancedFilters } from "@/components/reports/advanced-filters";
-import { ConversasTable } from "@/components/reports/conversas-table";
+import { ConversasPageClient } from "@/components/reports/conversas-page-client";
 import { RefreshButton } from "@/components/reports/refresh-button";
 import { FilterTransitionProvider } from "@/components/reports/filter-transition";
-import { ContentLoadingWrapper } from "@/components/reports/content-loading-wrapper";
 import { PageShell } from "@/components/layout/page-shell";
 import { TourButton } from "@/components/tour/tour-button";
 import { conversasTour } from "@/lib/tours/conversas-tour";
@@ -114,27 +112,22 @@ export default async function ConversasPage({ searchParams }: PageProps) {
 
       <FilterTransitionProvider>
         <div className="mt-6 space-y-6">
-          <div data-tour="filters">
-            <AdvancedFilters
-              inboxes={inboxes}
-              teams={teams}
-              assignees={assignees}
-              labels={labels}
-              initial={filterState}
-              accountId={accountId}
-            />
-          </div>
-
-          <ContentLoadingWrapper>
-            <div data-tour="table">
-              <ConversasTable
-                initialRows={conversasResult.rows}
-                initialCursor={conversasResult.nextCursor}
-                accountId={accountId}
-                filters={reportFilters}
-              />
-            </div>
-          </ContentLoadingWrapper>
+          <ConversasPageClient
+            inboxes={inboxes}
+            teams={teams}
+            assignees={assignees}
+            labels={labels}
+            filterState={filterState}
+            accountId={accountId}
+            initialRows={conversasResult.rows}
+            initialCursor={conversasResult.nextCursor}
+            reportFilters={reportFilters}
+            conditionGroup={
+              filterState.mode === "advanced"
+                ? filterState.conditionGroup
+                : undefined
+            }
+          />
         </div>
       </FilterTransitionProvider>
     </PageShell>
