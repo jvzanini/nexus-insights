@@ -43,6 +43,13 @@ YYYY-MM-DD HH:MM | agent=<agent-id> | commit=<sha7> | scope=<feat|fix|docs|infra
 2026-04-30 19:00 | agent=claude-conversas-v0.10.3-fix | commit=8464a66 | scope=fix | summary=v0.10.3 hotfix Conversas — toolbar rounded-2xl, sticky thead via useLayoutEffect (sem pulo no primeiro paint), FiltersDialog max-w 1100px max-h 85vh com scroll interno e accordion mutex, Modo Avançado sem label duplicado nos valores, STORAGE_COLS bumpado pra v3 com migration agressiva, "Limpar filtros/ordenação" como botões pill com ícone Trash2, tour overlay 440px com footer em 2 linhas.
 2026-04-30 19:05 | agent=claude-conversas-v0.10.3-fix | run=25183311591,25183640579 | scope=release | summary=Build v0.10.3 success (4m37s) + portainer-fix atualizou APP_VERSION. /api/health version=v0.10.3 status=ok db<30ms.
 2026-04-30 19:06 | agent=claude-conversas-v0.10.3-fix | observation=session-end | summary=v0.10.3 operacional em produção. Active file deletado.
+2026-04-30 16:00 | agent=claude-visibility-models | commit=1c025dc | scope=feat | summary=Helpers visibility com TDD (T1)
+2026-04-30 16:00 | agent=claude-visibility-models | commit=332e342 | scope=feat | summary=Wrappers @deprecated em get-enabled-reports e matrix-ia-setting (T2)
+2026-04-30 16:30 | agent=claude-visibility-models | commit=2e98173 | scope=feat | summary=VisibilitySelect primitivo 3-níveis + 3 testes RTL (T3)
+2026-04-30 16:30 | agent=claude-visibility-models | commit=761d532 | scope=feat | summary=Card Relatórios disponíveis usa VisibilitySelect (T4)
+2026-04-30 16:30 | agent=claude-visibility-models | commit=4c2504f | scope=feat | summary=Card Incluir Matrix IA usa VisibilitySelect (T5)
+2026-04-30 16:30 | agent=claude-visibility-models | commit=5b96e49 | scope=feat | summary=Seed defaults + configuracoes/page lê Visibility (T10)
+2026-04-30 16:45 | agent=claude-visibility-models | commit=cb50b23 | scope=feat | summary=Sidebar + 7 page guards aplicam visibility por role (T6)
 ```
 
 > Entradas anteriores aos workflows do dia 2026-04-30 estão capturadas no CHANGELOG.md (não vamos retroagir HISTORY pra trás disso para evitar trabalho inútil).
