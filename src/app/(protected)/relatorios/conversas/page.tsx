@@ -10,6 +10,7 @@ import { PageShell } from "@/components/layout/page-shell";
 import { TourButton } from "@/components/tour/tour-button";
 import { conversasTour } from "@/lib/tours/conversas-tour";
 import { getCurrentUser } from "@/lib/auth";
+import { isReportVisibleForUser } from "@/lib/reports/visibility";
 import { getTeams, getUsers, getLabels } from "@/lib/chatwoot/queries/meta-cache";
 import { getInboxesForUser } from "@/lib/chatwoot/queries/meta-cache-for-user";
 import { fetchConversas } from "@/lib/actions/reports/conversas";
@@ -29,6 +30,9 @@ interface PageProps {
 export default async function ConversasPage({ searchParams }: PageProps) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+
+  const visible = await isReportVisibleForUser("conversas", user.platformRole);
+  if (!visible) redirect("/dashboard");
 
   const accountId = await getActiveAccountId();
   const sp = await searchParams;

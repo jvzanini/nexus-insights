@@ -23,6 +23,7 @@ import { getActiveAccountId } from "@/lib/reports/active-account";
 import { parseReportSearchParams } from "@/lib/reports/parse-search-params";
 import { getMatrixIAIncluded } from "@/lib/reports/matrix-ia-setting";
 import { canSeeMatrixIA } from "@/lib/permissions";
+import { isReportVisibleForUser } from "@/lib/reports/visibility";
 import type { Granularity } from "@/lib/chatwoot/queries/leads-recebidos";
 
 export const metadata = { title: "Origem & IA | Nexus Insights" };
@@ -55,6 +56,9 @@ function MatrixFallback() {
 export default async function Page({ searchParams }: PageProps) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+
+  const visible = await isReportVisibleForUser("origem-ia", user.platformRole);
+  if (!visible) redirect("/dashboard");
 
   const sp = await searchParams;
   const { period, customStart, customEnd, tab } = parseReportSearchParams(sp);

@@ -16,6 +16,7 @@ import { PageShell } from "@/components/layout/page-shell";
 import { TourButton } from "@/components/tour/tour-button";
 import { mensagensNaoRespondidasTour } from "@/lib/tours/mensagens-nao-respondidas-tour";
 import { getCurrentUser } from "@/lib/auth";
+import { isReportVisibleForUser } from "@/lib/reports/visibility";
 import { getTeams, getUsers } from "@/lib/chatwoot/queries/meta-cache";
 import { getInboxesForUser } from "@/lib/chatwoot/queries/meta-cache-for-user";
 import { fetchMensagensNaoRespondidas } from "@/lib/actions/reports/mensagens-nao-respondidas";
@@ -46,6 +47,9 @@ export default async function MensagensNaoRespondidasPage({
 }: PageProps) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+
+  const visible = await isReportVisibleForUser("mensagens-nao-respondidas", user.platformRole);
+  if (!visible) redirect("/dashboard");
 
   const accountId = await getActiveAccountId();
   const sp = await searchParams;

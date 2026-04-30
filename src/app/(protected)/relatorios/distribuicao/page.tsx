@@ -21,6 +21,7 @@ import { distribuicaoTour } from "@/lib/tours/distribuicao-tour";
 import { getCurrentUser } from "@/lib/auth";
 import { getActiveAccountId } from "@/lib/reports/active-account";
 import { parseReportSearchParams } from "@/lib/reports/parse-search-params";
+import { isReportVisibleForUser } from "@/lib/reports/visibility";
 
 export const metadata = { title: "Distribuição | Nexus Insights" };
 export const dynamic = "force-dynamic";
@@ -50,6 +51,9 @@ function HorarioFallback() {
 export default async function Page({ searchParams }: PageProps) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+
+  const visible = await isReportVisibleForUser("distribuicao", user.platformRole);
+  if (!visible) redirect("/dashboard");
 
   const sp = await searchParams;
   const { period, customStart, customEnd, tab } = parseReportSearchParams(sp);

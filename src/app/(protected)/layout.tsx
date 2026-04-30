@@ -7,7 +7,7 @@ import { TourProvider } from "@/components/tour/tour-provider";
 import { PLATFORM_ROLE_LABELS } from "@/lib/constants/roles";
 import { getKnownAccounts } from "@/lib/tenant";
 import { prisma } from "@/lib/prisma";
-import { getEnabledReportKeys } from "@/lib/reports/get-enabled-reports";
+import { getVisibleReportKeys } from "@/lib/reports/visibility";
 import { isNexBubbleEnabled } from "@/lib/llm/get-nex-bubble-enabled";
 
 const ACCOUNT_COOKIE = "nexus_active_account";
@@ -80,7 +80,7 @@ export default async function ProtectedLayout({
     activeAccountId = DEFAULT_ACCOUNT_ID;
   }
 
-  const enabledReportKeys = Array.from(await getEnabledReportKeys());
+  const enabledReportKeys = Array.from(await getVisibleReportKeys(platformRole));
   const nexBubbleEnabled = await isNexBubbleEnabled();
 
   return (
