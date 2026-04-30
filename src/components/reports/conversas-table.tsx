@@ -42,6 +42,11 @@ import { formatPhone } from "@/lib/utils/format-phone";
 import { detectDocument } from "@/lib/utils/format-document";
 import { formatDuration } from "@/lib/utils/format-time";
 import {
+  nullableNumberCompare,
+  nullableStringCompare,
+  nullableDateCompare,
+} from "@/lib/utils/null-compare";
+import {
   useLocalStorageSet,
   useLocalStorageState,
 } from "@/lib/hooks/use-local-storage-state";
@@ -201,35 +206,6 @@ interface ColumnDef {
   align?: "left" | "right" | "center";
   render: (row: ConversaRow) => ReactNode;
   compareFn?: (a: ConversaRow, b: ConversaRow) => number;
-}
-
-function nullableNumberCompare(
-  a: number | null,
-  b: number | null,
-): number {
-  if (a === b) return 0;
-  if (a == null) return 1;
-  if (b == null) return -1;
-  return a - b;
-}
-
-function nullableStringCompare(
-  a: string | null,
-  b: string | null,
-): number {
-  if (a === b) return 0;
-  if (!a) return 1;
-  if (!b) return -1;
-  return a.localeCompare(b, "pt-BR", { numeric: true, sensitivity: "base" });
-}
-
-function dateCompare(a: string | null, b: string | null): number {
-  const av = a ? new Date(a).getTime() : Number.NaN;
-  const bv = b ? new Date(b).getTime() : Number.NaN;
-  if (Number.isNaN(av) && Number.isNaN(bv)) return 0;
-  if (Number.isNaN(av)) return 1;
-  if (Number.isNaN(bv)) return -1;
-  return av - bv;
 }
 
 const COLUMNS: ColumnDef[] = [
@@ -401,7 +377,7 @@ const COLUMNS: ColumnDef[] = [
     defaultOrder: 10,
     sortable: true,
     className: "min-w-[160px]",
-    compareFn: (a, b) => dateCompare(a.created_at, b.created_at),
+    compareFn: (a, b) => nullableDateCompare(a.created_at, b.created_at),
     render: (row) => (
       <span className="whitespace-nowrap text-xs text-muted-foreground tabular-nums">
         {formatDateTime(row.created_at)}
@@ -416,7 +392,7 @@ const COLUMNS: ColumnDef[] = [
     sortable: true,
     className: "min-w-[170px]",
     compareFn: (a, b) =>
-      dateCompare(a.last_activity_at, b.last_activity_at),
+      nullableDateCompare(a.last_activity_at, b.last_activity_at),
     render: (row) => (
       <span className="whitespace-nowrap text-xs text-muted-foreground tabular-nums">
         {formatDateTime(row.last_activity_at)}
