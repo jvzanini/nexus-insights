@@ -7,9 +7,12 @@ import {
   type DashboardData,
 } from "@/lib/chatwoot/queries/dashboard-data";
 import { shouldExcludeMatrixIA } from "@/lib/reports/exclude-matrix-ia";
+import { getDashboardPeriod, type DashboardPeriod } from "@/lib/dashboard-period";
+import { getDashboardSettings } from "@/lib/dashboard-settings";
+import { getPlatformTz } from "@/lib/datetime";
 import type { AuthUser } from "@/lib/auth-helpers";
 
-export type DashboardPeriod = "today" | "7d" | "30d";
+export type { DashboardPeriod };
 
 export interface DashboardActionResult {
   success: boolean;
@@ -18,48 +21,6 @@ export interface DashboardActionResult {
     activeAccountId: number;
   };
   error?: string;
-}
-
-function periodRanges(period: DashboardPeriod): {
-  current: { start: Date; end: Date };
-  prev: { start: Date; end: Date };
-} {
-  const now = new Date();
-  const end = now;
-  let start: Date;
-  let prevStart: Date;
-  let prevEnd: Date;
-
-  switch (period) {
-    case "today": {
-      const d = new Date(now);
-      d.setHours(0, 0, 0, 0);
-      start = d;
-      prevEnd = d;
-      const ps = new Date(d);
-      ps.setDate(ps.getDate() - 1);
-      prevStart = ps;
-      break;
-    }
-    case "7d": {
-      start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      prevEnd = start;
-      prevStart = new Date(start.getTime() - 7 * 24 * 60 * 60 * 1000);
-      break;
-    }
-    case "30d":
-    default: {
-      start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      prevEnd = start;
-      prevStart = new Date(start.getTime() - 30 * 24 * 60 * 60 * 1000);
-      break;
-    }
-  }
-
-  return {
-    current: { start, end },
-    prev: { start: prevStart, end: prevEnd },
-  };
 }
 
 export async function getDashboardData(args: {
@@ -93,9 +54,25 @@ export async function getDashboardData(args: {
     const allAccounts = await getKnownAccounts();
     const accounts = allAccounts.filter((a) => accessibleIds.includes(a.id));
 
-    const { current, prev } = periodRanges(args.period);
+    const [tz, settings, excludeMatrixIA] = await Promise.all([
+      getPlatformTz(),
+      getDashboardSettings(),
+      shouldExcludeMatrixIA(),
+    ]);
 
-    const excludeMatrixIA = await shouldExcludeMatrixIA();
+    const mode =
+      args.period === "semana"
+        ? settings.weekMode
+        : args.period === "mes"
+          ? settings.monthMode
+          : "current";
+
+    const { current, prev } = getDashboardPeriod({
+      period: args.period,
+      mode,
+      weekStartsOn: settings.weekStartsOn,
+      tz,
+    });
 
     const result = await dashboardData({
       accountId: args.accountId,

@@ -28,6 +28,7 @@ const DEFAULT_TTL_SECONDS = 30;
 export interface DashboardComparison {
   received: number | null;
   resolved: number | null;
+  open: number | null;
   resolutionRate: number | null;
 }
 
@@ -202,7 +203,7 @@ export async function dashboardData(args: DashboardDataInput) {
   // Cache key v2 — bump força invalidação dos caches v1 que tinham coortes diferentes.
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-data-v2",
+    name: "dashboard-data-v3",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -446,6 +447,7 @@ export async function dashboardData(args: DashboardDataInput) {
             openRes,
             receivedPrevRes,
             resolvedPrevRes,
+            openPrevRes,
             chartRes,
             topAgentsRes,
             topInboxesRes,
@@ -460,6 +462,7 @@ export async function dashboardData(args: DashboardDataInput) {
             pool.query<RowCount>(sqlOpen, periodParams),
             pool.query<RowCount>(sqlReceivedPrev, prevPeriodParams),
             pool.query<RowCount>(sqlResolvedPrev, prevPeriodParams),
+            pool.query<RowCount>(sqlOpen, prevPeriodParams),
             pool.query<RowChart>(sqlChart, [
               args.accountId,
               args.period.start,
@@ -492,12 +495,15 @@ export async function dashboardData(args: DashboardDataInput) {
               ? Math.min(100, (resolvedPrev / receivedPrev) * 100)
               : null;
 
+          const openPrev = Number(openPrevRes.rows[0]?.total ?? 0);
+
           const comparison: DashboardComparison = {
             received: pctDiff(received, receivedPrev),
             resolved: pctDiff(resolved, resolvedPrev),
+            open: pctDiff(open, openPrev),
             resolutionRate:
               resolutionRate !== null && resolutionRatePrev !== null
-                ? resolutionRate - resolutionRatePrev
+                ? pctDiff(resolutionRate, resolutionRatePrev)
                 : null,
           };
 

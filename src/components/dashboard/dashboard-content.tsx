@@ -121,7 +121,7 @@ export function DashboardContent({
   initialAccounts,
 }: DashboardContentProps) {
   const [accountId] = useState(initialAccountId);
-  const [period, setPeriod] = useState<DashboardPeriod>("today");
+  const [period, setPeriod] = useState<DashboardPeriod>("hoje");
   const [data, setData] = useState<DashboardSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -383,6 +383,7 @@ export function DashboardContent({
           label="Abertas"
           sublabel="(no período)"
           value={stats.open.toLocaleString("pt-BR")}
+          trend={trendFor(stats.comparison.open, "%")}
           onClick={() => setDrillDown("open")}
         />
         <KpiClickableCard
@@ -391,7 +392,7 @@ export function DashboardContent({
           iconColor="text-violet-400"
           label="Taxa de resolução"
           value={resolutionRateLabel}
-          trend={trendFor(stats.comparison.resolutionRate, "pp")}
+          trend={trendFor(stats.comparison.resolutionRate, "%")}
           miniChart={
             <Sparkline
               data={rateSpark}

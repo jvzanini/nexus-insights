@@ -5,6 +5,12 @@ import { getAccessibleAccountIds } from "@/lib/tenant";
 import { shouldExcludeMatrixIA } from "@/lib/reports/exclude-matrix-ia";
 import type { AuthUser } from "@/lib/auth-helpers";
 import {
+  getDashboardPeriod,
+  type DashboardPeriod,
+} from "@/lib/dashboard-period";
+import { getDashboardSettings } from "@/lib/dashboard-settings";
+import { getPlatformTz } from "@/lib/datetime";
+import {
   getOpenDrillDown,
   getReceivedDrillDown,
   getResolutionRateDrillDown,
@@ -19,7 +25,7 @@ import {
   type ByTeamDrillDownData,
 } from "@/lib/chatwoot/queries/dashboard-drill-down";
 
-export type DashboardPeriod = "today" | "7d" | "30d";
+export type { DashboardPeriod };
 
 export interface DrillDownActionResult<T> {
   success: boolean;
@@ -27,43 +33,26 @@ export interface DrillDownActionResult<T> {
   error?: string;
 }
 
-function periodRanges(period: DashboardPeriod): {
+async function resolvePeriodRanges(period: DashboardPeriod): Promise<{
   current: { start: Date; end: Date };
   prev: { start: Date; end: Date };
-} {
-  const now = new Date();
-  const end = now;
-  let start: Date;
-  let prevStart: Date;
-  let prevEnd: Date;
-
-  switch (period) {
-    case "today": {
-      const d = new Date(now);
-      d.setHours(0, 0, 0, 0);
-      start = d;
-      prevEnd = d;
-      const ps = new Date(d);
-      ps.setDate(ps.getDate() - 1);
-      prevStart = ps;
-      break;
-    }
-    case "7d": {
-      start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      prevEnd = start;
-      prevStart = new Date(start.getTime() - 7 * 24 * 60 * 60 * 1000);
-      break;
-    }
-    case "30d":
-    default: {
-      start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      prevEnd = start;
-      prevStart = new Date(start.getTime() - 30 * 24 * 60 * 60 * 1000);
-      break;
-    }
-  }
-
-  return { current: { start, end }, prev: { start: prevStart, end: prevEnd } };
+}> {
+  const [tz, settings] = await Promise.all([
+    getPlatformTz(),
+    getDashboardSettings(),
+  ]);
+  const mode =
+    period === "semana"
+      ? settings.weekMode
+      : period === "mes"
+        ? settings.monthMode
+        : "current";
+  return getDashboardPeriod({
+    period,
+    mode,
+    weekStartsOn: settings.weekStartsOn,
+    tz,
+  });
 }
 
 async function authorize(accountId: number): Promise<{
@@ -103,7 +92,7 @@ export async function getReceivedDrillDownAction(args: {
   try {
     const auth = await authorize(args.accountId);
     if (!auth.ok) return { success: false, error: auth.error };
-    const { current } = periodRanges(args.period);
+    const { current } = await resolvePeriodRanges(args.period);
     const result = await getReceivedDrillDown({
       accountId: args.accountId,
       period: current,
@@ -123,7 +112,7 @@ export async function getResolvedDrillDownAction(args: {
   try {
     const auth = await authorize(args.accountId);
     if (!auth.ok) return { success: false, error: auth.error };
-    const { current } = periodRanges(args.period);
+    const { current } = await resolvePeriodRanges(args.period);
     const result = await getResolvedDrillDown({
       accountId: args.accountId,
       period: current,
@@ -143,7 +132,7 @@ export async function getOpenDrillDownAction(args: {
   try {
     const auth = await authorize(args.accountId);
     if (!auth.ok) return { success: false, error: auth.error };
-    const { current } = periodRanges(args.period);
+    const { current } = await resolvePeriodRanges(args.period);
     const result = await getOpenDrillDown({
       accountId: args.accountId,
       period: current,
@@ -163,7 +152,7 @@ export async function getNoResponseDrillDownAction(args: {
   try {
     const auth = await authorize(args.accountId);
     if (!auth.ok) return { success: false, error: auth.error };
-    const { current } = periodRanges(args.period);
+    const { current } = await resolvePeriodRanges(args.period);
     const result = await getNoResponseDrillDown({
       accountId: args.accountId,
       period: current,
@@ -184,7 +173,7 @@ export async function getByTeamDrillDownAction(args: {
   try {
     const auth = await authorize(args.accountId);
     if (!auth.ok) return { success: false, error: auth.error };
-    const { current } = periodRanges(args.period);
+    const { current } = await resolvePeriodRanges(args.period);
     const result = await getByTeamDrillDown({
       accountId: args.accountId,
       period: current,
@@ -205,7 +194,7 @@ export async function getResolutionRateDrillDownAction(args: {
   try {
     const auth = await authorize(args.accountId);
     if (!auth.ok) return { success: false, error: auth.error };
-    const { current, prev } = periodRanges(args.period);
+    const { current, prev } = await resolvePeriodRanges(args.period);
     const result = await getResolutionRateDrillDown({
       accountId: args.accountId,
       period: current,

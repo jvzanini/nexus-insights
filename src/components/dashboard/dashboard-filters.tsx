@@ -12,14 +12,14 @@ interface DashboardFiltersProps {
 }
 
 const periods: Array<{ value: DashboardPeriod; label: string }> = [
-  { value: "today", label: "Hoje" },
-  { value: "7d", label: "7 dias" },
-  { value: "30d", label: "30 dias" },
+  { value: "hoje", label: "Hoje" },
+  { value: "semana", label: "Semana" },
+  { value: "mes", label: "Mês" },
 ];
 
 /**
  * Filtros do dashboard (v0.10):
- *  - Pills de período (Hoje / 7 dias / 30 dias).
+ *  - Pills de período (Hoje / Semana / Mês).
  *  - Botão refresh.
  *
  * O seletor de conta foi removido — vive exclusivamente no sidebar
