@@ -115,10 +115,46 @@ function evaluateCondition<T>(row: T, cond: Condition): boolean {
     }
     case "in": {
       if (!Array.isArray(target)) return false;
+      // Se fieldValue é array (ex.: labels), faz match se algum item bater
+      if (Array.isArray(fieldValue)) {
+        return target.some((t) =>
+          (fieldValue as unknown[]).some((item) => {
+            if (item == null) return false;
+            if (typeof item === "object") {
+              const obj = item as Record<string, unknown>;
+              return (
+                obj.id === t ||
+                obj.name === t ||
+                String(obj.id) === String(t) ||
+                String(obj.name) === String(t)
+              );
+            }
+            return item === t || String(item) === String(t);
+          }),
+        );
+      }
       return target.some((t) => t === fieldValue || String(t) === String(fieldValue));
     }
     case "not_in": {
       if (!Array.isArray(target)) return true;
+      // Se fieldValue é array (ex.: labels), nega o match item-a-item
+      if (Array.isArray(fieldValue)) {
+        return !target.some((t) =>
+          (fieldValue as unknown[]).some((item) => {
+            if (item == null) return false;
+            if (typeof item === "object") {
+              const obj = item as Record<string, unknown>;
+              return (
+                obj.id === t ||
+                obj.name === t ||
+                String(obj.id) === String(t) ||
+                String(obj.name) === String(t)
+              );
+            }
+            return item === t || String(item) === String(t);
+          }),
+        );
+      }
       return !target.some((t) => t === fieldValue || String(t) === String(fieldValue));
     }
     case "contains_all": {

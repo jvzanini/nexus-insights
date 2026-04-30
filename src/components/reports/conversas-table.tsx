@@ -390,7 +390,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     key: "labels",
-    label: "Labels",
+    label: "Etiquetas",
     defaultVisible: false,
     defaultOrder: 9,
     sortable: false,

@@ -64,6 +64,7 @@ const OPERATORS_BY_TYPE: Record<ConditionFieldDef["type"], OperatorOption[]> = {
   multi_select: [
     { value: "in", label: "em" },
     { value: "not_in", label: "fora de" },
+    { value: "contains_all", label: "contém todos" },
   ],
   date: [
     { value: "eq", label: "em" },

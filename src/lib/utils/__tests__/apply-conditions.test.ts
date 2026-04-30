@@ -183,6 +183,51 @@ describe("applyConditions", () => {
     expect(applyConditions(ROWS, group)).toEqual([]);
   });
 
+  it("operador in com fieldValue array de objetos (labels) matcha por id", () => {
+    interface RowWithLabels {
+      id: number;
+      labels: { id: number; name: string; color?: string }[];
+    }
+    const rows: RowWithLabels[] = [
+      { id: 1, labels: [{ id: 5, name: "VIP", color: "" }] },
+    ];
+    const group: ConditionGroup = {
+      combinator: "AND",
+      conditions: [{ field: "labels", operator: "in", value: [5] }],
+    };
+    expect(applyConditions(rows, group).map((r) => r.id)).toEqual([1]);
+  });
+
+  it("operador in com fieldValue array de objetos (labels) não matcha id ausente", () => {
+    interface RowWithLabels {
+      id: number;
+      labels: { id: number; name: string }[];
+    }
+    const rows: RowWithLabels[] = [
+      { id: 1, labels: [{ id: 99, name: "X" }] },
+    ];
+    const group: ConditionGroup = {
+      combinator: "AND",
+      conditions: [{ field: "labels", operator: "in", value: [5] }],
+    };
+    expect(applyConditions(rows, group)).toEqual([]);
+  });
+
+  it("operador not_in com fieldValue array de objetos (labels) exclui quando match", () => {
+    interface RowWithLabels {
+      id: number;
+      labels: { id: number; name: string }[];
+    }
+    const rows: RowWithLabels[] = [
+      { id: 1, labels: [{ id: 5, name: "VIP" }] },
+    ];
+    const group: ConditionGroup = {
+      combinator: "AND",
+      conditions: [{ field: "labels", operator: "not_in", value: [5] }],
+    };
+    expect(applyConditions(rows, group)).toEqual([]);
+  });
+
   it("operador contains_all com array de objetos no fieldValue", () => {
     interface RowWithLabels {
       id: number;
