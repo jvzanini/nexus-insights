@@ -67,3 +67,7 @@ YYYY-MM-DD HH:MM | agent=<agent-id> | commit=<sha7> | scope=<feat|fix|docs|infra
 ```
 
 > Entradas anteriores aos workflows do dia 2026-04-30 estão capturadas no CHANGELOG.md (não vamos retroagir HISTORY pra trás disso para evitar trabalho inútil).
+2026-04-30 22:35 | agent=claude-agente-nex-hotfix | commit=a792f1a | scope=fix | summary=P8 — tarja preta no overscroll: bg-background no html + overscroll-contain no main + body overscroll-y none.
+2026-04-30 22:38 | agent=claude-agente-nex-hotfix | commit=5f3788f | scope=release | summary=Release v0.12.1 — hotfix crash GPT-5.x (max_completion_tokens) + MODEL_PRICING abril/2026 + abas Configuração/Chaves no card + spread sem upper bound + custos 3 casas + visibility "Ninguém" respeitada inclusive p/ super_admin + remove toggles duplicados + tarja preta. 6 commits (84af983 a9fc8ed 327655a 4cebd32 a792f1a 5f3788f). 74 suites / 650 tests PASS. typecheck 0.
+2026-04-30 22:42 | agent=claude-agente-nex-hotfix | run=25192574003,25192740487 | scope=infra | summary=Build v0.12.1 success (4m19s) + portainer-fix atualizou APP_VERSION. /api/health version=v0.12.1 status=ok db<5ms redis<5ms.
+2026-04-30 22:44 | agent=claude-agente-nex-hotfix | observation=session-end | summary=Sessão encerrada. v0.12.1 LIVE em produção. Active file deletado.
