@@ -141,7 +141,10 @@ export function useChartTypeStorage(
   React.useEffect(() => {
     try {
       const stored = window.localStorage.getItem(key);
-      if (stored === "bar" || stored === "donut") setValue(stored);
+      if (stored === "bar" || stored === "donut") {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setValue(stored);
+      }
     } catch {
       // localStorage indisponível (SSR/private mode) — mantém default.
     }
@@ -171,7 +174,10 @@ export function useLineBarStorage(
   React.useEffect(() => {
     try {
       const stored = window.localStorage.getItem(key);
-      if (stored === "line" || stored === "bar") setValue(stored);
+      if (stored === "line" || stored === "bar") {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setValue(stored);
+      }
     } catch {
       // ignora
     }
