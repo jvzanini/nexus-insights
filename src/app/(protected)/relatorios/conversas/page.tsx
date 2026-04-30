@@ -11,11 +11,8 @@ import { ContentLoadingWrapper } from "@/components/reports/content-loading-wrap
 import { TourButton } from "@/components/tour/tour-button";
 import { conversasTour } from "@/lib/tours/conversas-tour";
 import { getCurrentUser } from "@/lib/auth";
-import {
-  getInboxes,
-  getTeams,
-  getUsers,
-} from "@/lib/chatwoot/queries/meta-cache";
+import { getTeams, getUsers } from "@/lib/chatwoot/queries/meta-cache";
+import { getInboxesForUser } from "@/lib/chatwoot/queries/meta-cache-for-user";
 import { fetchConversas } from "@/lib/actions/reports/conversas";
 import { getActiveAccountId } from "@/lib/reports/active-account";
 import { resolvePeriod } from "@/lib/reports/resolve-period";
@@ -70,7 +67,7 @@ export default async function ConversasPage({ searchParams }: PageProps) {
   // do Chatwoot (cache fallback), por isso o `.catch(() => null)`.
   const [inboxesResult, teamsResult, usersResult, conversasResult] =
     await Promise.all([
-      getInboxes(accountId).catch(() => null),
+      getInboxesForUser(accountId, user).catch(() => null),
       getTeams(accountId).catch(() => null),
       getUsers(accountId).catch(() => null),
       fetchConversas({ filters: reportFilters, accountId }),
