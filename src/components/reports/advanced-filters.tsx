@@ -36,6 +36,12 @@ export interface AdvancedFiltersProps {
   inboxes: MetaItem[];
   teams: MetaItem[];
   assignees: MetaItem[];
+  /**
+   * Lista de etiquetas (labels) da conta. Opcional por enquanto — a Onda 4
+   * cabeia o multi-select dentro do drawer/dialog. Mantido como prop para
+   * permitir que a page propague sem TS error.
+   */
+  labels?: MetaItem[];
   initial: FilterState;
   /** Conta ativa — usada para limitar o calendário ao primeiro registro do banco. */
   accountId?: number;
@@ -61,9 +67,13 @@ export function AdvancedFilters({
   inboxes,
   teams,
   assignees,
+  labels: _labels,
   initial,
   accountId,
 }: AdvancedFiltersProps) {
+  // `labels` é recebido aqui apenas para evitar warning de prop não declarada
+  // vinda da page. O multi-select de etiquetas será cabeado na Onda 4 (R8).
+  void _labels;
   const router = useRouter();
   const { startTransition } = useFilterTransition();
 

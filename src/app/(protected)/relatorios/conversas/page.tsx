@@ -12,7 +12,7 @@ import { PageShell } from "@/components/layout/page-shell";
 import { TourButton } from "@/components/tour/tour-button";
 import { conversasTour } from "@/lib/tours/conversas-tour";
 import { getCurrentUser } from "@/lib/auth";
-import { getTeams, getUsers } from "@/lib/chatwoot/queries/meta-cache";
+import { getTeams, getUsers, getLabels } from "@/lib/chatwoot/queries/meta-cache";
 import { getInboxesForUser } from "@/lib/chatwoot/queries/meta-cache-for-user";
 import { fetchConversas } from "@/lib/actions/reports/conversas";
 import { getActiveAccountId } from "@/lib/reports/active-account";
@@ -61,28 +61,37 @@ export default async function ConversasPage({ searchParams }: PageProps) {
     priorities: filterState.priorities.length
       ? filterState.priorities
       : undefined,
+    labelIds: filterState.labelIds.length ? filterState.labelIds : undefined,
     excludeMatrixIA,
   };
 
   // Carrega meta + dados em paralelo. Cada chamada é resiliente a falhas
   // do Chatwoot (cache fallback), por isso o `.catch(() => null)`.
-  const [inboxesResult, teamsResult, usersResult, conversasResult] =
-    await Promise.all([
-      getInboxesForUser(accountId, user).catch(() => null),
-      getTeams(accountId).catch(() => null),
-      getUsers(accountId).catch(() => null),
-      fetchConversas({ filters: reportFilters, accountId }),
-    ]);
+  const [
+    inboxesResult,
+    teamsResult,
+    usersResult,
+    labelsResult,
+    conversasResult,
+  ] = await Promise.all([
+    getInboxesForUser(accountId, user).catch(() => null),
+    getTeams(accountId).catch(() => null),
+    getUsers(accountId).catch(() => null),
+    getLabels(accountId).catch(() => null),
+    fetchConversas({ filters: reportFilters, accountId }),
+  ]);
 
   const inboxes = inboxesResult?.data ?? [];
   const teams = teamsResult?.data ?? [];
   const assignees = usersResult?.data ?? [];
+  const labels = labelsResult?.data ?? [];
 
   const stale =
     conversasResult.stale ||
     Boolean(inboxesResult?.stale) ||
     Boolean(teamsResult?.stale) ||
-    Boolean(usersResult?.stale);
+    Boolean(usersResult?.stale) ||
+    Boolean(labelsResult?.stale);
 
   return (
     <PageShell variant="wide">
@@ -110,6 +119,7 @@ export default async function ConversasPage({ searchParams }: PageProps) {
               inboxes={inboxes}
               teams={teams}
               assignees={assignees}
+              labels={labels}
               initial={filterState}
               accountId={accountId}
             />
