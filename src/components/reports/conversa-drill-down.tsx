@@ -90,7 +90,7 @@ export function ConversaDrillDown({ row, accountId }: Props) {
             variant="ghost"
             size="sm"
             onClick={() => setShowAll(true)}
-            className="mt-2 h-7 text-[11px]"
+            className="mt-2 h-8 text-[12px]"
           >
             Ver mais ({hidden})
           </Button>
@@ -101,7 +101,7 @@ export function ConversaDrillDown({ row, accountId }: Props) {
             variant="ghost"
             size="sm"
             onClick={() => setShowAll(false)}
-            className="mt-2 h-7 text-[11px]"
+            className="mt-2 h-8 text-[12px]"
           >
             Recolher
           </Button>
