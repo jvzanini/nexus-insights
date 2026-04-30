@@ -92,8 +92,15 @@ export default async function ConversasPage({ searchParams }: PageProps) {
     Boolean(labelsResult?.stale);
 
   return (
-    <PageShell variant="wide">
-      <PageHeader
+    <>
+      <a
+        href="#conversas-table"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-card focus:px-3 focus:py-2 focus:text-sm focus:shadow-md"
+      >
+        Pular para a tabela de conversas
+      </a>
+      <PageShell variant="wide">
+        <PageHeader
         icon={MessageSquare}
         title="Conversas"
         subtitle="Lista detalhada de conversas com filtros avançados"
@@ -130,6 +137,7 @@ export default async function ConversasPage({ searchParams }: PageProps) {
           />
         </div>
       </FilterTransitionProvider>
-    </PageShell>
+      </PageShell>
+    </>
   );
 }

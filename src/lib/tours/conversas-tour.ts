@@ -25,7 +25,7 @@ export const conversasTour: TourConfig = {
       targetSelector: "[data-tour='filters-chip']",
       title: "Filtros avançados",
       description:
-        "Refine por caixa de entrada, departamento, atendente, status e prioridade. Cada lista tem busca interna e botão de selecionar todos. Clique para abrir o painel.",
+        "Refine por caixa de entrada, departamento, atendente, status e prioridade. Abre painel centralizado com modos Simples e Avançado (E/OU).",
       placement: "bottom",
     },
     {
@@ -33,8 +33,8 @@ export const conversasTour: TourConfig = {
       targetSelector: "[data-tour='sorting-chip']",
       title: "Ordenação",
       description:
-        "Clique no cabeçalho da coluna para ordenar (asc → desc → nenhum). Segure Shift e clique em outra coluna para combinar critérios. O contador aqui mostra quantos critérios estão ativos.",
-      placement: "top",
+        "Combine múltiplos critérios de ordenação em sequência.",
+      placement: "bottom",
     },
     {
       id: "columns",
@@ -59,6 +59,14 @@ export const conversasTour: TourConfig = {
       description:
         "Cada linha mostra contato, departamento, atendente, status, prioridade e tempos. Cores indicam urgência (âmbar acima de 4h, vermelho acima de 24h).",
       placement: "top",
+    },
+    {
+      id: "drill-down",
+      targetSelector: "[data-tour='drill-down']",
+      title: "Drill-down inline",
+      description:
+        "Clique na linha para expandir e ver WhatsApp, etiquetas e atributos completos sem sair do relatório.",
+      placement: "right",
     },
     {
       id: "open-action",

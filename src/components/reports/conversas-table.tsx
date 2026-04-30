@@ -806,7 +806,10 @@ export function ConversasTable({
   if (rows.length === 0) {
     const hasUrlFilters = currentSearchParams.toString().length > 0;
     return (
-      <div className="rounded-2xl border border-border bg-card overflow-hidden">
+      <div
+        id="conversas-table"
+        className="rounded-2xl border border-border bg-card overflow-hidden"
+      >
         {toolbar}
         <div className="bg-muted/20 p-12 text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-muted/40">
@@ -834,7 +837,10 @@ export function ConversasTable({
 
   // Render principal --------------------------------------------------------
   return (
-    <div className="rounded-2xl border border-border bg-card overflow-hidden">
+    <div
+      id="conversas-table"
+      className="rounded-2xl border border-border bg-card overflow-hidden"
+    >
       {toolbar}
 
       {/* Desktop / large: tabela. */}
@@ -921,7 +927,11 @@ export function ConversasTable({
                     {orderedColumns.map((col) => {
                       if (col.key === "expand") {
                         return (
-                          <TableCell key="expand" className="w-10">
+                          <TableCell
+                            key="expand"
+                            className="w-10"
+                            data-tour={idx === 0 ? "drill-down" : undefined}
+                          >
                             <ChevronRight
                               aria-hidden
                               className={cn(
