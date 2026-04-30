@@ -36,6 +36,7 @@ import {
   ReceivedDrillDownContent,
   ResolutionRateDrillDownContent,
   ResolvedDrillDownContent,
+  StatusDrillDownContent,
 } from "./drill-down-contents";
 import { DrillDownDialog } from "@/components/ui/drill-down-dialog";
 import { TourButton } from "@/components/tour/tour-button";
@@ -588,12 +589,11 @@ export function DashboardContent({
         iconBg="bg-amber-500/10"
         size="xl"
       >
-        {/* Reuso do drill-down de "open" — sem filtro inbox por enquanto.
-            v0.11 pode adicionar filtro inbox específico. */}
         {inboxDrill ? (
-          <OpenDrillDownContent
+          <StatusDrillDownContent
             accountId={accountId}
             period={period}
+            status={0}
             enabled={inboxDrill !== null}
           />
         ) : null}
@@ -609,19 +609,13 @@ export function DashboardContent({
         iconBg="bg-violet-500/10"
         size="xl"
       >
-        {/* Para status=0 reusamos OpenDrillDown; para os demais, mostramos
-            uma view simples agora — drill específico em v0.11. */}
-        {statusDrill && statusDrill.status === 0 ? (
-          <OpenDrillDownContent
+        {statusDrill ? (
+          <StatusDrillDownContent
             accountId={accountId}
             period={period}
+            status={statusDrill.status}
             enabled={statusDrill !== null}
           />
-        ) : statusDrill ? (
-          <div className="rounded-xl border border-border bg-background/40 p-6 text-sm text-muted-foreground">
-            Drill-down detalhado para status &ldquo;{labelForStatus(statusDrill.status)}&rdquo; será adicionado em uma versão futura.
-            Use a tela de Conversas para filtrar por status.
-          </div>
         ) : null}
       </DrillDownDialog>
     </motion.div>

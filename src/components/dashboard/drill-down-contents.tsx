@@ -12,8 +12,6 @@
  */
 
 import { useEffect, useState } from "react";
-import { formatDistanceToNow } from "date-fns";
-import { ptBR } from "date-fns/locale";
 
 import {
   InteractiveAreaChart,
@@ -37,11 +35,14 @@ import {
   DrillDownSection,
   DrillDownSkeleton,
 } from "@/components/ui/drill-down-dialog";
+import { formatRelativeShort } from "@/lib/format/relative-time";
+import { DrillDownPagination } from "./drill-down-pagination";
 import {
   getOpenDrillDownAction,
   getReceivedDrillDownAction,
   getResolutionRateDrillDownAction,
   getResolvedDrillDownAction,
+  getStatusDrillDownAction,
   type DashboardPeriod,
 } from "@/lib/actions/dashboard-drill-down";
 import type {
@@ -49,6 +50,7 @@ import type {
   ReceivedDrillDownData,
   ResolutionRateDrillDownData,
   ResolvedDrillDownData,
+  StatusDrillDownData,
 } from "@/lib/chatwoot/queries/dashboard-drill-down";
 
 interface DrillDownProps {
@@ -132,10 +134,7 @@ function ConversationTable({
                 className="border-border/50 transition-colors hover:bg-accent/30"
               >
                 <TableCell className="py-2.5 text-xs text-muted-foreground">
-                  {formatDistanceToNow(new Date(item.lastActivityAt), {
-                    addSuffix: true,
-                    locale: ptBR,
-                  })}
+                  {formatRelativeShort(item.lastActivityAt)}
                 </TableCell>
                 <TableCell className="py-2.5 text-sm text-foreground">
                   {item.contactName ?? "—"}
@@ -185,13 +184,24 @@ export function ReceivedDrillDownContent({
   const [data, setData] = useState<ReceivedDrillDownData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+
+  // Reset page when period changes
+  useEffect(() => {
+    setPage(1);
+  }, [period]);
 
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
     async function run() {
       setLoading(true);
-      const res = await getReceivedDrillDownAction({ accountId, period });
+      const res = await getReceivedDrillDownAction({
+        accountId,
+        period,
+        page,
+        pageSize: 50,
+      });
       if (cancelled) return;
       if (res.success && res.data) {
         setData(res.data);
@@ -205,7 +215,7 @@ export function ReceivedDrillDownContent({
     return () => {
       cancelled = true;
     };
-  }, [accountId, period, enabled]);
+  }, [accountId, period, enabled, page]);
 
   if (loading && !data) return <DrillDownSkeleton />;
   if (error && !data) return <ErrorState message={error} />;
@@ -227,13 +237,17 @@ export function ReceivedDrillDownContent({
     { key: "Conversas", label: "Conversas", color: CHART_COLORS.violet },
   ];
 
+  // Nome enriquecido com janela completa (ex: "14:00 – 14:59") — InteractiveAreaChart
+  // não aceita tooltip per-ponto, então enriquecemos o name diretamente.
   const byHourData = data.byHour.map((h) => ({
-    name: `${String(h.hour).padStart(2, "0")}h`,
+    name: `${String(h.hour).padStart(2, "0")}:00 – ${String(h.hour).padStart(2, "0")}:59`,
     Conversas: h.count,
   }));
   const byHourSeries: AreaChartSeries[] = [
     { key: "Conversas", label: "Conversas", color: CHART_COLORS.amber },
   ];
+
+  const items = data.items ?? data.recent;
 
   return (
     <div className="space-y-5">
@@ -269,7 +283,7 @@ export function ReceivedDrillDownContent({
         </DrillDownSection>
         <DrillDownSection
           title="Distribuição por hora do dia"
-          description="Onde está concentrado o volume?"
+          description="Cada coluna cobre HH:00 – HH:59"
         >
           <InteractiveAreaChart
             data={byHourData}
@@ -282,13 +296,20 @@ export function ReceivedDrillDownContent({
       </div>
 
       <DrillDownSection
-        title="Últimas 20 conversas recebidas"
-        description="Ordenadas por data de criação"
+        title={`Conversas recebidas — ${data.total.toLocaleString("pt-BR")} no total`}
+        description="Ordenadas por data de criação (mais recente primeiro)"
       >
         <ConversationTable
-          items={data.recent}
+          items={items}
           accountId={accountId}
           emptyMessage="Nenhuma conversa recebida no período"
+        />
+        <DrillDownPagination
+          page={data.page}
+          pageSize={data.pageSize}
+          total={data.total}
+          loading={loading}
+          onChange={setPage}
         />
       </DrillDownSection>
     </div>
@@ -305,13 +326,24 @@ export function ResolvedDrillDownContent({
   const [data, setData] = useState<ResolvedDrillDownData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+
+  // Reset page when period changes
+  useEffect(() => {
+    setPage(1);
+  }, [period]);
 
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
     async function run() {
       setLoading(true);
-      const res = await getResolvedDrillDownAction({ accountId, period });
+      const res = await getResolvedDrillDownAction({
+        accountId,
+        period,
+        page,
+        pageSize: 50,
+      });
       if (cancelled) return;
       if (res.success && res.data) {
         setData(res.data);
@@ -325,7 +357,7 @@ export function ResolvedDrillDownContent({
     return () => {
       cancelled = true;
     };
-  }, [accountId, period, enabled]);
+  }, [accountId, period, enabled, page]);
 
   if (loading && !data) return <DrillDownSkeleton />;
   if (error && !data) return <ErrorState message={error} />;
@@ -347,13 +379,17 @@ export function ResolvedDrillDownContent({
     { key: "Conversas", label: "Conversas", color: CHART_COLORS.emerald },
   ];
 
+  // Nome enriquecido com janela completa (ex: "14:00 – 14:59") — InteractiveAreaChart
+  // não aceita tooltip per-ponto, então enriquecemos o name diretamente.
   const byHourData = data.byHour.map((h) => ({
-    name: `${String(h.hour).padStart(2, "0")}h`,
+    name: `${String(h.hour).padStart(2, "0")}:00 – ${String(h.hour).padStart(2, "0")}:59`,
     Conversas: h.count,
   }));
   const byHourSeries: AreaChartSeries[] = [
     { key: "Conversas", label: "Conversas", color: CHART_COLORS.cyan },
   ];
+
+  const items = data.items ?? data.recent;
 
   return (
     <div className="space-y-5">
@@ -387,7 +423,7 @@ export function ResolvedDrillDownContent({
         </DrillDownSection>
         <DrillDownSection
           title="Distribuição por hora do dia"
-          description="Quando as resoluções acontecem"
+          description="Cada coluna cobre HH:00 – HH:59"
         >
           <InteractiveAreaChart
             data={byHourData}
@@ -400,13 +436,20 @@ export function ResolvedDrillDownContent({
       </div>
 
       <DrillDownSection
-        title="Últimas 20 conversas resolvidas"
-        description="Ordenadas por data da resolução"
+        title={`Conversas resolvidas — ${data.total.toLocaleString("pt-BR")} no total`}
+        description="Ordenadas pela data da resolução"
       >
         <ConversationTable
-          items={data.recent}
+          items={items}
           accountId={accountId}
           emptyMessage="Nenhuma conversa resolvida no período"
+        />
+        <DrillDownPagination
+          page={data.page}
+          pageSize={data.pageSize}
+          total={data.total}
+          loading={loading}
+          onChange={setPage}
         />
       </DrillDownSection>
     </div>
@@ -513,6 +556,121 @@ export function OpenDrillDownContent({
   );
 }
 
+/* -------------------------- Status genérico (v0.13.0) -------------------------- */
+
+const STATUS_LABEL: Record<0 | 1 | 2 | 3, string> = {
+  0: "Aberto",
+  1: "Resolvido",
+  2: "Pendente",
+  3: "Adiado",
+};
+
+export function StatusDrillDownContent({
+  accountId,
+  period,
+  status,
+  enabled,
+}: DrillDownProps & { status: 0 | 1 | 2 | 3 }) {
+  const [data, setData] = useState<StatusDrillDownData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    setPage(1);
+  }, [period, status]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    async function run() {
+      setLoading(true);
+      const res = await getStatusDrillDownAction({
+        accountId,
+        period,
+        status,
+        page,
+        pageSize: 50,
+      });
+      if (cancelled) return;
+      if (res.success && res.data) {
+        setData(res.data);
+        setError(null);
+      } else {
+        setError(res.error ?? "Erro desconhecido");
+      }
+      setLoading(false);
+    }
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [accountId, period, status, enabled, page]);
+
+  if (loading && !data) return <DrillDownSkeleton />;
+  if (error && !data) return <ErrorState message={error} />;
+  if (!data) return null;
+
+  const label = STATUS_LABEL[status];
+  const byInboxData = data.byInbox.map((i) => ({
+    name: i.name,
+    Conversas: i.count,
+  }));
+  const byInboxSeries: BarChartSeries[] = [
+    { key: "Conversas", label: "Conversas", color: CHART_COLORS.violet },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <DrillDownSection
+          title={`Total de conversas com status "${label}"`}
+          description={`Coorte: criadas no período + status = ${label.toLowerCase()}`}
+        >
+          <div className="flex h-[280px] flex-col items-center justify-center rounded-lg border border-border bg-background/40">
+            <p className="font-heading text-5xl font-bold tabular-nums text-foreground">
+              {data.total.toLocaleString("pt-BR")}
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">{label}</p>
+          </div>
+        </DrillDownSection>
+        <DrillDownSection
+          title="Top inboxes"
+          description="10 inboxes com mais conversas neste status"
+        >
+          <InteractiveBarChart
+            data={byInboxData}
+            series={byInboxSeries}
+            layout="horizontal"
+            height={280}
+            showLegend={false}
+            yAxisWidth={120}
+            emptyMessage="Sem inboxes com conversas neste status"
+          />
+        </DrillDownSection>
+      </div>
+
+      <DrillDownSection
+        title={`Conversas em "${label}" (${data.total.toLocaleString("pt-BR")} no total)`}
+        description="Ordenadas por última atividade"
+      >
+        <ConversationTable
+          items={data.items}
+          accountId={accountId}
+          emptyMessage={`Nenhuma conversa "${label.toLowerCase()}" no período`}
+        />
+        <DrillDownPagination
+          page={data.page}
+          pageSize={data.pageSize}
+          total={data.total}
+          loading={loading}
+          onChange={setPage}
+        />
+      </DrillDownSection>
+    </div>
+  );
+}
+
 /* -------------------------- Taxa de Resolução -------------------------- */
 
 export function ResolutionRateDrillDownContent({
@@ -554,8 +712,8 @@ export function ResolutionRateDrillDownContent({
   const previousLabel =
     data.previous !== null ? `${data.previous.toFixed(1)}%` : "—";
   const diffLabel =
-    data.diffPp !== null
-      ? `${data.diffPp > 0 ? "+" : ""}${data.diffPp.toFixed(1)}pp`
+    data.diffPct !== null
+      ? `${data.diffPct > 0 ? "+" : ""}${data.diffPct.toFixed(1)}%`
       : "—";
 
   // Donut: representação da taxa atual como `resolved` vs `restante (não resolvido)`.
@@ -599,7 +757,7 @@ export function ResolutionRateDrillDownContent({
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <DrillDownSection
           title="Taxa de resolução atual"
-          description={`Anterior: ${previousLabel} • Variação: ${diffLabel}`}
+          description={`Anterior: ${previousLabel} → Atual: ${currentLabel} (variação: ${diffLabel})`}
         >
           <DonutWithCenter
             data={donutData}
