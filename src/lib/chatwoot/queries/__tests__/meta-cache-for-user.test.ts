@@ -3,13 +3,13 @@ import { getInboxesForUser } from "../meta-cache-for-user";
 jest.mock("../meta-cache", () => ({
   getInboxes: jest.fn(),
 }));
-jest.mock("@/lib/reports/matrix-ia-setting", () => ({
-  getMatrixIAIncluded: jest.fn(),
+jest.mock("@/lib/reports/visibility", () => ({
+  isMatrixIAVisibleForUser: jest.fn(),
 }));
 
 const { getInboxes } = jest.requireMock("../meta-cache");
-const { getMatrixIAIncluded } = jest.requireMock(
-  "@/lib/reports/matrix-ia-setting",
+const { isMatrixIAVisibleForUser } = jest.requireMock(
+  "@/lib/reports/visibility",
 );
 
 const FIXTURE = {
@@ -23,44 +23,64 @@ const FIXTURE = {
 describe("getInboxesForUser", () => {
   beforeEach(() => {
     (getInboxes as jest.Mock).mockResolvedValue(FIXTURE);
-    (getMatrixIAIncluded as jest.Mock).mockReset();
+    (isMatrixIAVisibleForUser as jest.Mock).mockReset();
   });
 
-  it("super_admin sempre vê inbox 31 mesmo com flag OFF", async () => {
-    (getMatrixIAIncluded as jest.Mock).mockResolvedValue(false);
+  it("super_admin com visibility ALL vê inbox 31", async () => {
+    (isMatrixIAVisibleForUser as jest.Mock).mockResolvedValue(true);
     const r = await getInboxesForUser(9, { platformRole: "super_admin" });
     expect(r.data.map((i) => i.id)).toContain(31);
-    expect(getMatrixIAIncluded).not.toHaveBeenCalled();
+    expect(isMatrixIAVisibleForUser).toHaveBeenCalledWith("super_admin");
   });
 
-  it("manager + flag ON vê inbox 31", async () => {
-    (getMatrixIAIncluded as jest.Mock).mockResolvedValue(true);
+  it("manager com visibility ALL vê inbox 31", async () => {
+    (isMatrixIAVisibleForUser as jest.Mock).mockResolvedValue(true);
     const r = await getInboxesForUser(9, { platformRole: "manager" });
     expect(r.data.map((i) => i.id)).toContain(31);
   });
 
-  it("manager + flag OFF NÃO vê inbox 31", async () => {
-    (getMatrixIAIncluded as jest.Mock).mockResolvedValue(false);
+  it("manager com visibility SUPER_ADMIN_ONLY NÃO vê inbox 31", async () => {
+    (isMatrixIAVisibleForUser as jest.Mock).mockResolvedValue(false);
     const r = await getInboxesForUser(9, { platformRole: "manager" });
     expect(r.data.map((i) => i.id)).not.toContain(31);
     expect(r.data.map((i) => i.id)).toEqual([9, 50]);
   });
 
-  it("admin + flag OFF NÃO vê inbox 31", async () => {
-    (getMatrixIAIncluded as jest.Mock).mockResolvedValue(false);
+  it("admin com visibility SUPER_ADMIN_ONLY NÃO vê inbox 31", async () => {
+    (isMatrixIAVisibleForUser as jest.Mock).mockResolvedValue(false);
     const r = await getInboxesForUser(9, { platformRole: "admin" });
     expect(r.data.map((i) => i.id)).not.toContain(31);
   });
 
-  it("viewer + flag OFF NÃO vê inbox 31", async () => {
-    (getMatrixIAIncluded as jest.Mock).mockResolvedValue(false);
+  it("viewer com visibility SUPER_ADMIN_ONLY NÃO vê inbox 31", async () => {
+    (isMatrixIAVisibleForUser as jest.Mock).mockResolvedValue(false);
     const r = await getInboxesForUser(9, { platformRole: "viewer" });
     expect(r.data.map((i) => i.id)).not.toContain(31);
   });
 
+  it("super_admin com visibility NONE NÃO vê inbox 31", async () => {
+    (isMatrixIAVisibleForUser as jest.Mock).mockResolvedValue(false);
+    const r = await getInboxesForUser(9, { platformRole: "super_admin" });
+    expect(r.data.map((i) => i.id)).not.toContain(31);
+  });
+
+  it("aceita role string direta (sem objeto user)", async () => {
+    (isMatrixIAVisibleForUser as jest.Mock).mockResolvedValue(false);
+    const r = await getInboxesForUser(9, "manager");
+    expect(r.data.map((i) => i.id)).not.toContain(31);
+    expect(isMatrixIAVisibleForUser).toHaveBeenCalledWith("manager");
+  });
+
+  it("aceita null/undefined role e trata como não-super-admin", async () => {
+    (isMatrixIAVisibleForUser as jest.Mock).mockResolvedValue(false);
+    const r = await getInboxesForUser(9, null);
+    expect(r.data.map((i) => i.id)).not.toContain(31);
+    expect(isMatrixIAVisibleForUser).toHaveBeenCalledWith(null);
+  });
+
   it("preserva flag stale", async () => {
     (getInboxes as jest.Mock).mockResolvedValue({ ...FIXTURE, stale: true });
-    (getMatrixIAIncluded as jest.Mock).mockResolvedValue(false);
+    (isMatrixIAVisibleForUser as jest.Mock).mockResolvedValue(false);
     const r = await getInboxesForUser(9, { platformRole: "manager" });
     expect(r.stale).toBe(true);
   });
