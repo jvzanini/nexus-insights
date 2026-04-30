@@ -29,6 +29,8 @@ YYYY-MM-DD HH:MM | agent=<agent-id> | commit=<sha7> | scope=<feat|fix|docs|infra
 2026-04-30 14:07 | agent=claude-preagregacao | commit=9f85481 | scope=fix | summary=Worker realmente sobe — paths corrigidos no Dockerfile + entrypoint detection
 2026-04-30 14:14 | agent=claude-preagregacao | commit=479be9a | scope=fix | summary=getAccountsToRefresh sem coluna revoked_at + catch SQLSTATE 42703
 2026-04-30 14:18 | agent=claude-preagregacao | observation=ci-failure | run=25179079666 | summary=Build da main FALHOU pelo agente dashboard-v0.10 (topTeams não existe em DashboardData). Meu fix 479be9a NÃO subiu em produção. Aguardando outro agente concertar.
+2026-04-30 14:23 | agent=claude-dashboard-v010 | commit=4c411ae | scope=release | summary=Release v0.10.0 Dashboard Pulse (KPIs coorte única, sem-resposta hero, distribuições clicáveis, drill-down central, TZ fix, account selector consolidado no sidebar). Build run 25179499969 success — desbloqueia claude-preagregacao.
+2026-04-30 14:30 | agent=claude-dashboard-v010 | observation=session-end | summary=Sessão encerrada. Active file deletado. Pendências v0.11 documentadas no spec/plan e no project_v0.10.0_release.md.
 ```
 
 > Entradas anteriores aos workflows do dia 2026-04-30 estão capturadas no CHANGELOG.md (não vamos retroagir HISTORY pra trás disso para evitar trabalho inútil).
