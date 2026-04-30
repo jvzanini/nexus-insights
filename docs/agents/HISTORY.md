@@ -40,6 +40,7 @@ YYYY-MM-DD HH:MM | agent=<agent-id> | commit=<sha7> | scope=<feat|fix|docs|infra
 2026-04-30 18:30 | agent=claude-dashboard-v010-fix | commit=5eadbea | scope=fix | summary=Hotfix UX dashboard v0.10.2 — drill-down central (fix bug de centralização), bar-only nos cards de distribuição, status compactado horizontal, "Abrir no Chatwoot" em todas as tabelas, hint de click nas barras, remove conversas recentes do dashboard.
 2026-04-30 18:42 | agent=claude-dashboard-v010-fix | run=25182308818,25182594386 | scope=release | summary=Build v0.10.2 success + portainer-fix atualizou APP_VERSION. /api/health version=v0.10.2 status=ok.
 2026-04-30 18:43 | agent=claude-dashboard-v010-fix | observation=session-end | summary=Sessão encerrada. Active file deletado.
+2026-04-30 19:00 | agent=claude-conversas-v0.10.3-fix | commit=8464a66 | scope=fix | summary=v0.10.3 hotfix Conversas — toolbar rounded-2xl, sticky thead via useLayoutEffect (sem pulo no primeiro paint), FiltersDialog max-w 1100px max-h 85vh com scroll interno e accordion mutex, Modo Avançado sem label duplicado nos valores, STORAGE_COLS bumpado pra v3 com migration agressiva, "Limpar filtros/ordenação" como botões pill com ícone Trash2, tour overlay 440px com footer em 2 linhas.
 ```
 
 > Entradas anteriores aos workflows do dia 2026-04-30 estão capturadas no CHANGELOG.md (não vamos retroagir HISTORY pra trás disso para evitar trabalho inútil).
