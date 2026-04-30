@@ -41,6 +41,7 @@ interface SidebarProps {
   appSettings?: Record<string, unknown>;
   accounts?: Array<{ id: number; name: string }>;
   activeAccountId?: number;
+  enabledReportKeys?: string[];
 }
 
 export function Sidebar({
@@ -48,6 +49,7 @@ export function Sidebar({
   appSettings = {},
   accounts = [],
   activeAccountId,
+  enabledReportKeys,
 }: SidebarProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -71,7 +73,12 @@ export function Sidebar({
   }
 
   const ThemeIcon = THEME_ICONS[theme] ?? Moon;
-  const visibleNav = filterNav(NAV_ITEMS, user, appSettings);
+  const visibleNav = filterNav(
+    NAV_ITEMS,
+    user,
+    appSettings,
+    enabledReportKeys,
+  );
 
   function isActive(href: string) {
     if (href === "/dashboard") return pathname === "/dashboard";

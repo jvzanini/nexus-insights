@@ -5,11 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PollingSettingsForm } from "@/components/settings/polling-settings-form";
 import { VisibilitySettingsForm } from "@/components/settings/visibility-settings-form";
 import { PlatformSettingsCard } from "@/components/settings/platform-settings-card";
+import { EnabledReportsCard } from "@/components/settings/enabled-reports-card";
 import { getCurrentUser } from "@/lib/auth";
 import { getAllSettings } from "@/lib/actions/settings";
 import { getPlatformLocale, getPlatformTz } from "@/lib/datetime";
+import { getEnabledReportKeys } from "@/lib/reports/get-enabled-reports";
 
 export const metadata = { title: "Configurações | Nexus Insights" };
+export const dynamic = "force-dynamic";
 
 function readNumber(value: unknown, fallback: number): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -34,9 +37,10 @@ export default async function Page() {
   const result = await getAllSettings();
   const data = result.success && result.data ? result.data : {};
 
-  const [platformTimezone, platformLocale] = await Promise.all([
+  const [platformTimezone, platformLocale, enabledReportKeys] = await Promise.all([
     getPlatformTz(),
     getPlatformLocale(),
+    getEnabledReportKeys(),
   ]);
 
   const isSuperAdmin = user.platformRole === "super_admin";
@@ -75,6 +79,12 @@ export default async function Page() {
             currentTimezone={platformTimezone}
             currentLocale={platformLocale}
             canEdit={isSuperAdmin}
+          />
+        )}
+
+        {isSuperAdmin && (
+          <EnabledReportsCard
+            initialEnabled={Array.from(enabledReportKeys)}
           />
         )}
 
