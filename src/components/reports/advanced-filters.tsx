@@ -1,8 +1,19 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+// AdvancedFilters — toolbar sticky com Período + Busca + 2 chips de modal:
+// "Filtros · N" (FiltersDialog Simples/Avançado) e "Ordenação · N"
+// (SortingDialog).
+//
+// O toolbar mede sua própria altura via ResizeObserver e expõe `--toolbar-h`
+// como CSS var no <html>, consumida pelo `sticky thead` da tabela em
+// `top-[var(--toolbar-h,132px)]`.
+//
+// ui-ux-pro-max: primary-action (1 CTA por área), progressive-disclosure,
+// state-clarity (chip pulsante quando há pending), spacing-scale 4/8.
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Filter, Search } from "lucide-react";
+import { ArrowUpDown, Filter, Search } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +22,12 @@ import { Input } from "@/components/ui/input";
 import { PeriodPills } from "@/components/reports/period-pills";
 import { useFilterTransition } from "@/components/reports/filter-transition";
 import { AppliedFiltersChips } from "@/components/reports/applied-filters-chips";
-import { FiltersDrawer } from "@/components/reports/filters-drawer";
+import { FiltersDialog } from "@/components/reports/filters-dialog";
+import {
+  SortingDialog,
+  type SortRule,
+  type SortRuleOption,
+} from "@/components/reports/sorting-dialog";
 import {
   EMPTY_FILTER_STATE,
   diffFilterStates,
@@ -32,61 +48,75 @@ import type { MetaItem } from "@/lib/chatwoot/queries/meta-cache";
 
 export type { MetaItem };
 
+// Critérios de ordenação disponíveis na tabela de conversas — espelha as
+// colunas com `compareFn` definidos em <ConversasTable>.
+const SORT_OPTIONS: SortRuleOption[] = [
+  { key: "display_id", label: "#" },
+  { key: "name", label: "Nome" },
+  { key: "phone", label: "WhatsApp" },
+  { key: "inbox", label: "Estado" },
+  { key: "team", label: "Departamento" },
+  { key: "assignee", label: "Atendente" },
+  { key: "status", label: "Status" },
+  { key: "priority", label: "Prioridade" },
+  { key: "waiting_seconds", label: "Sem resposta há" },
+  { key: "open_seconds", label: "Aberta há" },
+  { key: "created_at", label: "Criado em" },
+  { key: "last_activity_at", label: "Última atualização" },
+];
+
 export interface AdvancedFiltersProps {
   inboxes: MetaItem[];
   teams: MetaItem[];
   assignees: MetaItem[];
-  /**
-   * Lista de etiquetas (labels) da conta. Opcional por enquanto — a Onda 4
-   * cabeia o multi-select dentro do drawer/dialog. Mantido como prop para
-   * permitir que a page propague sem TS error.
-   */
-  labels?: MetaItem[];
+  /** Etiquetas (labels) da conta — usadas tanto no modo Simples como no Avançado. */
+  labels: MetaItem[];
   initial: FilterState;
   /** Conta ativa — usada para limitar o calendário ao primeiro registro do banco. */
   accountId?: number;
+  /** Stack de critérios de ordenação. Cabeada bidirecionalmente com a tabela. */
+  sortStack: SortRule[];
+  onSortStackChange: (next: SortRule[]) => void;
 }
-
-// ---------------------------------------------------------------------------
-// AdvancedFilters — toolbar compacto + drawer
-// ---------------------------------------------------------------------------
-//
-// Layout (4 linhas verticais, 8dp rhythm):
-//   1. Período → <PeriodPills>
-//   2. Busca + chip "Filtros · N"
-//   3. Chips de filtros aplicados (condicional)
-//   4. Banner "N pendentes — Aplicar agora" (condicional)
-//
-// O drawer concentra todos os multi-selects em seções colapsáveis. A toolbar
-// permanece enxuta, priorizando a leitura rápida do estado atual.
-//
-// ui-ux-pro-max: primary-action (1 CTA por área), progressive-disclosure,
-// state-clarity (chip pulsante quando há pending), spacing-scale 4/8.
 
 export function AdvancedFilters({
   inboxes,
   teams,
   assignees,
-  labels: _labels,
+  labels,
   initial,
   accountId,
+  sortStack,
+  onSortStackChange,
 }: AdvancedFiltersProps) {
-  // `labels` é recebido aqui apenas para evitar warning de prop não declarada
-  // vinda da page. O multi-select de etiquetas será cabeado na Onda 4 (R8).
-  void _labels;
   const router = useRouter();
   const { startTransition } = useFilterTransition();
 
   const [draft, setDraft] = useState<FilterState>(initial);
   const [applied, setApplied] = useState<FilterState>(initial);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [sortingOpen, setSortingOpen] = useState(false);
+
+  const sectionRef = useRef<HTMLElement>(null);
+
+  // Mede a altura do toolbar e exporta como `--toolbar-h` no <html>. O thead
+  // sticky da tabela usa esse valor como `top: var(--toolbar-h, fallback)`.
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const h = Math.ceil(entries[0]?.contentRect.height ?? 0);
+      document.documentElement.style.setProperty("--toolbar-h", `${h}px`);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const pendingDiff = useMemo(
     () => diffFilterStates(draft, applied),
     [draft, applied],
   );
   const hasPending = pendingDiff > 0;
-  const isDirty = !isFilterStateEqual(draft, applied);
 
   const appliedCount = useMemo(
     () =>
@@ -94,9 +124,16 @@ export function AdvancedFilters({
       applied.teamIds.length +
       applied.assigneeIds.length +
       applied.statuses.length +
-      applied.priorities.length,
+      applied.priorities.length +
+      applied.labelIds.length +
+      (applied.mode === "advanced" &&
+      applied.conditionGroup?.conditions?.length
+        ? 1
+        : 0),
     [applied],
   );
+
+  const sortCount = sortStack.length;
 
   const pushUrl = useCallback(
     (state: FilterState) => {
@@ -130,16 +167,26 @@ export function AdvancedFilters({
   );
 
   const handleApply = useCallback(() => {
-    if (!isDirty) return;
+    if (isFilterStateEqual(draft, applied)) return;
     setApplied(draft);
     pushUrl(draft);
-  }, [draft, isDirty, pushUrl]);
+  }, [draft, applied, pushUrl]);
 
   const handleReset = useCallback(() => {
     setDraft(EMPTY_FILTER_STATE);
     setApplied(EMPTY_FILTER_STATE);
     pushUrl(EMPTY_FILTER_STATE);
   }, [pushUrl]);
+
+  // Aplicar do dialog: promove draft → applied e atualiza URL.
+  const handleDialogApply = useCallback(
+    (next: FilterState) => {
+      setDraft(next);
+      setApplied(next);
+      pushUrl(next);
+    },
+    [pushUrl],
+  );
 
   // Remove a seleção inteira de um grupo (chip X) e aplica imediatamente.
   const handleRemoveGroup = useCallback(
@@ -161,6 +208,9 @@ export function AdvancedFilters({
         case "priorities":
           next.priorities = [];
           break;
+        case "labelIds":
+          next.labelIds = [];
+          break;
         default:
           return;
       }
@@ -171,28 +221,21 @@ export function AdvancedFilters({
     [applied, pushUrl],
   );
 
-  // Aplicar do drawer: promove draft → applied e atualiza URL.
-  const handleDrawerApply = useCallback(
-    (next: FilterState) => {
-      setDraft(next);
-      setApplied(next);
-      pushUrl(next);
-    },
-    [pushUrl],
-  );
-
   const updateSearch = (value: string) => {
     setDraft((prev) => ({ ...prev, search: value || undefined }));
   };
 
   return (
     <section
+      ref={sectionRef}
+      role="toolbar"
       aria-label="Filtros avançados"
-      className="space-y-3 rounded-2xl border border-border/60 bg-card/50 p-4 shadow-sm"
+      data-toolbar="conversas"
+      className="sticky top-0 z-[var(--z-toolbar,30)] -mx-4 space-y-3 border-b border-border/60 bg-card/95 px-4 py-4 backdrop-blur-md sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
     >
       {/* Linha 1 — Período */}
       <div className="flex flex-col gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           Período
         </span>
         <div data-tour="period">
@@ -205,7 +248,7 @@ export function AdvancedFilters({
         </div>
       </div>
 
-      {/* Linha 2 — Busca + chip Filtros */}
+      {/* Linha 2 — Busca + chip Filtros + chip Ordenação */}
       <div className="flex flex-wrap items-center gap-2">
         <div data-tour="search" className="relative min-w-[260px] flex-1">
           <Search
@@ -224,19 +267,22 @@ export function AdvancedFilters({
             }}
             placeholder="Buscar..."
             aria-label="Buscar conversas"
-            className="h-9 pl-9"
+            className="h-10 pl-9"
           />
         </div>
+
         <Button
           data-tour="filters-chip"
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => setDrawerOpen(true)}
-          aria-label={`Abrir filtros${appliedCount > 0 ? ` (${appliedCount} aplicados)` : ""}`}
+          onClick={() => setFiltersOpen(true)}
+          aria-label={`Abrir filtros${
+            appliedCount > 0 ? ` (${appliedCount} aplicados)` : ""
+          }`}
           className={cn(
-            "relative",
-            appliedCount > 0 && "border-primary/50 text-foreground",
+            "relative h-10 px-4",
+            appliedCount > 0 && "border-violet-500/40 text-foreground",
           )}
         >
           <Filter aria-hidden="true" />
@@ -256,11 +302,37 @@ export function AdvancedFilters({
             />
           ) : null}
         </Button>
+
+        <Button
+          data-tour="sorting-chip"
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setSortingOpen(true)}
+          aria-label={`Abrir ordenação${
+            sortCount > 0 ? ` (${sortCount} critérios)` : ""
+          }`}
+          className={cn(
+            "relative h-10 px-4",
+            sortCount > 0 && "border-violet-500/40 text-foreground",
+          )}
+        >
+          <ArrowUpDown aria-hidden="true" />
+          Ordenação
+          {sortCount > 0 ? (
+            <Badge
+              variant="default"
+              className="ml-1 h-5 min-w-5 px-1.5 tabular-nums"
+            >
+              {sortCount}
+            </Badge>
+          ) : null}
+        </Button>
       </div>
 
       {/* Linha 3 — Chips aplicados (condicional) */}
       <AppliedFiltersChips
-        meta={{ inboxes, teams, assignees }}
+        meta={{ inboxes, teams, assignees, labels }}
         applied={applied}
         onRemove={handleRemoveGroup}
         onClearAll={handleReset}
@@ -273,10 +345,7 @@ export function AdvancedFilters({
           aria-live="polite"
           className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm"
         >
-          <Filter
-            className="h-4 w-4 text-primary"
-            aria-hidden="true"
-          />
+          <Filter className="h-4 w-4 text-primary" aria-hidden="true" />
           <span className="text-foreground">
             <strong className="font-semibold">{pendingDiff}</strong>{" "}
             {pendingDiff === 1 ? "filtro pendente" : "filtros pendentes"}
@@ -293,15 +362,25 @@ export function AdvancedFilters({
         </div>
       ) : null}
 
-      <FiltersDrawer
-        open={drawerOpen}
-        onOpenChange={setDrawerOpen}
+      <FiltersDialog
+        open={filtersOpen}
+        onOpenChange={setFiltersOpen}
         applied={applied}
-        onApply={handleDrawerApply}
+        onApply={handleDialogApply}
         onClear={handleReset}
         inboxes={inboxes}
         teams={teams}
         assignees={assignees}
+        labels={labels}
+      />
+
+      <SortingDialog
+        open={sortingOpen}
+        onOpenChange={setSortingOpen}
+        applied={sortStack}
+        options={SORT_OPTIONS}
+        onApply={onSortStackChange}
+        onClear={() => onSortStackChange([])}
       />
     </section>
   );
