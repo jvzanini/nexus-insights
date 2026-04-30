@@ -1,5 +1,51 @@
 # Changelog
 
+## [v0.9.0] 2026-04-30 — Conversas Poderoso
+
+> Redesign completo da tela `/relatorios/conversas`: query builder com **E/OU** em grupos, painel de **Ordenação** em cadeia, **drill-down inline expansível**, **sticky toolbar + header**, status no feminino com cores ajustadas, filtro por **Etiquetas**, fix de bugs críticos de UX e ordenação. Spec/plan em `docs/superpowers/{specs,plans}/2026-04-30-conversas-poderoso-*.md`.
+
+### Adicionado
+
+- **`<FiltersDialog>` centralizado** — substitui `<FiltersDrawer>` lateral. Modo **Simples** (paridade com drawer + Etiquetas) e **Avançado** (query builder com E/OU em grupos, 10 campos: caixa, departamento, atendente, status, prioridade, etiquetas, sem resposta há, aberta há, nome, WhatsApp). Operadores `eq/neq/gt/gte/lt/lte/contains/starts_with/in/not_in/contains_all`. Apply explícito.
+- **`<SortingDialog>`** — painel de ordenação em cadeia com lista ordenável (↑↓), Asc/Desc por critério, badge de índice, Adicionar/Remover, Limpar/Aplicar. Convive com click+shift+click no header (atalho rápido) que continua funcionando.
+- **Drill-down inline na tabela** — chevron na primeira coluna; click em qualquer célula expande linha mostrando WhatsApp formatado, Documento, Etiquetas full, Atributos completos sem reticências (até 30, com "Ver mais (N)") e Tempos. Botão "Abrir no Chatwoot" no rodapé do detalhe. Colunas Phone/Doc/Labels/Attrs/Created/LastActivity migram para o detalhe (ainda disponíveis via `ColumnsToggle`).
+- **Sticky toolbar + sticky thead** — toolbar de filtros e cabeçalho da tabela ficam fixos durante scroll; `--toolbar-h` calculado em runtime via `ResizeObserver`; z-index disciplinado (`--z-toolbar: 30`, `--z-table-thead: 20`, `--z-modal: 100`, `--z-toast: 1000`).
+- **Filtro por Etiquetas** — `getLabels(accountId)` em meta-cache (Chatwoot `labels`); novo grupo "Etiquetas" no FiltersDialog com `<MultiSelectCheckbox>` buscável; serializado em URL como `label=`.
+- **Tipografia +1 step** — root html bumpado de 16px → **16.25px** (≥1280px = 16.5px); promoção `text-xs`→`text-[13px]` em valores tabulares; `text-[10px]`→`text-[11px]` em labels secundárias.
+- **Skip link a11y** — "Pular para a tabela de conversas" para usuários de teclado.
+- **Tour estendido** — passo `drill-down` cobrindo a chevron-cell + cópia de `sorting-chip` revisada.
+- **`<ConversasPageClient>`** — client wrapper que cabeia `sortStack` entre `<AdvancedFilters>` e `<ConversasTable>` (state controlado, persistido em `localStorage`).
+- **`condition-group-codec.ts`** — encode/decode base64url de `ConditionGroup` na URL (param `cg`, cap 4kB).
+
+### Mudou
+
+- **Status no feminino**: "Em aberto" → **Aberta** (amber, mantido); "Resolvida" mudou cor de **emerald → sky** (azul claro); "Pendente" mantido (violet); "Adiado" → **Adiada** com cor **slate** (cinza claro). Atualizado em badge, dashboards (pie chart, drill-down) e KPIs ("Abertas" plural).
+- **Coluna "Labels" → "Etiquetas"** em UI, `ColumnsToggle` e mobile cards (chave interna `labels` mantida por compat).
+- **`FilterState`** estendido: `labelIds: number[]`, `mode: "simple" | "advanced"`, `conditionGroup?: ConditionGroup`.
+- **`<ConversasTable>`** passou a receber `sortStack` / `onSortStackChange` / `conditionGroup` controlados pelo parent. `applyConditions` é executado client-side antes do sort.
+- **Operadores `in`/`not_in`** em `applyConditions` agora detectam `Array.isArray(fieldValue)` e fazem lookup por `id`/`name` em arrays de objetos (necessário para filtrar por Etiquetas no modo Avançado).
+
+### Corrigido
+
+- **Bug ordenação null** (R6) — `nullableNumberCompare` agora trata `null` como **valor mínimo** simétrico (asc: null primeiro; desc: null último). "Tracinho" em `waiting_seconds`/`open_seconds` significa "não está esperando" e deve aparecer antes dos valores numéricos quando ordenamos pelo menor tempo. Extraído para `src/lib/utils/null-compare.ts` com testes simétricos.
+- **`<CustomSelect>` intermitente** — substituído handler `mousedown` manual por `<Popover>` da base-ui. Elimina race em que o próprio click no trigger era detectado como "click outside" antes do `setOpen(true)` propagar (causava dropdown precisar de 2 clicks).
+- **`<PeriodPills>` calendário** — `key` do `<PickerPanel>` estabilizada (não remonta em cada render quando o range muda durante seleção).
+
+### Removido
+
+- `<FiltersDrawer>` (substituído por `<FiltersDialog>`) e respectivo teste.
+- `renderTrigger` prop não usada do `<CustomSelect>`.
+
+### Verificação
+
+- `npx tsc --noEmit` → exit 0
+- `npx jest` → **503/503 testes passando**, 58 suites
+- `npm run build` → production build OK, todas as rotas geradas
+
+🤖 Implementado em modo autônomo total — Claude Opus 4.7 (1M context).
+
+---
+
 ## [v0.8.0] 2026-04-30 — Pré-agregação de relatórios + hotfix Bad Gateway
 
 > Release de **infraestrutura**. Resolve o incidente recorrente de Bad Gateway em produção e move parte da carga dos relatórios para um modelo de pré-agregação assíncrona, reduzindo a pressão sobre o banco do Chatwoot e habilitando atualização "quase em tempo real" via SSE.
