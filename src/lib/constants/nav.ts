@@ -15,6 +15,7 @@ import {
   Smile,
   Shield,
   Bot,
+  Sparkles,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { PlatformRole } from "@/generated/prisma/client";
@@ -144,6 +145,13 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/configuracoes",
     icon: Settings,
     superAdminOnly: true,
+  },
+  {
+    label: "Consumo IA",
+    href: "/configuracoes/consumo",
+    icon: Sparkles,
+    superAdminOnly: true,
+    section: "admin",
   },
   { label: "Perfil", href: "/perfil", icon: User },
 ];
