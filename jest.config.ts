@@ -12,6 +12,7 @@ const config: Config = {
       "<rootDir>/node_modules/@nexusai360/webhook-routing/dist/index.cjs",
     "^@nexusai360/webhook-routing/(.*)$":
       "<rootDir>/node_modules/@nexusai360/webhook-routing/dist/$1.cjs",
+    "^server-only$": "<rootDir>/src/lib/__mocks__/server-only.ts",
   },
   collectCoverageFrom: [
     "src/lib/permissions.ts",

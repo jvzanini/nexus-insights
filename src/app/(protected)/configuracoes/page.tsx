@@ -6,10 +6,12 @@ import { PollingSettingsForm } from "@/components/settings/polling-settings-form
 import { VisibilitySettingsForm } from "@/components/settings/visibility-settings-form";
 import { PlatformSettingsCard } from "@/components/settings/platform-settings-card";
 import { EnabledReportsCard } from "@/components/settings/enabled-reports-card";
+import { LlmConfigCard } from "@/components/settings/llm-config-card";
 import { getCurrentUser } from "@/lib/auth";
 import { getAllSettings } from "@/lib/actions/settings";
 import { getPlatformLocale, getPlatformTz } from "@/lib/datetime";
 import { getEnabledReportKeys } from "@/lib/reports/get-enabled-reports";
+import { getPublicActiveLlmConfig } from "@/lib/llm/get-active-config";
 
 export const metadata = { title: "Configurações | Nexus Insights" };
 export const dynamic = "force-dynamic";
@@ -37,11 +39,13 @@ export default async function Page() {
   const result = await getAllSettings();
   const data = result.success && result.data ? result.data : {};
 
-  const [platformTimezone, platformLocale, enabledReportKeys] = await Promise.all([
-    getPlatformTz(),
-    getPlatformLocale(),
-    getEnabledReportKeys(),
-  ]);
+  const [platformTimezone, platformLocale, enabledReportKeys, llmConfig] =
+    await Promise.all([
+      getPlatformTz(),
+      getPlatformLocale(),
+      getEnabledReportKeys(),
+      getPublicActiveLlmConfig(),
+    ]);
 
   const isSuperAdmin = user.platformRole === "super_admin";
 
@@ -87,6 +91,8 @@ export default async function Page() {
             initialEnabled={Array.from(enabledReportKeys)}
           />
         )}
+
+        {isSuperAdmin && <LlmConfigCard initial={llmConfig} />}
 
         <Card className="rounded-2xl border border-border bg-muted/30 p-2">
           <CardHeader>

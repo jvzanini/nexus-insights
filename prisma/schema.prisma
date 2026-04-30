@@ -155,3 +155,35 @@ model EmailChangeToken {
 
   @@map("email_change_tokens")
 }
+
+model LlmConfig {
+  id              String   @id @default(uuid()) @db.Uuid
+  provider        String
+  model           String
+  encryptedApiKey String   @map("encrypted_api_key")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdById     String?  @db.Uuid @map("created_by_id")
+
+  @@map("llm_configs")
+}
+
+model LlmUsage {
+  id            String   @id @default(uuid()) @db.Uuid
+  provider      String
+  model         String
+  tokensInput   Int      @map("tokens_input")
+  tokensOutput  Int      @map("tokens_output")
+  costUsd       Decimal  @map("cost_usd") @db.Decimal(10, 6)
+  promptChars   Int      @map("prompt_chars")
+  responseChars Int      @map("response_chars")
+  userId        String?  @db.Uuid @map("user_id")
+  durationMs    Int?     @map("duration_ms")
+  errorMessage  String?  @map("error_message")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([provider, model, createdAt])
+  @@map("llm_usage")
+}
