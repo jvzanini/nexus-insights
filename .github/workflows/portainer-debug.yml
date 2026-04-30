@@ -1,0 +1,137 @@
+name: Portainer debug
+
+# Workflow manual para inspecionar a stack Nexus Insights em produção
+# (logs, status dos services, env vars). Não modifica nada — só leitura.
+#
+# Como rodar (do meu lado):
+#   gh workflow run portainer-debug.yml -f action=logs-app
+#   gh workflow run portainer-debug.yml -f action=logs-worker
+#   gh workflow run portainer-debug.yml -f action=list-services
+#   gh workflow run portainer-debug.yml -f action=stack-info
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Operação a executar"
+        required: true
+        type: choice
+        options:
+          - logs-app
+          - logs-worker
+          - list-services
+          - stack-info
+      tail:
+        description: "Linhas de log (logs-*)"
+        required: false
+        default: "200"
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+      PORTAINER_TOKEN: ${{ secrets.PORTAINER_TOKEN }}
+      PORTAINER_ENDPOINT_ID: ${{ secrets.PORTAINER_ENDPOINT_ID }}
+      PORTAINER_STACK_ID: ${{ secrets.PORTAINER_STACK_ID }}
+      ACTION: ${{ inputs.action }}
+      TAIL: ${{ inputs.tail }}
+    steps:
+      - name: Sanity
+        run: |
+          set -e
+          : "${PORTAINER_URL:?PORTAINER_URL não configurado}"
+          : "${PORTAINER_TOKEN:?PORTAINER_TOKEN não configurado}"
+          : "${PORTAINER_ENDPOINT_ID:?PORTAINER_ENDPOINT_ID não configurado}"
+          : "${PORTAINER_STACK_ID:?PORTAINER_STACK_ID não configurado}"
+          echo "Conectando em $PORTAINER_URL endpoint=$PORTAINER_ENDPOINT_ID stack=$PORTAINER_STACK_ID"
+
+      - name: Resolve stack name
+        id: stack
+        run: |
+          set -e
+          curl --silent --insecure -H "X-API-Key: $PORTAINER_TOKEN" \
+            "$PORTAINER_URL/api/stacks/$PORTAINER_STACK_ID" > /tmp/stack.json
+          STACK_NAME=$(jq -r '.Name' /tmp/stack.json)
+          echo "stack_name=$STACK_NAME" >> "$GITHUB_OUTPUT"
+          echo "Stack name: $STACK_NAME"
+
+      - name: List services
+        if: inputs.action == 'list-services'
+        run: |
+          set -e
+          curl --silent --insecure -H "X-API-Key: $PORTAINER_TOKEN" \
+            "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/services" > /tmp/svc.json
+          PREFIX="${{ steps.stack.outputs.stack_name }}_"
+          echo "================================="
+          echo "Services no stack ${{ steps.stack.outputs.stack_name }}:"
+          echo "================================="
+          jq -r --arg p "$PREFIX" '
+            .[]
+            | select(.Spec.Name | startswith($p))
+            | {
+                name: .Spec.Name,
+                image: .Spec.TaskTemplate.ContainerSpec.Image,
+                command: (.Spec.TaskTemplate.ContainerSpec.Command // []),
+                args: (.Spec.TaskTemplate.ContainerSpec.Args // []),
+                env: (
+                  .Spec.TaskTemplate.ContainerSpec.Env // []
+                  | map(select(test("^(APP_VERSION|NODE_ENV|RUN_MIGRATIONS|REDIS_URL|DATABASE_URL)=")))
+                ),
+                replicas: .Spec.Mode.Replicated.Replicas,
+                created_at: .CreatedAt,
+                updated_at: .UpdatedAt
+              }
+          ' /tmp/svc.json
+
+      - name: Stack info
+        if: inputs.action == 'stack-info'
+        run: |
+          set -e
+          echo "================================="
+          echo "Stack metadata:"
+          echo "================================="
+          jq '{Id, Name, Type, Status, EndpointId, ProjectPath, EntryPoint, GitConfig, Env}' /tmp/stack.json
+
+      - name: Logs app
+        if: inputs.action == 'logs-app'
+        run: |
+          set -e
+          STACK_NAME="${{ steps.stack.outputs.stack_name }}"
+          SERVICE_NAME="${STACK_NAME}_app"
+          curl --silent --insecure -H "X-API-Key: $PORTAINER_TOKEN" \
+            "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/services" > /tmp/svc.json
+          SVC_ID=$(jq -r --arg n "$SERVICE_NAME" '[.[] | select(.Spec.Name==$n)][0].ID // empty' /tmp/svc.json)
+          if [ -z "$SVC_ID" ]; then
+            echo "Service $SERVICE_NAME não encontrado. Lista:"
+            jq -r '[.[].Spec.Name]' /tmp/svc.json
+            exit 1
+          fi
+          echo "Service $SERVICE_NAME id=$SVC_ID — últimas $TAIL linhas"
+          echo "=========================================="
+          # Docker stream: bytes 1-7 são frame header (8B), pulamos com `cut -c9-`
+          curl --silent --insecure -H "X-API-Key: $PORTAINER_TOKEN" \
+            "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/services/$SVC_ID/logs?stdout=1&stderr=1&tail=$TAIL&timestamps=1" \
+            | sed 's/[\x00-\x07\x0e-\x1f]//g' || true
+
+      - name: Logs worker
+        if: inputs.action == 'logs-worker'
+        run: |
+          set -e
+          STACK_NAME="${{ steps.stack.outputs.stack_name }}"
+          SERVICE_NAME="${STACK_NAME}_worker"
+          curl --silent --insecure -H "X-API-Key: $PORTAINER_TOKEN" \
+            "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/services" > /tmp/svc.json
+          SVC_ID=$(jq -r --arg n "$SERVICE_NAME" '[.[] | select(.Spec.Name==$n)][0].ID // empty' /tmp/svc.json)
+          if [ -z "$SVC_ID" ]; then
+            echo "Service $SERVICE_NAME NÃO ENCONTRADO. Provavelmente o stack ainda não tem service worker. Services existentes:"
+            jq -r '[.[] | select(.Spec.Name | startswith("'"$STACK_NAME"'_")) | .Spec.Name]' /tmp/svc.json
+            exit 1
+          fi
+          echo "Service $SERVICE_NAME id=$SVC_ID — últimas $TAIL linhas"
+          echo "=========================================="
+          curl --silent --insecure -H "X-API-Key: $PORTAINER_TOKEN" \
+            "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/services/$SVC_ID/logs?stdout=1&stderr=1&tail=$TAIL&timestamps=1" \
+            | sed 's/[\x00-\x07\x0e-\x1f]//g' || true
