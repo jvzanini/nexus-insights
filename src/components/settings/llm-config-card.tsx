@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Sparkles,
@@ -14,6 +14,7 @@ import {
   ExternalLink,
   CreditCard,
   AlertTriangle,
+  Coins,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -29,7 +30,6 @@ import {
 } from "@/components/ui/searchable-select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PasswordInput } from "@/components/ui/password-input";
 import { Switch } from "@/components/ui/switch";
 import { TierBadge } from "@/components/llm/tier-badge";
 import { PROVIDER_CATALOG } from "@/lib/llm/catalog";
@@ -37,21 +37,28 @@ import type { LlmProvider } from "@/lib/llm/types";
 import {
   saveLlmConfig,
   setNexBubbleEnabled,
-  testLlmConnection,
-  type TestLlmConnectionResult,
 } from "@/lib/actions/llm-config";
+import {
+  testLlmCredentialAction,
+  type TestLlmConnectionResult,
+} from "@/lib/actions/llm-credentials";
+import { setCardSpreadAction } from "@/lib/actions/exchange-rate";
+import type { CredentialSummary } from "@/lib/llm/credentials";
+import type { PublicLlmConfig } from "@/lib/llm/get-active-config";
 import { cn } from "@/lib/utils";
 
 interface LlmConfigCardProps {
-  initial: {
-    provider: LlmProvider;
-    model: string;
-    apiKeyMasked: string;
-  } | null;
+  initial: PublicLlmConfig | null;
   initialNexEnabled: boolean;
+  initialCredentials: CredentialSummary[];
+  initialSpread: number;
 }
 
 const CUSTOM_MODEL_VALUE = "__custom__";
+const NEW_CREDENTIAL_VALUE = "__new__";
+const SPREAD_MIN = 1.0;
+const SPREAD_MAX = 1.3;
+const SPREAD_DEBOUNCE_MS = 500;
 
 const PROVIDER_OPTIONS: SelectOption[] = (
   Object.keys(PROVIDER_CATALOG) as LlmProvider[]
@@ -75,6 +82,21 @@ function findInitialModelValue(
   return { selectValue: CUSTOM_MODEL_VALUE, customModel: model };
 }
 
+function buildCredentialOptions(
+  credentials: CredentialSummary[],
+): SelectOption[] {
+  const opts: SelectOption[] = credentials.map((c) => ({
+    value: c.id,
+    label: `${c.label} · ••••${c.last4}`,
+  }));
+  opts.push({
+    value: NEW_CREDENTIAL_VALUE,
+    label: "+ Nova chave",
+    description: "Cadastre no card 'Chaves de API' abaixo",
+  });
+  return opts;
+}
+
 interface TestState {
   status: "idle" | "ok" | "warn" | "fail";
   message?: string;
@@ -85,6 +107,8 @@ interface TestState {
 export function LlmConfigCard({
   initial,
   initialNexEnabled,
+  initialCredentials,
+  initialSpread,
 }: LlmConfigCardProps) {
   const router = useRouter();
   const [provider, setProvider] = useState<LlmProvider>(
@@ -102,12 +126,50 @@ export function LlmConfigCard({
   const [customModel, setCustomModel] = useState<string>(
     initialResolved.customModel,
   );
-  const [apiKey, setApiKey] = useState<string>("");
+
+  const credentialsForProvider = useMemo(
+    () => initialCredentials.filter((c) => c.provider === provider),
+    [initialCredentials, provider],
+  );
+
+  // `selectedCredentialIdByUser` é null quando o usuário ainda não interagiu
+  // explicitamente OU quando a credencial escolhida sumiu (delete/troca de
+  // provider). O efetivo `credentialId` é derivado: usa a escolha do usuário
+  // quando ainda existe no provider atual; senão cai pro initial; senão pra
+  // primeira; senão null.
+  const [selectedCredentialIdByUser, setSelectedCredentialIdByUser] = useState<
+    string | null
+  >(null);
+
+  const credentialId: string | null = useMemo(() => {
+    if (
+      selectedCredentialIdByUser &&
+      credentialsForProvider.some((c) => c.id === selectedCredentialIdByUser)
+    ) {
+      return selectedCredentialIdByUser;
+    }
+    if (
+      initial?.credentialId &&
+      credentialsForProvider.some((c) => c.id === initial.credentialId)
+    ) {
+      return initial.credentialId;
+    }
+    return credentialsForProvider[0]?.id ?? null;
+  }, [selectedCredentialIdByUser, credentialsForProvider, initial]);
+
   const [test, setTest] = useState<TestState>({ status: "idle" });
   const [isSaving, startSave] = useTransition();
   const [isTesting, startTest] = useTransition();
   const [nexEnabled, setNexEnabled] = useState<boolean>(initialNexEnabled);
   const [isTogglingNex, startNexToggle] = useTransition();
+
+  // Spread cartão.
+  const [spreadInput, setSpreadInput] = useState<string>(
+    initialSpread.toFixed(2),
+  );
+  const [isSavingSpread, setIsSavingSpread] = useState<boolean>(false);
+  const lastSavedSpreadRef = useRef<number>(initialSpread);
+  const spreadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const catalog = PROVIDER_CATALOG[provider];
 
@@ -126,15 +188,28 @@ export function LlmConfigCard({
     return [customOption, ...fromCatalog];
   }, [catalog]);
 
+  const credentialOptions = useMemo<SelectOption[]>(
+    () => buildCredentialOptions(credentialsForProvider),
+    [credentialsForProvider],
+  );
+
   const isConfigured = Boolean(initial);
   const usingCustom = modelSelect === CUSTOM_MODEL_VALUE;
   const resolvedModel = (usingCustom ? customModel : modelSelect).trim();
+  const hasNoCredentials = credentialsForProvider.length === 0;
+  const selectedCredential = credentialId
+    ? credentialsForProvider.find((c) => c.id === credentialId) ?? null
+    : null;
 
   function handleProviderChange(next: string) {
     const nextProvider = next as LlmProvider;
     setProvider(nextProvider);
     setModelSelect(PROVIDER_CATALOG[nextProvider].models[0].id);
     setCustomModel("");
+    // Reseta a seleção do usuário — `credentialId` derivado vai cair no
+    // fallback automaticamente (initial.credentialId se compatível, senão a
+    // primeira do novo provider).
+    setSelectedCredentialIdByUser(null);
     setTest({ status: "idle" });
   }
 
@@ -143,6 +218,17 @@ export function LlmConfigCard({
     if (next !== CUSTOM_MODEL_VALUE) {
       setCustomModel("");
     }
+    setTest({ status: "idle" });
+  }
+
+  function handleCredentialChange(next: string) {
+    if (next === NEW_CREDENTIAL_VALUE) {
+      toast.info(
+        "Use o card 'Chaves de API' abaixo para cadastrar uma nova chave.",
+      );
+      return;
+    }
+    setSelectedCredentialIdByUser(next);
     setTest({ status: "idle" });
   }
 
@@ -157,23 +243,23 @@ export function LlmConfigCard({
     if (resolvedModel.length > 100) {
       return "ID de modelo muito longo (máx 100 chars)";
     }
-    if (!apiKey || apiKey.trim().length < 10) {
-      return "Cole uma API key válida";
+    if (!credentialId) {
+      return "Cadastre uma chave de API antes de continuar";
     }
     return null;
   }
 
   async function persistConfig(): Promise<boolean> {
+    if (!credentialId) return false;
     const result = await saveLlmConfig({
       provider,
       model: resolvedModel,
-      apiKey: apiKey.trim(),
+      credentialId,
     });
     if (!result.ok) {
       toast.error(result.error ?? "Erro ao salvar configuração");
       return false;
     }
-    setApiKey("");
     setTest({ status: "idle" });
     router.refresh();
     return true;
@@ -185,12 +271,13 @@ export function LlmConfigCard({
       toast.error(err);
       return;
     }
+    if (!credentialId) return;
     startTest(async () => {
-      const result = await testLlmConnection({
+      const result = await testLlmCredentialAction(
+        credentialId,
         provider,
-        model: resolvedModel,
-        apiKey: apiKey.trim(),
-      });
+        resolvedModel,
+      );
       if (!result.ok) {
         setTest({ status: "fail", message: result.error });
         toast.error(result.error ?? "Erro ao testar conexão");
@@ -199,7 +286,6 @@ export function LlmConfigCard({
       const data = result.data!;
 
       if (data.reachable && data.creditOk !== false) {
-        // Auto-save após teste OK.
         const saved = await persistConfig();
         if (saved) {
           setTest({ status: "ok", message: "Conexão OK" });
@@ -257,13 +343,14 @@ export function LlmConfigCard({
       toast.error(err);
       return;
     }
+    if (!credentialId) return;
     startSave(async () => {
       // Sempre testa antes de salvar manualmente.
-      const testResult = await testLlmConnection({
+      const testResult = await testLlmCredentialAction(
+        credentialId,
         provider,
-        model: resolvedModel,
-        apiKey: apiKey.trim(),
-      });
+        resolvedModel,
+      );
       if (!testResult.ok) {
         toast.error(testResult.error ?? "Erro ao testar conexão");
         return;
@@ -307,7 +394,72 @@ export function LlmConfigCard({
     });
   }
 
+  function commitSpread(rawValue: string) {
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed)) {
+      toast.error("Spread inválido");
+      setSpreadInput(lastSavedSpreadRef.current.toFixed(2));
+      return;
+    }
+    if (parsed < SPREAD_MIN || parsed > SPREAD_MAX) {
+      toast.error(
+        `Spread fora do range [${SPREAD_MIN.toFixed(2)}, ${SPREAD_MAX.toFixed(2)}]`,
+      );
+      setSpreadInput(lastSavedSpreadRef.current.toFixed(2));
+      return;
+    }
+    if (Math.abs(parsed - lastSavedSpreadRef.current) < 1e-9) {
+      // Sem mudança real — apenas re-formata.
+      setSpreadInput(parsed.toFixed(2));
+      return;
+    }
+    setIsSavingSpread(true);
+    void (async () => {
+      try {
+        const result = await setCardSpreadAction(parsed);
+        if (!result.ok) {
+          toast.error(result.error ?? "Erro ao salvar spread");
+          setSpreadInput(lastSavedSpreadRef.current.toFixed(2));
+          return;
+        }
+        lastSavedSpreadRef.current = parsed;
+        setSpreadInput(parsed.toFixed(2));
+        toast.success("Spread atualizado");
+        router.refresh();
+      } finally {
+        setIsSavingSpread(false);
+      }
+    })();
+  }
+
+  function handleSpreadChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const next = e.currentTarget.value;
+    setSpreadInput(next);
+    if (spreadDebounceRef.current) clearTimeout(spreadDebounceRef.current);
+    spreadDebounceRef.current = setTimeout(() => {
+      commitSpread(next);
+    }, SPREAD_DEBOUNCE_MS);
+  }
+
+  function handleSpreadBlur() {
+    if (spreadDebounceRef.current) {
+      clearTimeout(spreadDebounceRef.current);
+      spreadDebounceRef.current = null;
+    }
+    commitSpread(spreadInput);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (spreadDebounceRef.current) clearTimeout(spreadDebounceRef.current);
+    };
+  }, []);
+
   const busy = isSaving || isTesting;
+  const actionsDisabled = busy || hasNoCredentials || !credentialId;
+
+  const selectedCredentialValue =
+    credentialId ?? (hasNoCredentials ? NEW_CREDENTIAL_VALUE : "");
 
   return (
     <Card className="rounded-2xl border border-border bg-muted/30 p-2">
@@ -319,8 +471,8 @@ export function LlmConfigCard({
           <div className="flex flex-col gap-0.5">
             <CardTitle className="text-foreground">Agente Nex</CardTitle>
             <p className="text-xs text-muted-foreground">
-              Configure o provedor de IA usado pelo agente de consultas. A
-              chave é cifrada com AES-256 antes de ser persistida.
+              Configure o provedor de IA usado pelo agente de consultas. As
+              chaves são gerenciadas no card &quot;Chaves de API&quot;.
             </p>
           </div>
         </div>
@@ -403,8 +555,12 @@ export function LlmConfigCard({
             )}
             <span className="leading-snug">
               {isConfigured
-                ? `Configurado: ${PROVIDER_CATALOG[initial!.provider].label} · ${initial!.model} · chave ${initial!.apiKeyMasked}`
-                : "Não configurado — selecione provider, modelo e cole a API key abaixo."}
+                ? `Configurado: ${PROVIDER_CATALOG[initial!.provider].label} · ${initial!.model}${
+                    initial!.credentialLabel
+                      ? ` · ${initial!.credentialLabel} ${initial!.apiKeyMasked.slice(-6)}`
+                      : ` · ${initial!.apiKeyMasked}`
+                  }`
+                : "Não configurado — selecione provedor, modelo e chave abaixo."}
             </span>
           </div>
 
@@ -457,34 +613,36 @@ export function LlmConfigCard({
                 className="min-h-[44px]"
                 aria-describedby="llm-custom-model-help"
               />
-              <p id="llm-custom-model-help" className="text-xs text-muted-foreground">
+              <p
+                id="llm-custom-model-help"
+                className="text-xs text-muted-foreground"
+              >
                 Útil para snapshots datados ou modelos novos não listados ainda.
               </p>
             </div>
           ) : null}
 
           <div className="space-y-1.5">
-            <Label htmlFor="llm-api-key" className="gap-2">
+            <Label htmlFor="llm-credential" className="gap-2">
               <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
-              API key
+              Chave de API
             </Label>
-            <PasswordInput
-              id="llm-api-key"
-              value={apiKey}
-              onChange={setApiKey}
+            <CustomSelect
+              value={selectedCredentialValue}
+              onChange={handleCredentialChange}
+              options={credentialOptions}
               placeholder={
-                isConfigured
-                  ? "Cole nova chave para substituir a atual"
-                  : "Cole a chave fornecida pelo provedor"
+                hasNoCredentials
+                  ? "Sem chaves cadastradas"
+                  : "Selecionar chave"
               }
-              autoComplete="off"
-              ariaLabel="API key do provedor de IA"
-              className="min-h-[44px]"
               disabled={busy}
+              triggerClassName="min-h-[44px]"
             />
             <p className="text-xs text-muted-foreground">
-              A chave nunca é exibida após salvar. Para trocar, basta colar uma
-              nova.
+              {hasNoCredentials
+                ? `Nenhuma chave cadastrada para ${catalog.label}. Use o card "Chaves de API" abaixo para adicionar.`
+                : "Selecione qual chave salva o agente deve usar. As chaves são gerenciadas separadamente."}
             </p>
 
             {/* Atalhos: criar API key + adicionar crédito (URLs do catálogo). */}
@@ -512,17 +670,6 @@ export function LlmConfigCard({
                 </a>
               ) : null}
             </div>
-
-            {/* Honeypot — evita autofill em browsers que ignoram autocomplete=off. */}
-            <Input
-              type="text"
-              tabIndex={-1}
-              autoComplete="off"
-              aria-hidden="true"
-              className="hidden"
-              readOnly
-              value=""
-            />
           </div>
 
           {test.status !== "idle" && (
@@ -581,12 +728,46 @@ export function LlmConfigCard({
             </div>
           )}
 
+          {/* Spread cartão. */}
+          <div className="space-y-1.5">
+            <Label htmlFor="llm-card-spread" className="gap-2">
+              <Coins className="h-3.5 w-3.5 text-muted-foreground" />
+              Spread cartão
+            </Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="llm-card-spread"
+                type="number"
+                step="0.01"
+                min={SPREAD_MIN}
+                max={SPREAD_MAX}
+                value={spreadInput}
+                onChange={handleSpreadChange}
+                onBlur={handleSpreadBlur}
+                disabled={isSavingSpread}
+                className="min-h-[44px] w-32"
+                aria-describedby="llm-card-spread-help"
+                aria-label="Spread cartão (multiplicador USD/BRL)"
+              />
+              {isSavingSpread ? (
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              ) : null}
+            </div>
+            <p
+              id="llm-card-spread-help"
+              className="text-xs text-muted-foreground"
+            >
+              Multiplicador aplicado sobre a cotação comercial USD/BRL (default
+              1.10 ≈ IOF + spread Visa/Master). Range permitido: 1.00 a 1.30.
+            </p>
+          </div>
+
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
             <Button
               type="button"
               variant="outline"
               onClick={handleTest}
-              disabled={busy}
+              disabled={actionsDisabled}
               className="cursor-pointer min-h-[44px]"
             >
               {isTesting ? (
@@ -599,7 +780,7 @@ export function LlmConfigCard({
             <Button
               type="button"
               onClick={handleSave}
-              disabled={busy}
+              disabled={actionsDisabled}
               className="cursor-pointer min-h-[44px]"
             >
               {isSaving ? (
@@ -610,6 +791,20 @@ export function LlmConfigCard({
               Salvar configuração
             </Button>
           </div>
+
+          {/* Hint para o leitor de tela / debug visual quando sem credenciais. */}
+          {hasNoCredentials ? (
+            <p
+              className="text-xs text-amber-600 dark:text-amber-400"
+              role="note"
+            >
+              Sem chaves cadastradas para {catalog.label} — botões desativados.
+            </p>
+          ) : selectedCredential ? (
+            <p className="sr-only" aria-live="polite">
+              Chave selecionada: {selectedCredential.label}
+            </p>
+          ) : null}
         </div>
       </CardContent>
     </Card>

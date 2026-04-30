@@ -3,45 +3,92 @@
  */
 import "@testing-library/jest-dom";
 
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 
 import { PROVIDER_CATALOG } from "@/lib/llm/catalog";
+import type { CredentialSummary } from "@/lib/llm/credentials";
 
 const saveLlmConfig = jest.fn();
-const testLlmConnection = jest.fn();
 const setNexBubbleEnabled = jest.fn();
+const testLlmCredentialAction = jest.fn();
+const setCardSpreadAction = jest.fn();
 const refresh = jest.fn();
 
 jest.mock("@/lib/actions/llm-config", () => ({
   saveLlmConfig: (...args: unknown[]) => saveLlmConfig(...args),
-  testLlmConnection: (...args: unknown[]) => testLlmConnection(...args),
   setNexBubbleEnabled: (...args: unknown[]) => setNexBubbleEnabled(...args),
+}));
+
+jest.mock("@/lib/actions/llm-credentials", () => ({
+  testLlmCredentialAction: (...args: unknown[]) =>
+    testLlmCredentialAction(...args),
+}));
+
+jest.mock("@/lib/actions/exchange-rate", () => ({
+  setCardSpreadAction: (...args: unknown[]) => setCardSpreadAction(...args),
 }));
 
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ refresh }),
 }));
 
+const toastMock = {
+  success: jest.fn(),
+  error: jest.fn(),
+  warning: jest.fn(),
+  info: jest.fn(),
+};
 jest.mock("sonner", () => ({
-  toast: {
-    success: jest.fn(),
-    error: jest.fn(),
-    warning: jest.fn(),
-  },
+  toast: toastMock,
 }));
 
 import { LlmConfigCard } from "../llm-config-card";
 
+const cred = (overrides: Partial<CredentialSummary> = {}): CredentialSummary => ({
+  id: overrides.id ?? "cred-openai-1",
+  provider: overrides.provider ?? "openai",
+  label: overrides.label ?? "Chave Principal",
+  last4: overrides.last4 ?? "Wxyz",
+  createdAt: overrides.createdAt ?? "2026-04-01T00:00:00.000Z",
+  updatedAt: overrides.updatedAt ?? "2026-04-30T00:00:00.000Z",
+});
+
 describe("LlmConfigCard", () => {
   beforeEach(() => {
+    jest.useFakeTimers();
     saveLlmConfig.mockReset();
-    testLlmConnection.mockReset();
     setNexBubbleEnabled.mockReset();
+    testLlmCredentialAction.mockReset();
+    setCardSpreadAction.mockReset();
     refresh.mockReset();
+    toastMock.success.mockReset();
+    toastMock.error.mockReset();
+    toastMock.warning.mockReset();
+    toastMock.info.mockReset();
   });
 
-  it("renderiza estado não configurado e mostra atalho 'Criar API key' do provider OpenAI", () => {
-    render(<LlmConfigCard initial={null} initialNexEnabled={false} />);
+  afterEach(() => {
+    act(() => {
+      jest.runOnlyPendingTimers();
+    });
+    jest.useRealTimers();
+  });
+
+  it("renderiza atalho 'Criar API key' do provider OpenAI", () => {
+    render(
+      <LlmConfigCard
+        initial={null}
+        initialNexEnabled={false}
+        initialCredentials={[cred()]}
+        initialSpread={1.1}
+      />,
+    );
     const apiKeyShortcut = screen.getByTestId("llm-shortcut-api-key");
     expect(apiKeyShortcut).toHaveAttribute(
       "href",
@@ -52,18 +99,32 @@ describe("LlmConfigCard", () => {
   });
 
   it("mostra atalho 'Adicionar crédito' quando provider tem topUpUrl", () => {
-    render(<LlmConfigCard initial={null} initialNexEnabled={false} />);
+    render(
+      <LlmConfigCard
+        initial={null}
+        initialNexEnabled={false}
+        initialCredentials={[cred()]}
+        initialSpread={1.1}
+      />,
+    );
     const topUp = screen.getByTestId("llm-shortcut-top-up");
     expect(topUp).toHaveAttribute("href", PROVIDER_CATALOG.openai.topUpUrl);
   });
 
   it("seleciona 'Outro' habilita campo de modelo customizado", async () => {
-    render(<LlmConfigCard initial={null} initialNexEnabled={false} />);
-
-    // Abre o select de modelo
-    const modelTrigger = screen.getAllByRole("button").find((b) =>
-      b.getAttribute("aria-haspopup") === "listbox",
+    render(
+      <LlmConfigCard
+        initial={null}
+        initialNexEnabled={false}
+        initialCredentials={[cred()]}
+        initialSpread={1.1}
+      />,
     );
+
+    // O `SearchableSelect` (Modelo) é o único trigger com aria-haspopup="listbox".
+    const modelTrigger = screen
+      .getAllByRole("button")
+      .find((b) => b.getAttribute("aria-haspopup") === "listbox");
     expect(modelTrigger).toBeTruthy();
     fireEvent.click(modelTrigger!);
 
@@ -71,40 +132,88 @@ describe("LlmConfigCard", () => {
     fireEvent.click(customOption);
 
     expect(screen.getByLabelText("Modelo customizado")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/gpt-4o-2024-08-06/)).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText(/gpt-4o-2024-08-06/),
+    ).toBeInTheDocument();
   });
 
-  it("auto-save é chamado quando teste retorna reachable=true e creditOk!=false", async () => {
-    testLlmConnection.mockResolvedValue({
+  it("renderiza select de credenciais com opções para o provider", async () => {
+    render(
+      <LlmConfigCard
+        initial={null}
+        initialNexEnabled={false}
+        initialCredentials={[
+          cred({ id: "c1", label: "Principal", last4: "1234" }),
+          cred({ id: "c2", label: "Backup", last4: "abcd" }),
+        ]}
+        initialSpread={1.1}
+      />,
+    );
+
+    // Mesmo fechado, o trigger do CustomSelect mostra o label da seleção atual
+    // (primeira credencial). Clica nele para abrir as opções.
+    const credentialTrigger = screen
+      .getAllByRole("button")
+      .find((b) => b.textContent?.includes("Principal · ••••1234"));
+    expect(credentialTrigger).toBeTruthy();
+    fireEvent.click(credentialTrigger!);
+
+    // Após abrir, "Backup" e "+ Nova chave" aparecem na lista.
+    expect(await screen.findByText(/Backup · ••••abcd/)).toBeInTheDocument();
+    expect(screen.getByText(/\+ Nova chave/)).toBeInTheDocument();
+  });
+
+  it("auto-save é chamado com credentialId quando teste retorna reachable=true e creditOk!=false", async () => {
+    testLlmCredentialAction.mockResolvedValue({
       ok: true,
       data: { reachable: true, creditOk: true },
     });
     saveLlmConfig.mockResolvedValue({ ok: true });
 
-    render(<LlmConfigCard initial={null} initialNexEnabled={false} />);
-
-    // Cola API key longa o suficiente.
-    const apiKeyInput = screen.getByLabelText(/API key do provedor de IA/i);
-    fireEvent.change(apiKeyInput, { target: { value: "sk-test-1234567890abcdef" } });
+    render(
+      <LlmConfigCard
+        initial={null}
+        initialNexEnabled={false}
+        initialCredentials={[cred({ id: "cred-1" })]}
+        initialSpread={1.1}
+      />,
+    );
 
     const testBtn = screen.getByRole("button", { name: /testar conexão/i });
     await act(async () => {
       fireEvent.click(testBtn);
     });
 
-    await waitFor(() => expect(testLlmConnection).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(testLlmCredentialAction).toHaveBeenCalledTimes(1),
+    );
+    const [credId, prov] = testLlmCredentialAction.mock.calls[0];
+    expect(credId).toBe("cred-1");
+    expect(prov).toBe("openai");
+
     await waitFor(() => expect(saveLlmConfig).toHaveBeenCalledTimes(1));
+    expect(saveLlmConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "openai",
+        credentialId: "cred-1",
+      }),
+    );
   });
 
   it("creditOk=false mostra warning + botão 'Salvar mesmo assim' e NÃO auto-salva", async () => {
-    testLlmConnection.mockResolvedValue({
+    testLlmCredentialAction.mockResolvedValue({
       ok: true,
       data: { reachable: true, creditOk: false, message: "Sem crédito" },
     });
 
-    render(<LlmConfigCard initial={null} initialNexEnabled={false} />);
-    const apiKeyInput = screen.getByLabelText(/API key do provedor de IA/i);
-    fireEvent.change(apiKeyInput, { target: { value: "sk-test-1234567890abcdef" } });
+    render(
+      <LlmConfigCard
+        initial={null}
+        initialNexEnabled={false}
+        initialCredentials={[cred()]}
+        initialSpread={1.1}
+      />,
+    );
 
     const testBtn = screen.getByRole("button", { name: /testar conexão/i });
     await act(async () => {
@@ -121,7 +230,7 @@ describe("LlmConfigCard", () => {
   });
 
   it("teste com errorKind invalid_key mostra mensagem amigável e não salva", async () => {
-    testLlmConnection.mockResolvedValue({
+    testLlmCredentialAction.mockResolvedValue({
       ok: true,
       data: {
         reachable: false,
@@ -130,9 +239,14 @@ describe("LlmConfigCard", () => {
       },
     });
 
-    render(<LlmConfigCard initial={null} initialNexEnabled={false} />);
-    const apiKeyInput = screen.getByLabelText(/API key do provedor de IA/i);
-    fireEvent.change(apiKeyInput, { target: { value: "sk-bad-1234567890" } });
+    render(
+      <LlmConfigCard
+        initial={null}
+        initialNexEnabled={false}
+        initialCredentials={[cred()]}
+        initialSpread={1.1}
+      />,
+    );
 
     const testBtn = screen.getByRole("button", { name: /testar conexão/i });
     await act(async () => {
@@ -142,12 +256,14 @@ describe("LlmConfigCard", () => {
     await waitFor(() =>
       expect(screen.getByText(/Falha ao conectar/i)).toBeInTheDocument(),
     );
-    expect(screen.getByText(/API key inválida ou expirada\./i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/API key inválida ou expirada\./i),
+    ).toBeInTheDocument();
     expect(saveLlmConfig).not.toHaveBeenCalled();
   });
 
   it("'Salvar configuração' (manual) testa antes; falha no teste impede save", async () => {
-    testLlmConnection.mockResolvedValue({
+    testLlmCredentialAction.mockResolvedValue({
       ok: true,
       data: {
         reachable: false,
@@ -156,16 +272,23 @@ describe("LlmConfigCard", () => {
       },
     });
 
-    render(<LlmConfigCard initial={null} initialNexEnabled={false} />);
-    const apiKeyInput = screen.getByLabelText(/API key do provedor de IA/i);
-    fireEvent.change(apiKeyInput, { target: { value: "sk-bad-1234567890" } });
+    render(
+      <LlmConfigCard
+        initial={null}
+        initialNexEnabled={false}
+        initialCredentials={[cred()]}
+        initialSpread={1.1}
+      />,
+    );
 
     const saveBtn = screen.getByRole("button", { name: /salvar configuração/i });
     await act(async () => {
       fireEvent.click(saveBtn);
     });
 
-    await waitFor(() => expect(testLlmConnection).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(testLlmCredentialAction).toHaveBeenCalledTimes(1),
+    );
     expect(saveLlmConfig).not.toHaveBeenCalled();
   });
 
@@ -175,13 +298,139 @@ describe("LlmConfigCard", () => {
         initial={{
           provider: "openai",
           model: "gpt-4o-2024-08-06-snapshot",
-          apiKeyMasked: "sk-***",
+          apiKeyMasked: "••••••••sk-x",
+          credentialId: "cred-1",
+          credentialLabel: "Chave 1",
         }}
         initialNexEnabled={true}
+        initialCredentials={[cred({ id: "cred-1" })]}
+        initialSpread={1.1}
       />,
     );
 
-    const customInput = screen.getByLabelText("Modelo customizado") as HTMLInputElement;
+    const customInput = screen.getByLabelText(
+      "Modelo customizado",
+    ) as HTMLInputElement;
     expect(customInput.value).toBe("gpt-4o-2024-08-06-snapshot");
+  });
+
+  it("sem credenciais → botões desabilitados + mensagem 'Sem chaves cadastradas'", () => {
+    render(
+      <LlmConfigCard
+        initial={null}
+        initialNexEnabled={false}
+        initialCredentials={[]}
+        initialSpread={1.1}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /testar conexão/i }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /salvar configuração/i }),
+    ).toBeDisabled();
+    expect(screen.getByText(/Sem chaves cadastradas/i)).toBeInTheDocument();
+  });
+
+  it("input de spread dispara setCardSpreadAction após debounce", async () => {
+    setCardSpreadAction.mockResolvedValue({ ok: true });
+
+    render(
+      <LlmConfigCard
+        initial={null}
+        initialNexEnabled={false}
+        initialCredentials={[cred()]}
+        initialSpread={1.1}
+      />,
+    );
+
+    const spreadInput = screen.getByLabelText(
+      /Spread cartão \(multiplicador USD\/BRL\)/i,
+    ) as HTMLInputElement;
+    expect(spreadInput.value).toBe("1.10");
+
+    fireEvent.change(spreadInput, { target: { value: "1.15" } });
+
+    // Antes do debounce não deve ter chamado.
+    expect(setCardSpreadAction).not.toHaveBeenCalled();
+
+    await act(async () => {
+      jest.advanceTimersByTime(600);
+    });
+
+    await waitFor(() => expect(setCardSpreadAction).toHaveBeenCalledTimes(1));
+    expect(setCardSpreadAction).toHaveBeenCalledWith(1.15);
+  });
+
+  it("spread fora do range exibe erro e não chama setCardSpreadAction", async () => {
+    render(
+      <LlmConfigCard
+        initial={null}
+        initialNexEnabled={false}
+        initialCredentials={[cred()]}
+        initialSpread={1.1}
+      />,
+    );
+
+    const spreadInput = screen.getByLabelText(
+      /Spread cartão \(multiplicador USD\/BRL\)/i,
+    ) as HTMLInputElement;
+    fireEvent.change(spreadInput, { target: { value: "2.5" } });
+
+    await act(async () => {
+      jest.advanceTimersByTime(600);
+    });
+
+    expect(setCardSpreadAction).not.toHaveBeenCalled();
+    expect(toastMock.error).toHaveBeenCalled();
+  });
+
+  it("trocar modelo (sem trocar credencial) dispara save com mesmo credentialId", async () => {
+    testLlmCredentialAction.mockResolvedValue({
+      ok: true,
+      data: { reachable: true, creditOk: true },
+    });
+    saveLlmConfig.mockResolvedValue({ ok: true });
+
+    render(
+      <LlmConfigCard
+        initial={{
+          provider: "openai",
+          model: PROVIDER_CATALOG.openai.models[0].id,
+          apiKeyMasked: "••••••••abcd",
+          credentialId: "cred-fixed",
+          credentialLabel: "Fixa",
+        }}
+        initialNexEnabled={false}
+        initialCredentials={[cred({ id: "cred-fixed", label: "Fixa" })]}
+        initialSpread={1.1}
+      />,
+    );
+
+    // Trocar para outro modelo do catálogo (se houver mais de 1).
+    const targetModel = PROVIDER_CATALOG.openai.models[1];
+    if (!targetModel) return; // catálogo só com 1 modelo: pula sem falhar
+    const modelTrigger = screen
+      .getAllByRole("button")
+      .find((b) => b.getAttribute("aria-haspopup") === "listbox");
+    expect(modelTrigger).toBeTruthy();
+    fireEvent.click(modelTrigger!);
+    const opt = await screen.findByText(targetModel.label);
+    fireEvent.click(opt);
+
+    const saveBtn = screen.getByRole("button", { name: /salvar configuração/i });
+    await act(async () => {
+      fireEvent.click(saveBtn);
+    });
+
+    await waitFor(() => expect(saveLlmConfig).toHaveBeenCalledTimes(1));
+    expect(saveLlmConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "openai",
+        model: targetModel.id,
+        credentialId: "cred-fixed",
+      }),
+    );
   });
 });

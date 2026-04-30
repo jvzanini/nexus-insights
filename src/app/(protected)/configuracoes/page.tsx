@@ -20,6 +20,8 @@ import {
 } from "@/lib/reports/visibility";
 import { getPublicActiveLlmConfig } from "@/lib/llm/get-active-config";
 import { isNexBubbleEnabled } from "@/lib/llm/get-nex-bubble-enabled";
+import { listCredentials } from "@/lib/llm/credentials";
+import { getUsdBrlRate, DEFAULT_CARD_SPREAD } from "@/lib/llm/exchange-rate";
 
 export const metadata = { title: "Configurações | Nexus Insights" };
 export const dynamic = "force-dynamic";
@@ -54,6 +56,8 @@ export default async function Page() {
     llmConfig,
     matrixIaVisibility,
     nexBubbleEnabled,
+    initialCredentials,
+    currentRate,
   ] = await Promise.all([
     getPlatformTz(),
     getPlatformLocale(),
@@ -65,7 +69,17 @@ export default async function Page() {
     getPublicActiveLlmConfig(),
     getMatrixIAVisibility(),
     isNexBubbleEnabled(),
+    listCredentials().catch((err) => {
+      console.error("[configuracoes] listCredentials falhou:", err);
+      return [];
+    }),
+    getUsdBrlRate().catch((err) => {
+      console.error("[configuracoes] getUsdBrlRate falhou:", err);
+      return null;
+    }),
   ]);
+
+  const initialSpread = currentRate?.spread ?? DEFAULT_CARD_SPREAD;
 
   const reportVisibilityMap = Object.fromEntries(
     reportVisibilityEntries,
@@ -122,6 +136,8 @@ export default async function Page() {
           <LlmConfigCard
             initial={llmConfig}
             initialNexEnabled={nexBubbleEnabled}
+            initialCredentials={initialCredentials}
+            initialSpread={initialSpread}
           />
         )}
 
