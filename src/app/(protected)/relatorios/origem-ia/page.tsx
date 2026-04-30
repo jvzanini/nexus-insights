@@ -4,6 +4,9 @@ import { redirect } from "next/navigation";
 
 import { PageHeader } from "@/components/page-header";
 import { PeriodSelectorUrl } from "@/components/reports/period-selector-url";
+import { RefreshButton } from "@/components/reports/refresh-button";
+import { FilterTransitionProvider } from "@/components/reports/filter-transition";
+import { ContentLoadingWrapper } from "@/components/reports/content-loading-wrapper";
 import { TabsShell } from "@/components/reports/dashboards/tabs-shell";
 import { LeadsRecebidosContent } from "@/components/reports/dashboards/leads-recebidos-content";
 import { MatrixIaContent } from "@/components/reports/dashboards/matrix-ia-content";
@@ -110,11 +113,16 @@ export default async function Page({ searchParams }: PageProps) {
         subtitle="Leads recebidos e canal automatizado Matrix IA"
       />
 
-      <div className="mb-6">
-        <PeriodSelectorUrl value={period} />
-      </div>
+      <FilterTransitionProvider>
+        <div className="mb-6 flex items-center gap-2">
+          <PeriodSelectorUrl value={period} accountId={accountId} />
+          <RefreshButton />
+        </div>
 
-      <TabsShell activeValue={tab ?? "leads"} tabs={tabs} />
+        <ContentLoadingWrapper>
+          <TabsShell activeValue={tab ?? "leads"} tabs={tabs} />
+        </ContentLoadingWrapper>
+      </FilterTransitionProvider>
     </div>
   );
 }

@@ -14,6 +14,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { PeriodPills } from "@/components/reports/period-pills";
+import { useFilterTransition } from "@/components/reports/filter-transition";
 import {
   EMPTY_FILTER_STATE,
   type FilterState,
@@ -38,6 +39,8 @@ export interface AdvancedFiltersProps {
   teams: MetaItem[];
   assignees: MetaItem[];
   initial: FilterState;
+  /** Conta ativa — usada para limitar o calendário ao primeiro registro do banco. */
+  accountId?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -201,8 +204,10 @@ export function AdvancedFilters({
   teams,
   assignees,
   initial,
+  accountId,
 }: AdvancedFiltersProps) {
   const router = useRouter();
+  const { startTransition } = useFilterTransition();
 
   const [draft, setDraft] = useState<FilterState>(initial);
   const [applied, setApplied] = useState<FilterState>(initial);
@@ -222,9 +227,11 @@ export function AdvancedFilters({
   const pushUrl = useCallback(
     (state: FilterState) => {
       const qs = serializeFilterState(state).toString();
-      router.push(qs ? `?${qs}` : "?");
+      startTransition(() => {
+        router.push(qs ? `?${qs}` : "?");
+      });
     },
-    [router],
+    [router, startTransition],
   );
 
   // Period aplica direto: muda draft + applied + URL num só clique.
@@ -283,6 +290,7 @@ export function AdvancedFilters({
           value={draft.period}
           customRange={draft.customRange}
           onChange={handlePeriodChange}
+          accountId={accountId}
         />
       </div>
 
@@ -321,7 +329,7 @@ export function AdvancedFilters({
           value={draft.priorities}
           onChange={(v) => updateDraft("priorities", v)}
         />
-        <div className="relative sm:col-span-2 lg:col-span-1">
+        <div data-tour="search" className="relative sm:col-span-2 lg:col-span-1">
           <Search
             className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
             aria-hidden="true"

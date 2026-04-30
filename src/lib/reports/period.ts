@@ -27,21 +27,23 @@ export type PeriodKey =
 export { getPeriodInTz };
 export type { PeriodRange, CustomRangeInput };
 
-// Apenas as 4 opções "canônicas" são exibidas aos usuários nesta migração.
+// As 5 opções "canônicas" exibidas aos usuários (inclui "Todos" — sem corte).
 export const PERIOD_OPTIONS: Array<{ key: NewPeriodKey; label: string }> = [
   { key: "hoje", label: "Hoje" },
   { key: "semana_atual", label: "Esta semana" },
   { key: "mes_atual", label: "Este mês" },
+  { key: "todos", label: "Todos" },
   { key: "custom", label: "Personalizado" },
 ];
 
 // Conjunto de chaves consideradas válidas no runtime.
-// Atenção: somente as 4 canônicas. As chaves legadas continuam aceitas
+// Atenção: somente as 5 canônicas. As chaves legadas continuam aceitas
 // pelo *tipo* (compat estática), mas `isPeriodKey` rejeita strings legadas.
 export const VALID_PERIODS = new Set<NewPeriodKey>([
   "hoje",
   "semana_atual",
   "mes_atual",
+  "todos",
   "custom",
 ]);
 

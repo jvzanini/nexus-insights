@@ -41,6 +41,7 @@ function toCanonical(period: string | null | undefined): CanonicalPeriodKey {
     period === "hoje" ||
     period === "semana_atual" ||
     period === "mes_atual" ||
+    period === "todos" ||
     period === "custom"
   ) {
     return period;

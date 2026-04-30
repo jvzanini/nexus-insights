@@ -4,6 +4,9 @@ import { redirect } from "next/navigation";
 
 import { PageHeader } from "@/components/page-header";
 import { PeriodSelectorUrl } from "@/components/reports/period-selector-url";
+import { RefreshButton } from "@/components/reports/refresh-button";
+import { FilterTransitionProvider } from "@/components/reports/filter-transition";
+import { ContentLoadingWrapper } from "@/components/reports/content-loading-wrapper";
 import { TabsShell } from "@/components/reports/dashboards/tabs-shell";
 import { PorEstadoContent } from "@/components/reports/dashboards/por-estado-content";
 import { VolumetriaContent } from "@/components/reports/dashboards/volumetria-content";
@@ -58,33 +61,38 @@ export default async function Page({ searchParams }: PageProps) {
         subtitle="Estados, inboxes e horários de pico"
       />
 
-      <div className="mb-6">
-        <PeriodSelectorUrl value={period} />
-      </div>
+      <FilterTransitionProvider>
+        <div className="mb-6 flex items-center gap-2">
+          <PeriodSelectorUrl value={period} accountId={accountId} />
+          <RefreshButton />
+        </div>
 
-      <TabsShell
-        activeValue={tab ?? "estado"}
-        tabs={[
-          {
-            value: "estado",
-            label: "Por estado",
-            content: (
-              <Suspense fallback={<EstadoFallback />}>
-                <PorEstadoContent {...contentProps} />
-              </Suspense>
-            ),
-          },
-          {
-            value: "horario",
-            label: "Heatmap horário",
-            content: (
-              <Suspense fallback={<HorarioFallback />}>
-                <VolumetriaContent {...contentProps} />
-              </Suspense>
-            ),
-          },
-        ]}
-      />
+        <ContentLoadingWrapper>
+          <TabsShell
+            activeValue={tab ?? "estado"}
+            tabs={[
+              {
+                value: "estado",
+                label: "Por estado",
+                content: (
+                  <Suspense fallback={<EstadoFallback />}>
+                    <PorEstadoContent {...contentProps} />
+                  </Suspense>
+                ),
+              },
+              {
+                value: "horario",
+                label: "Heatmap horário",
+                content: (
+                  <Suspense fallback={<HorarioFallback />}>
+                    <VolumetriaContent {...contentProps} />
+                  </Suspense>
+                ),
+              },
+            ]}
+          />
+        </ContentLoadingWrapper>
+      </FilterTransitionProvider>
     </div>
   );
 }

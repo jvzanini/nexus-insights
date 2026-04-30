@@ -1,8 +1,8 @@
 "use client";
 
-import { useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PeriodPills } from "@/components/reports/period-pills";
+import { useFilterTransition } from "@/components/reports/filter-transition";
 import {
   type PeriodKey,
   isPeriodKey,
@@ -13,6 +13,7 @@ interface PeriodSelectorUrlProps {
   defaultValue?: PeriodKey;
   paramKey?: string;
   className?: string;
+  accountId?: number;
 }
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -22,10 +23,11 @@ export function PeriodSelectorUrl({
   defaultValue = "30d",
   paramKey = "period",
   className,
+  accountId,
 }: PeriodSelectorUrlProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [, startTransition] = useTransition();
+  const { startTransition } = useFilterTransition();
 
   // Lê custom range da URL (somente válido se period === "custom").
   const customStart = searchParams.get("custom_start");
@@ -77,6 +79,7 @@ export function PeriodSelectorUrl({
       customRange={customRange}
       onChange={onChange}
       className={className}
+      accountId={accountId}
     />
   );
 }

@@ -23,12 +23,12 @@ import {
   PERIOD_OPTIONS,
   type PeriodKey,
 } from "@/lib/reports/period";
+import { getMinReportDate } from "@/lib/actions/reports/period";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-const MAX_RANGE_DAYS = 90;
 const MOBILE_BREAKPOINT_PX = 640;
 
 /** Datas no formato yyyy-mm-dd ↔ Date local (sem timezone shift). */
@@ -58,11 +58,6 @@ function formatRange(start: string, end: string, locale = "pt-BR"): string {
   return `${sStr} – ${eStr}`;
 }
 
-function diffInDaysInclusive(start: Date, end: Date): number {
-  const ms = end.getTime() - start.getTime();
-  return Math.floor(ms / (1000 * 60 * 60 * 24)) + 1;
-}
-
 function useIsMobile(): boolean {
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
@@ -87,6 +82,7 @@ interface CustomRangePickerProps {
   onApply: (range: { start: string; end: string }) => void;
   trigger: React.ReactNode;
   isMobile: boolean;
+  minDate?: Date;
 }
 
 function CustomRangePicker({
@@ -96,6 +92,7 @@ function CustomRangePicker({
   onApply,
   trigger,
   isMobile,
+  minDate,
 }: CustomRangePickerProps) {
   // Montamos o PickerPanel só quando aberto e usamos `key` derivada do
   // initialRange para garantir que o estado interno é recriado a partir do
@@ -110,6 +107,7 @@ function CustomRangePicker({
       }}
       onCancel={() => onOpenChange(false)}
       isMobile={isMobile}
+      minDate={minDate}
     />
   ) : null;
 
@@ -143,6 +141,7 @@ interface PickerPanelProps {
   onApply: (range: { start: string; end: string }) => void;
   onCancel: () => void;
   isMobile: boolean;
+  minDate?: Date;
 }
 
 function PickerPanel({
@@ -150,6 +149,7 @@ function PickerPanel({
   onApply,
   onCancel,
   isMobile,
+  minDate,
 }: PickerPanelProps) {
   const [range, setRange] = useState<DateRange | undefined>(() =>
     initialRange
@@ -160,13 +160,24 @@ function PickerPanel({
       : undefined,
   );
 
+  // Limites: antes de minDate (primeira conversa do banco) e depois de hoje.
+  const today = useMemo(() => {
+    const d = new Date();
+    d.setHours(23, 59, 59, 999);
+    return d;
+  }, []);
+
+  const disabledMatcher = useMemo(() => {
+    if (minDate) {
+      return { before: minDate, after: today };
+    }
+    return { after: today };
+  }, [minDate, today]);
+
   const error = useMemo(() => {
     if (!range?.from || !range?.to) return null;
     if (range.to.getTime() < range.from.getTime()) {
       return "A data final deve ser igual ou posterior à data inicial.";
-    }
-    if (diffInDaysInclusive(range.from, range.to) > MAX_RANGE_DAYS) {
-      return `O intervalo máximo é de ${MAX_RANGE_DAYS} dias.`;
     }
     return null;
   }, [range]);
@@ -178,6 +189,10 @@ function PickerPanel({
     onApply({ start: dateToIso(range.from), end: dateToIso(range.to) });
   };
 
+  const helperText = minDate
+    ? `Selecione qualquer intervalo a partir de ${new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).format(minDate)}.`
+    : "Selecione qualquer intervalo até hoje.";
+
   return (
     <div className="flex flex-col gap-3">
       <Calendar
@@ -186,17 +201,18 @@ function PickerPanel({
         onSelect={setRange}
         locale={ptBR}
         numberOfMonths={isMobile ? 1 : 2}
-        defaultMonth={range?.from}
+        defaultMonth={range?.from ?? minDate}
         showOutsideDays
+        disabled={disabledMatcher}
+        startMonth={minDate}
+        endMonth={today}
       />
       {error ? (
         <p role="alert" className="px-1 text-xs text-destructive">
           {error}
         </p>
       ) : (
-        <p className="px-1 text-xs text-muted-foreground">
-          Selecione um intervalo de até {MAX_RANGE_DAYS} dias.
-        </p>
+        <p className="px-1 text-xs text-muted-foreground">{helperText}</p>
       )}
       <div className="flex items-center justify-end gap-2">
         <Button variant="ghost" size="sm" onClick={onCancel}>
@@ -227,6 +243,8 @@ export interface PeriodPillsProps {
     customRange?: { start: string; end: string },
   ) => void;
   className?: string;
+  /** Conta ativa — usada para limitar o calendário a partir do primeiro registro. */
+  accountId?: number;
 }
 
 export function PeriodPills({
@@ -234,9 +252,29 @@ export function PeriodPills({
   customRange,
   onChange,
   className,
+  accountId,
 }: PeriodPillsProps) {
   const isMobile = useIsMobile();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [minDate, setMinDate] = useState<Date | undefined>(undefined);
+
+  // Fetch lazy: só busca a data mínima quando o picker é aberto pela primeira vez.
+  useEffect(() => {
+    if (!pickerOpen || minDate || typeof accountId !== "number") return;
+    let cancelled = false;
+    getMinReportDate(accountId)
+      .then((iso) => {
+        if (cancelled) return;
+        const d = new Date(iso);
+        if (!Number.isNaN(d.getTime())) setMinDate(d);
+      })
+      .catch(() => {
+        // Silencioso — o picker funciona sem o limite mínimo.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pickerOpen, minDate, accountId]);
 
   const handlePillClick = (key: PeriodKey) => {
     if (key === "custom") {
@@ -298,6 +336,7 @@ export function PeriodPills({
               initialRange={customRange}
               onApply={handleApplyCustom}
               isMobile={isMobile}
+              minDate={minDate}
               trigger={
                 <button
                   type="button"

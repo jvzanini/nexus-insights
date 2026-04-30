@@ -5,8 +5,11 @@ const VALID_PERIODS: PeriodKey[] = [
   "ontem",
   "7d",
   "30d",
+  "semana_atual",
   "mes_atual",
   "mes_anterior",
+  "todos",
+  "custom",
 ];
 
 export interface ParsedReportParams {

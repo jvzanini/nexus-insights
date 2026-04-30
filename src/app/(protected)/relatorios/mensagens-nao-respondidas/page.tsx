@@ -9,6 +9,11 @@ import {
   type MensagensFiltersValue,
 } from "@/components/reports/mensagens-nao-respondidas-filters";
 import { MensagensNaoRespondidasTable } from "@/components/reports/mensagens-nao-respondidas-table";
+import { RefreshButton } from "@/components/reports/refresh-button";
+import { FilterTransitionProvider } from "@/components/reports/filter-transition";
+import { ContentLoadingWrapper } from "@/components/reports/content-loading-wrapper";
+import { TourButton } from "@/components/tour/tour-button";
+import { mensagensNaoRespondidasTour } from "@/lib/tours/mensagens-nao-respondidas-tour";
 import { getCurrentUser } from "@/lib/auth";
 import {
   getInboxes,
@@ -17,6 +22,7 @@ import {
 } from "@/lib/chatwoot/queries/meta-cache";
 import { fetchMensagensNaoRespondidas } from "@/lib/actions/reports/mensagens-nao-respondidas";
 import { getActiveAccountId } from "@/lib/reports/active-account";
+import { shouldExcludeMatrixIA } from "@/lib/reports/exclude-matrix-ia";
 import { formatDuration } from "@/lib/utils/format-time";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
 
@@ -56,12 +62,15 @@ export default async function MensagensNaoRespondidasPage({
     assigneeIds: parseIds(assigneeRaw),
   };
 
+  const excludeMatrixIA = await shouldExcludeMatrixIA();
+
   const reportFilters: ReportFilters = {
     inboxIds: filterValue.inboxIds.length ? filterValue.inboxIds : undefined,
     teamIds: filterValue.teamIds.length ? filterValue.teamIds : undefined,
     assigneeIds: filterValue.assigneeIds.length
       ? filterValue.assigneeIds
       : undefined,
+    excludeMatrixIA,
   };
 
   const [inboxesResult, teamsResult, usersResult, dataResult] =
@@ -96,15 +105,22 @@ export default async function MensagensNaoRespondidasPage({
         title="Mensagens não respondidas"
         subtitle="Conversas em aberto cuja última mensagem foi do contato"
         actions={
-          dataResult.cachedAt ? (
-            <CachedBadge cachedAt={dataResult.cachedAt} />
-          ) : null
+          <div className="flex items-center gap-2">
+            {dataResult.cachedAt ? (
+              <CachedBadge cachedAt={dataResult.cachedAt} />
+            ) : null}
+            <RefreshButton />
+            <TourButton tour={mensagensNaoRespondidasTour} />
+          </div>
         }
       />
 
       {stale ? <StaleBanner cachedAt={dataResult.cachedAt} /> : null}
 
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div
+        data-tour="mnr-kpis"
+        className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+      >
         <KpiCard
           icon={ListTodo}
           label="Total aguardando"
@@ -128,17 +144,25 @@ export default async function MensagensNaoRespondidasPage({
         />
       </div>
 
-      <MensagensNaoRespondidasFilters
-        inboxes={inboxes}
-        teams={teams}
-        assignees={assignees}
-        initial={filterValue}
-      />
+      <FilterTransitionProvider>
+        <div data-tour="mnr-filters">
+          <MensagensNaoRespondidasFilters
+            inboxes={inboxes}
+            teams={teams}
+            assignees={assignees}
+            initial={filterValue}
+          />
+        </div>
 
-      <MensagensNaoRespondidasTable
-        rows={dataResult.rows}
-        accountId={accountId}
-      />
+        <ContentLoadingWrapper>
+          <div data-tour="mnr-table">
+            <MensagensNaoRespondidasTable
+              rows={dataResult.rows}
+              accountId={accountId}
+            />
+          </div>
+        </ContentLoadingWrapper>
+      </FilterTransitionProvider>
     </div>
   );
 }

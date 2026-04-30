@@ -15,7 +15,12 @@ import {
 } from "date-fns";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
 
-export type PeriodKey = "hoje" | "semana_atual" | "mes_atual" | "custom";
+export type PeriodKey =
+  | "hoje"
+  | "semana_atual"
+  | "mes_atual"
+  | "todos"
+  | "custom";
 
 export interface PeriodRange {
   start: Date;
@@ -67,6 +72,14 @@ export function getPeriodInTz(
       return {
         start: fromZonedTime(monthStartLocal, tz),
         end: fromZonedTime(nextMonthStartLocal, tz),
+      };
+    }
+
+    case "todos": {
+      // Sem corte temporal — pega tudo desde o epoch até "agora".
+      return {
+        start: new Date(0),
+        end: new Date(),
       };
     }
 

@@ -52,6 +52,7 @@ export function deserializeFilterState(params: URLSearchParams): FilterState {
     periodRaw === "hoje" ||
     periodRaw === "semana_atual" ||
     periodRaw === "mes_atual" ||
+    periodRaw === "todos" ||
     periodRaw === "custom"
       ? (periodRaw as PeriodKey)
       : "hoje";

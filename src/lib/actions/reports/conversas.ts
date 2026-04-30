@@ -15,6 +15,8 @@ export interface FetchConversasInput {
   filters: ReportFilters;
   cursor?: string | null;
   accountId?: number;
+  /** Page size. Default 50, máximo 10000. */
+  limit?: number;
 }
 
 export interface FetchConversasResult {
@@ -98,6 +100,7 @@ export async function fetchConversas(
       accountId,
       filters: scopedFilters,
       cursor: args.cursor ?? null,
+      limit: args.limit,
     });
 
     return {

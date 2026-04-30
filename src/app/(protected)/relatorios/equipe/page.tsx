@@ -4,6 +4,9 @@ import { redirect } from "next/navigation";
 
 import { PageHeader } from "@/components/page-header";
 import { PeriodSelectorUrl } from "@/components/reports/period-selector-url";
+import { RefreshButton } from "@/components/reports/refresh-button";
+import { FilterTransitionProvider } from "@/components/reports/filter-transition";
+import { ContentLoadingWrapper } from "@/components/reports/content-loading-wrapper";
 import { TabsShell } from "@/components/reports/dashboards/tabs-shell";
 import { RankingAtendentesContent } from "@/components/reports/dashboards/ranking-atendentes-content";
 import { PorDepartamentoContent } from "@/components/reports/dashboards/por-departamento-content";
@@ -60,33 +63,38 @@ export default async function Page({ searchParams }: PageProps) {
         subtitle="Ranking de atendentes e departamentos"
       />
 
-      <div className="mb-6">
-        <PeriodSelectorUrl value={period} />
-      </div>
+      <FilterTransitionProvider>
+        <div className="mb-6 flex items-center gap-2">
+          <PeriodSelectorUrl value={period} accountId={accountId} />
+          <RefreshButton />
+        </div>
 
-      <TabsShell
-        activeValue={tab ?? "ranking"}
-        tabs={[
-          {
-            value: "ranking",
-            label: "Ranking de atendentes",
-            content: (
-              <Suspense fallback={<RankingFallback />}>
-                <RankingAtendentesContent {...contentProps} />
-              </Suspense>
-            ),
-          },
-          {
-            value: "departamento",
-            label: "Por departamento",
-            content: (
-              <Suspense fallback={<DepartamentoFallback />}>
-                <PorDepartamentoContent {...contentProps} />
-              </Suspense>
-            ),
-          },
-        ]}
-      />
+        <ContentLoadingWrapper>
+          <TabsShell
+            activeValue={tab ?? "ranking"}
+            tabs={[
+              {
+                value: "ranking",
+                label: "Ranking de atendentes",
+                content: (
+                  <Suspense fallback={<RankingFallback />}>
+                    <RankingAtendentesContent {...contentProps} />
+                  </Suspense>
+                ),
+              },
+              {
+                value: "departamento",
+                label: "Por departamento",
+                content: (
+                  <Suspense fallback={<DepartamentoFallback />}>
+                    <PorDepartamentoContent {...contentProps} />
+                  </Suspense>
+                ),
+              },
+            ]}
+          />
+        </ContentLoadingWrapper>
+      </FilterTransitionProvider>
     </div>
   );
 }

@@ -6,6 +6,7 @@ import {
   dashboardData,
   type DashboardData,
 } from "@/lib/chatwoot/queries/dashboard-data";
+import { shouldExcludeMatrixIA } from "@/lib/reports/exclude-matrix-ia";
 import type { AuthUser } from "@/lib/auth-helpers";
 
 export type DashboardPeriod = "today" | "7d" | "30d";
@@ -94,12 +95,13 @@ export async function getDashboardData(args: {
 
     const { current, prev } = periodRanges(args.period);
 
+    const excludeMatrixIA = await shouldExcludeMatrixIA();
+
     const result = await dashboardData({
       accountId: args.accountId,
       period: current,
       prevPeriod: prev,
-      // super_admin pode incluir Matrix IA; demais sempre excluem
-      excludeMatrixIA: user.platformRole !== "super_admin",
+      excludeMatrixIA,
     });
 
     return {

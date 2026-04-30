@@ -4,6 +4,9 @@ import { redirect } from "next/navigation";
 
 import { PageHeader } from "@/components/page-header";
 import { PeriodSelectorUrl } from "@/components/reports/period-selector-url";
+import { RefreshButton } from "@/components/reports/refresh-button";
+import { FilterTransitionProvider } from "@/components/reports/filter-transition";
+import { ContentLoadingWrapper } from "@/components/reports/content-loading-wrapper";
 import { TabsShell } from "@/components/reports/dashboards/tabs-shell";
 import { TemposRespostaContent } from "@/components/reports/dashboards/tempos-resposta-content";
 import { SlaContent } from "@/components/reports/dashboards/sla-content";
@@ -68,42 +71,47 @@ export default async function Page({ searchParams }: PageProps) {
         subtitle="Tempos de resposta, SLA e CSAT"
       />
 
-      <div className="mb-6">
-        <PeriodSelectorUrl value={period} />
-      </div>
+      <FilterTransitionProvider>
+        <div className="mb-6 flex items-center gap-2">
+          <PeriodSelectorUrl value={period} accountId={accountId} />
+          <RefreshButton />
+        </div>
 
-      <TabsShell
-        activeValue={tab ?? "tempos"}
-        tabs={[
-          {
-            value: "tempos",
-            label: "Tempos de resposta",
-            content: (
-              <Suspense fallback={<TemposFallback />}>
-                <TemposRespostaContent {...contentProps} />
-              </Suspense>
-            ),
-          },
-          {
-            value: "sla",
-            label: "SLA",
-            content: (
-              <Suspense fallback={<SlaFallback />}>
-                <SlaContent {...contentProps} />
-              </Suspense>
-            ),
-          },
-          {
-            value: "csat",
-            label: "CSAT",
-            content: (
-              <Suspense fallback={<CsatFallback />}>
-                <CsatContent {...contentProps} />
-              </Suspense>
-            ),
-          },
-        ]}
-      />
+        <ContentLoadingWrapper>
+          <TabsShell
+            activeValue={tab ?? "tempos"}
+            tabs={[
+              {
+                value: "tempos",
+                label: "Tempos de resposta",
+                content: (
+                  <Suspense fallback={<TemposFallback />}>
+                    <TemposRespostaContent {...contentProps} />
+                  </Suspense>
+                ),
+              },
+              {
+                value: "sla",
+                label: "SLA",
+                content: (
+                  <Suspense fallback={<SlaFallback />}>
+                    <SlaContent {...contentProps} />
+                  </Suspense>
+                ),
+              },
+              {
+                value: "csat",
+                label: "CSAT",
+                content: (
+                  <Suspense fallback={<CsatFallback />}>
+                    <CsatContent {...contentProps} />
+                  </Suspense>
+                ),
+              },
+            ]}
+          />
+        </ContentLoadingWrapper>
+      </FilterTransitionProvider>
     </div>
   );
 }

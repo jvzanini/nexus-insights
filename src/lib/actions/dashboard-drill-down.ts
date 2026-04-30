@@ -2,6 +2,7 @@
 
 import { getCurrentUser } from "@/lib/auth";
 import { getAccessibleAccountIds } from "@/lib/tenant";
+import { shouldExcludeMatrixIA } from "@/lib/reports/exclude-matrix-ia";
 import type { AuthUser } from "@/lib/auth-helpers";
 import {
   getOpenDrillDown,
@@ -87,7 +88,8 @@ async function authorize(accountId: number): Promise<{
   if (!accessibleIds.includes(accountId)) {
     return { ok: false, error: "Acesso negado a esta conta" };
   }
-  return { ok: true, excludeMatrixIA: user.platformRole !== "super_admin" };
+  const excludeMatrixIA = await shouldExcludeMatrixIA();
+  return { ok: true, excludeMatrixIA };
 }
 
 export async function getReceivedDrillDownAction(args: {

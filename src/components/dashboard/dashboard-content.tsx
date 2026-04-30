@@ -32,6 +32,8 @@ import {
   ResolvedDrillDownContent,
 } from "./drill-down-contents";
 import { DrillDownSheet } from "@/components/ui/drill-down-sheet";
+import { TourButton } from "@/components/tour/tour-button";
+import { dashboardTour } from "@/lib/tours/dashboard-tour";
 
 type DashboardSnapshot = NonNullable<DashboardActionResult["data"]>;
 
@@ -290,7 +292,7 @@ export function DashboardContent({
       {/* Greeting */}
       <motion.div
         variants={itemVariants}
-        className="flex items-start justify-between"
+        className="flex items-start justify-between gap-3"
       >
         <div>
           <h1 className="text-2xl font-bold text-foreground tracking-tight">
@@ -298,10 +300,11 @@ export function DashboardContent({
           </h1>
           <p className="text-sm text-muted-foreground mt-1">{today}</p>
         </div>
+        <TourButton tour={dashboardTour} />
       </motion.div>
 
       {/* Filtros */}
-      <motion.div variants={itemVariants}>
+      <motion.div variants={itemVariants} data-tour="dashboard-filters">
         <DashboardFilters
           accounts={initialAccounts}
           selectedAccountId={accountId}
@@ -316,6 +319,7 @@ export function DashboardContent({
       {/* Stats cards (clickable) */}
       <motion.div
         variants={itemVariants}
+        data-tour="dashboard-kpis"
         className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"
       >
         <KpiClickableCard
@@ -380,7 +384,11 @@ export function DashboardContent({
 
       {/* Chart + Top 5 atendentes */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-        <motion.div variants={itemVariants} className="lg:col-span-2">
+        <motion.div
+          variants={itemVariants}
+          data-tour="dashboard-chart"
+          className="lg:col-span-2"
+        >
           <ConversationsLineChart data={chart} granularity={granularity} />
         </motion.div>
         <motion.div variants={itemVariants}>
@@ -400,7 +408,10 @@ export function DashboardContent({
       </div>
 
       {/* Top inboxes + top teams */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+      <div
+        data-tour="dashboard-tops"
+        className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6"
+      >
         <motion.div variants={itemVariants}>
           <Top5ListCard
             icon={Inbox}
@@ -432,7 +443,7 @@ export function DashboardContent({
       </div>
 
       {/* Recent conversations */}
-      <motion.div variants={itemVariants}>
+      <motion.div variants={itemVariants} data-tour="dashboard-recent">
         <RecentConversationsTable items={recent} />
       </motion.div>
 

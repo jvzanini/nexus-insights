@@ -6,10 +6,11 @@ import {
 } from "@/lib/reports/period";
 
 describe("isPeriodKey", () => {
-  it("aceita as 4 chaves canônicas", () => {
+  it("aceita as 5 chaves canônicas", () => {
     expect(isPeriodKey("hoje")).toBe(true);
     expect(isPeriodKey("semana_atual")).toBe(true);
     expect(isPeriodKey("mes_atual")).toBe(true);
+    expect(isPeriodKey("todos")).toBe(true);
     expect(isPeriodKey("custom")).toBe(true);
   });
 
@@ -28,18 +29,19 @@ describe("isPeriodKey", () => {
 });
 
 describe("PERIOD_OPTIONS", () => {
-  it("expõe exatamente as 4 opções canônicas", () => {
-    expect(PERIOD_OPTIONS).toHaveLength(4);
+  it("expõe exatamente as 5 opções canônicas (inclui Todos)", () => {
+    expect(PERIOD_OPTIONS).toHaveLength(5);
     expect(PERIOD_OPTIONS.map((p) => p.key)).toEqual([
       "hoje",
       "semana_atual",
       "mes_atual",
+      "todos",
       "custom",
     ]);
   });
 
-  it("VALID_PERIODS contém as 4 canônicas", () => {
-    expect(VALID_PERIODS.size).toBe(4);
+  it("VALID_PERIODS contém as 5 canônicas", () => {
+    expect(VALID_PERIODS.size).toBe(5);
     for (const opt of PERIOD_OPTIONS) {
       expect(VALID_PERIODS.has(opt.key)).toBe(true);
     }
@@ -79,6 +81,12 @@ describe("getPeriod (canônicas)", () => {
     expect(start.getTime()).toBeLessThan(end.getTime());
     const diffMs = end.getTime() - start.getTime();
     expect(diffMs).toBeLessThanOrEqual(31 * 24 * 60 * 60 * 1000);
+  });
+
+  it("todos devolve range desde o epoch até agora", () => {
+    const { start, end } = getPeriod("todos");
+    expect(start.getTime()).toBe(0);
+    expect(end.getTime()).toBeLessThanOrEqual(Date.now());
   });
 });
 

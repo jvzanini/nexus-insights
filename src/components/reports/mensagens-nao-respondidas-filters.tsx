@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useTransition } from "react";
+import { useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
+import { useFilterTransition } from "@/components/reports/filter-transition";
 
 interface MetaItem {
   id: number;
@@ -46,7 +47,7 @@ export function MensagensNaoRespondidasFilters({
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [pending, startTransition] = useTransition();
+  const { isPending: pending, startTransition } = useFilterTransition();
 
   const value = initial;
 
@@ -58,7 +59,7 @@ export function MensagensNaoRespondidasFilters({
         router.push(qs ? `?${qs}` : "?", { scroll: false });
       });
     },
-    [router],
+    [router, startTransition],
   );
 
   const toggleInbox = (id: number) => {
