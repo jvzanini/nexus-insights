@@ -1,5 +1,80 @@
 # Changelog
 
+## [v0.8.0] 2026-04-30 — Pré-agregação de relatórios + hotfix Bad Gateway
+
+> Release de **infraestrutura**. Resolve o incidente recorrente de Bad Gateway em produção e move parte da carga dos relatórios para um modelo de pré-agregação assíncrona, reduzindo a pressão sobre o banco do Chatwoot e habilitando atualização "quase em tempo real" via SSE.
+
+### Hotfix Bad Gateway (urgente — incidente 2026-04-30)
+
+- **`docker/Dockerfile`** — `--chown=nextjs:nodejs` em todos os COPY + `mkdir -p /app/.next/cache && chown -R nextjs:nodejs /app/.next` antes de `USER nextjs`. Causa raiz: `EACCES` ao escrever cache do Next 16 (`next/image`, prerender) virava `unhandledRejection`, matava o processo e Swarm reiniciava — Traefik respondia 502 durante o restart.
+- **`prisma/seed.ts`** — passa `adapter` ao `new PrismaClient` (Prisma 7 + adapter-pg exigem); seed deixou de quebrar com `PrismaClientInitializationError`.
+- **`src/instrumentation.ts`** (novo) — handlers globais de `unhandledRejection` e `uncaughtException` que apenas logam (defense-in-depth).
+
+### Adicionado — modelo de pré-agregação
+
+- **6 tabelas no banco interno** (Prisma migration `20260430_pre_agregacao`):
+  - `chatwoot_facts_daily_by_account` — KPIs diários consolidados.
+  - `chatwoot_facts_daily_by_inbox` — recortado por inbox.
+  - `chatwoot_facts_daily_by_agent` — recortado por agent (orphans excluídos).
+  - `chatwoot_facts_daily_by_team` — recortado por team (sentinela `0` = "sem time").
+  - `chatwoot_facts_hourly_by_account` — granularidade hora × dia.
+  - `chatwoot_facts_meta` — controle por dimensão (`last_refresh_at`, `last_error`, status).
+- **Camada de leitura** `src/lib/chatwoot/facts.ts` — `readFactsDaily()`, `readFactsHourly()`, `readFactsMeta()` com Zod nos args, `excludeMatrixIA` via LEFT JOIN e cálculo de `lagSeconds + status` (fresh/stale/lagging/never).
+- **5 jobs BullMQ** em `src/worker/jobs/pre-agregacao/`:
+  - `refresh-by-account` (template).
+  - `refresh-by-inbox`, `refresh-by-agent`, `refresh-by-team`.
+  - `housekeeping-old-buckets` — DELETE WHERE bucket_date < hoje − retention (lê `audit.retention_days`).
+- **Schedules cron repetíveis** via `queue.upsertJobScheduler` registrados ao subir o worker:
+  - `refresh-by-*` a cada 5 min (`*/5 * * * *`).
+  - `housekeeping-old-buckets` diário 03:00 (`0 3 * * *`).
+- **Página `/configuracoes/jobs`** (super_admin only) — lista 5 dimensões × N accounts com status colorido (fresh/stale/lagging/never), lag em minutos, `last_error` truncado, botões "Rodar agora" e "Backfill 90 dias". Auto-refresh a cada 5s. Action `triggerRefresh` + `triggerBackfill` + `getJobsStatus` em `src/lib/actions/jobs.ts` (com audit log).
+- **Sidebar** — link "Jobs de pré-agregação" (super_admin only) sob Configurações.
+
+### Adicionado — UI de freshness + tempo "quase real"
+
+- **`<FactsFreshness accountId={...} />`** — badge no header dos relatórios com cor verde/âmbar/rosa/cinza + ícone Lucide e label "Atualizado há X min". Tooltip mostra ISO da última agregação. Auto-refresh 30s. Aplicado em: Visão Geral, Distribuição, Equipe, Origem & IA, Performance, Dashboard.
+- **SSE de invalidação** — `withMetaUpdate` publica `{ type: "facts:refreshed", dimension, accountId }` no canal `nexus-insights:realtime` ao concluir um job. Frontend escuta via `useFactsRealtime` (debounce 5s) e dispara `router.refresh()` automaticamente — usuário vê o painel atualizar sem reload.
+- **Server Action** `getFreshnessForAccount` em `src/lib/actions/freshness.ts`.
+
+### Mudou — relatórios migrados para facts
+
+- **`volumetria-heatmap`** — agora lê de `chatwoot_facts_hourly_by_account` quando filtros são compatíveis (sem inbox/team/agent específicos). Caso contrário, fallback para Chatwoot direto. Cache key inalterado.
+- **`volumetria-dow`** — agora lê de `chatwoot_facts_daily_by_account` e agrega DOW em JS. Mesmo padrão de fallback.
+
+> Os outros 9 relatórios (`home-summary`, `dashboard-data`, `dashboard-kpis`, `status-distribution`, `ranking-atendentes`, `por-departamento`, `tempos-resposta`, `leads-recebidos`, `matrix-ia`) **continuam on-demand** mas exibem o badge `<FactsFreshness />` para sinalizar que existe um pipeline de pré-agregação em paralelo. Migração desses está prevista para a v0.9 (depende de extensões de schema, ex.: snapshot live de open/pending por inbox/team).
+
+### Documentação
+
+- **`docs/superpowers/specs/2026-04-30-pre-agregacao-design.md`** — spec v3 (com histórico v1→v2→v3 documentado).
+- **`docs/superpowers/plans/2026-04-30-pre-agregacao.md`** — plan v3 com 6 marcos (M1 schema+leitura, M2 jobs, M3 backfill, M4 migração, M5 SSE+UI, M6 encerramento).
+
+### Testes
+
+- **+59 testes novos** (459 → 506 total + 1 falhando em arquivo untracked alheio):
+  - `facts.test.ts` (13).
+  - `shared.test.ts` (8 + 3 SSE).
+  - `refresh-by-{account,inbox,agent,team}.test.ts` (~30).
+  - `housekeeping.test.ts` (5).
+  - `jobs.test.ts` (11) — Server Actions.
+  - `volumetria-{heatmap,dow}.test.ts` migradas (7).
+  - `facts-freshness.test.tsx` (4).
+  - `use-facts-realtime.test.tsx` (5).
+
+### Operação / Runbook
+
+- Após deploy, super_admin abre `/configuracoes/jobs` e clica em "Backfill 90 dias" para cada dimensão (1ª vez). Tempo esperado: 5–15 min para 2 accounts × 90 dias.
+- Verificar `/api/health` (sem alteração — extensão `chatwoot_facts.{by_X}` fica para v0.9).
+- Logs do worker (`docker service logs nexus-insights_worker`): `[worker.refresh-by-X] done <jobId> { accounts: N, days: 7, errors: 0 }` a cada 5 min.
+
+### Riscos conhecidos / TODO v0.9
+
+- `triggerBackfill` enfileira `{ days }` em `job.data` mas `processRefreshByX` ainda ignora — janela rolling fixa de 7 dias permanece. (Fácil de estender; documentado em `src/lib/actions/jobs.ts` e na nota de rodapé do painel.)
+- 9 relatórios ainda on-demand (lista acima).
+- Snapshot live (open_at_eod, pending_at_eod) só é gravado para "hoje" — dias passados ficam zerados.
+- Statement timeout do pool Chatwoot mantém os 30s históricos do app (worker não tem isolamento próprio nessa release).
+
+---
+
 ## [v0.7.0] 2026-04-29 — Polimento UX + Agente Nex 2.0
 
 > Polimento amplo após release v0.6.1 — atende feedback crítico do usuário sobre sidebar, filtros, conversas, tour e configuração do Agente Nex.

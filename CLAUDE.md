@@ -97,6 +97,7 @@ Caminho: `/Users/joaovitorzanini/Developer/Claude Code/Nexus AI/Projetos Interno
 - **Auth:** NextAuth.js v5 (JWT stateless, Credentials provider, bcryptjs, session refresh por requisição via callback `jwt`).
 - **DB:** PostgreSQL + Prisma v7 (`@prisma/adapter-pg`); client importado de `@/generated/prisma/client`.
 - **Cache/Queue/Realtime:** Redis 7 + BullMQ + Redis Pub/Sub + SSE em `/api/events`.
+- **Pré-agregação de relatórios** (v0.8.0+): camada de leitura `src/lib/chatwoot/facts.ts` lê 6 tabelas no banco interno (`chatwoot_facts_daily_by_*` + `chatwoot_facts_hourly_by_account` + `chatwoot_facts_meta`). Worker BullMQ (`src/worker/jobs/pre-agregacao/`) refresca rolling 7 dias a cada 5 min, publica `facts:refreshed` no Redis Pub/Sub, frontend escuta via `useFactsRealtime` (debounce 5s) → `router.refresh()`. Painel `/configuracoes/jobs` (super_admin) controla disparo manual e backfill. Runbook em `docs/runbooks/pre-agregacao.md`.
 - **Estrutura de pastas:**
   - `src/app/(auth)` (rotas públicas) e `src/app/(protected)` (autenticadas).
   - `src/lib/actions/` consolidado para Server Actions.

@@ -1,12 +1,27 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-04-30
-**Versão atual em produção:** v0.7.0
+**Versão atual em produção:** v0.8.0
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.7.0)
+## Em produção (v0.8.0)
+
+### Novidades desta release
+
+- **Hotfix Bad Gateway** — Dockerfile com chown correto em `/app/.next` resolve o `EACCES` que derrubava o container; `instrumentation.ts` adiciona handlers globais de unhandledRejection como rede de segurança; `prisma/seed.ts` ganha o adapter (Prisma 7).
+- **Pré-agregação de relatórios** — pipeline assíncrono (5 jobs BullMQ a cada 5 min) popula 6 tabelas de fatos no banco interno; relatórios `volumetria-heatmap` e `volumetria-dow` migrados; demais 9 relatórios continuam on-demand mas exibem badge de freshness.
+- **Tempo "quase real"** — SSE de invalidação dispara `router.refresh()` no frontend assim que um job conclui (`facts:refreshed`).
+- **Página `/configuracoes/jobs`** (super_admin) — monitoramento de status + botão "Backfill 90 dias".
+
+### Operação após primeiro deploy
+
+1. Aplicar migrations (automático via entrypoint).
+2. Worker sobe os 5 schedules cron automaticamente.
+3. Super_admin acessa `/configuracoes/jobs`, clica "Backfill 90 dias" para cada dimensão (4 cliques). Tempo estimado: 5–15 min.
+
+
 
 ### Plataforma
 - **Stack:** Next.js 16 (App Router) + TypeScript + Tailwind v4 + base-ui
