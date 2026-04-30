@@ -46,12 +46,17 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'push' }}
+    permissions:
+      contents: read
+      packages: read
     env:
       PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
       PORTAINER_TOKEN: ${{ secrets.PORTAINER_TOKEN }}
       PORTAINER_ENDPOINT_ID: ${{ secrets.PORTAINER_ENDPOINT_ID }}
       PORTAINER_STACK_ID: ${{ secrets.PORTAINER_STACK_ID }}
-      GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+      # GITHUB_TOKEN do próprio job (com packages: read) é o suficiente
+      # para autenticar o pull no GHCR. Não depende de PAT externo.
+      GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Trigger Portainer redeploy (Swarm-aware)
         run: |
@@ -60,7 +65,7 @@ jobs:
             echo "PORTAINER_STACK_ID não configurado — pulando."
             exit 0
           fi
-          AUTH=$(printf '{"username":"jvzanini","password":"%s"}' "$GHCR_TOKEN" | base64 | tr -d '\n')
+          AUTH=$(printf '{"username":"%s","password":"%s"}' "${GITHUB_ACTOR:-jvzanini}" "$GHCR_TOKEN" | base64 | tr -d '\n')
           curl --silent --insecure -X POST -H "X-API-Key: $PORTAINER_TOKEN" -H "X-Registry-Auth: $AUTH" "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/images/create?fromImage=ghcr.io/jvzanini/nexus-insights&tag=latest" -o /tmp/pull.log -w "Pull image: HTTP %{http_code}\n" || true
           STACK_NAME=$(curl --silent --insecure -H "X-API-Key: $PORTAINER_TOKEN" "$PORTAINER_URL/api/stacks/$PORTAINER_STACK_ID" | jq -r '.Name')
           SERVICE_NAME="${STACK_NAME}_app"
