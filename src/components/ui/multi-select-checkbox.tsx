@@ -54,32 +54,27 @@ export function MultiSelectCheckbox({
   const count = value.length;
   const hasQuery = query.trim().length > 0;
 
-  // Estado inteligente do botão de "selecionar todos / visíveis".
-  const visibleSelected = filtered.filter((o) => value.includes(o.id)).length;
-  const someSelected = visibleSelected > 0;
+  // "Selecionar todos" sempre disponível; "Limpar" só quando há algo
+  // selecionado. Quando há busca ativa, ambas as ações se referem aos itens
+  // visíveis (pelo título do botão).
+  const allTargetIds = (hasQuery ? filtered : options).map((o) => o.id);
+  const allSelected =
+    allTargetIds.length > 0 &&
+    allTargetIds.every((id) => value.includes(id));
 
-  let actionLabel = "";
-  let actionFn: () => void = () => {};
-  if (!hasQuery) {
-    if (count === 0) {
-      actionLabel = "Selecionar todos";
-      actionFn = () => onChange(options.map((o) => o.id));
-    } else {
-      actionLabel = "Limpar tudo";
-      actionFn = () => onChange([]);
+  const handleSelectAll = () => {
+    if (allSelected) return; // já tudo marcado
+    onChange(uniq([...value, ...allTargetIds]));
+  };
+  const handleClear = () => {
+    if (count === 0) return;
+    if (!hasQuery) {
+      onChange([]);
+      return;
     }
-  } else {
-    if (!someSelected) {
-      actionLabel = "Selecionar visíveis";
-      actionFn = () => onChange(uniq([...value, ...filtered.map((o) => o.id)]));
-    } else {
-      actionLabel = "Limpar visíveis";
-      actionFn = () => {
-        const filteredIds = new Set(filtered.map((o) => o.id));
-        onChange(value.filter((id) => !filteredIds.has(id)));
-      };
-    }
-  }
+    const visibleIds = new Set(filtered.map((o) => o.id));
+    onChange(value.filter((id) => !visibleIds.has(id)));
+  };
 
   const toggle = (id: number) => {
     if (value.includes(id)) onChange(value.filter((v) => v !== id));
@@ -92,16 +87,31 @@ export function MultiSelectCheckbox({
         <span className="text-xs font-semibold text-muted-foreground">
           {label}
         </span>
-        <button
-          type="button"
-          onClick={actionFn}
-          className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-          title={
-            hasQuery ? "Aplica somente aos resultados visíveis" : undefined
-          }
-        >
-          {actionLabel}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleSelectAll}
+            disabled={allSelected || allTargetIds.length === 0}
+            className="text-xs text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            title={
+              hasQuery
+                ? "Selecionar somente os resultados visíveis"
+                : "Selecionar todos os itens"
+            }
+          >
+            {hasQuery ? "Selecionar visíveis" : "Selecionar todos"}
+          </button>
+          {count > 0 ? (
+            <button
+              type="button"
+              onClick={handleClear}
+              className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+              title={hasQuery ? "Limpar somente visíveis" : "Limpar seleção"}
+            >
+              {hasQuery ? "Limpar visíveis" : "Limpar"}
+            </button>
+          ) : null}
+        </div>
       </div>
       <div className="px-2 py-2">
         <div className="relative">

@@ -3,6 +3,7 @@
 import {
   Fragment,
   useCallback,
+  useEffect,
   useMemo,
   useState,
   useTransition,
@@ -590,6 +591,17 @@ export function ConversasTable({
     });
   }, []);
 
+  // Sincroniza estado local com novo conjunto vindo do servidor (mudança de
+  // período/filtros aplicada via Server Component re-render). Sem isso, `rows`
+  // e `cursor` ficam stale após o primeiro render — daí o sintoma de "todos os
+  // períodos mostram a mesma quantidade" e o "Carregar mais" sumir.
+  useEffect(() => {
+    setRows(initialRows);
+    setCursor(initialCursor);
+    setError(null);
+    setExpandedIds(new Set());
+  }, [initialRows, initialCursor]);
+
   // ---- Persistências (localStorage) -----
   const [visibleCols, setVisibleCols] = useLocalStorageSet(
     STORAGE_COLS,
@@ -853,7 +865,7 @@ export function ConversasTable({
       >
         <Table>
           <TableHeader
-            className="sticky top-[var(--toolbar-h,132px)] z-[var(--z-table-thead,20)] bg-card"
+            className="sticky top-[var(--toolbar-h,132px)] z-[var(--z-table-thead,20)] bg-card shadow-[0_1px_0_0_rgb(var(--border)_/_0.6)]"
           >
             <TableRow className="hover:bg-transparent">
               {orderedColumns.map((col) => {

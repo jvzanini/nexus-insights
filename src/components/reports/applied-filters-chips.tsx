@@ -1,9 +1,13 @@
 "use client";
 
-import { X } from "lucide-react";
+import { ArrowDown, ArrowUp, X } from "lucide-react";
 
 import type { FilterState } from "@/lib/reports/filter-state";
 import type { MetaItem } from "@/lib/chatwoot/queries/meta-cache";
+import type {
+  SortRule,
+  SortRuleOption,
+} from "@/components/reports/sorting-dialog";
 
 /**
  * AppliedFiltersChips — chips compactos resumindo filtros já aplicados.
@@ -38,6 +42,11 @@ interface Props {
   applied: FilterState;
   onRemove: (key: keyof FilterState) => void;
   onClearAll: () => void;
+  /** Critérios de ordenação aplicados (opcional). */
+  sortStack?: SortRule[];
+  sortOptions?: SortRuleOption[];
+  onRemoveSort?: (key: string) => void;
+  onClearAllSort?: () => void;
 }
 
 const STATUS_LABELS: Record<number, string> = {
@@ -76,6 +85,10 @@ export function AppliedFiltersChips({
   applied,
   onRemove,
   onClearAll,
+  sortStack,
+  sortOptions,
+  onRemoveSort,
+  onClearAllSort,
 }: Props) {
   const chips: Array<{ key: keyof FilterState; label: string }> = [];
 
@@ -118,7 +131,19 @@ export function AppliedFiltersChips({
     });
   }
 
-  if (chips.length === 0) return null;
+  const sortChips = sortStack?.length
+    ? sortStack.map((rule, idx) => {
+        const opt = sortOptions?.find((o) => o.key === rule.key);
+        return {
+          key: rule.key,
+          direction: rule.direction,
+          index: idx + 1,
+          label: opt?.label ?? rule.key,
+        };
+      })
+    : [];
+
+  if (chips.length === 0 && sortChips.length === 0) return null;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -141,13 +166,53 @@ export function AppliedFiltersChips({
           </span>
         );
       })}
-      <button
-        type="button"
-        onClick={onClearAll}
-        className="cursor-pointer text-xs text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline"
-      >
-        Limpar tudo
-      </button>
+
+      {sortChips.map((c) => (
+        <span
+          key={`sort-${c.key}`}
+          className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/40 bg-violet-500/10 px-2.5 py-1 text-xs text-foreground"
+        >
+          <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-violet-500/20 text-[9px] font-bold text-violet-300 tabular-nums">
+            {c.index}
+          </span>
+          {c.direction === "asc" ? (
+            <ArrowUp className="h-3 w-3" aria-hidden="true" />
+          ) : (
+            <ArrowDown className="h-3 w-3" aria-hidden="true" />
+          )}
+          <span className="truncate">{c.label}</span>
+          {onRemoveSort ? (
+            <button
+              type="button"
+              onClick={() => onRemoveSort(c.key)}
+              aria-label={`Remover ordenação por ${c.label}`}
+              className="inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            >
+              <X className="h-3 w-3" aria-hidden="true" />
+            </button>
+          ) : null}
+        </span>
+      ))}
+
+      {chips.length > 0 ? (
+        <button
+          type="button"
+          onClick={onClearAll}
+          className="cursor-pointer text-xs text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline"
+        >
+          Limpar filtros
+        </button>
+      ) : null}
+
+      {sortChips.length > 0 && onClearAllSort ? (
+        <button
+          type="button"
+          onClick={onClearAllSort}
+          className="cursor-pointer text-xs text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline"
+        >
+          Limpar ordenação
+        </button>
+      ) : null}
     </div>
   );
 }

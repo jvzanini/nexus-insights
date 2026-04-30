@@ -121,7 +121,7 @@ describe("AppliedFiltersChips", () => {
     expect(onRemove).toHaveBeenCalledWith("teamIds");
   });
 
-  it("Limpar tudo chama onClearAll", () => {
+  it("Limpar filtros chama onClearAll quando há filtros aplicados", () => {
     const onClearAll = jest.fn();
     render(
       <AppliedFiltersChips
@@ -131,8 +131,44 @@ describe("AppliedFiltersChips", () => {
         onClearAll={onClearAll}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /Limpar tudo/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Limpar filtros/ }));
     expect(onClearAll).toHaveBeenCalled();
+  });
+
+  it("renderiza chips de ordenação separadamente quando sortStack tem critérios", () => {
+    const onRemoveSort = jest.fn();
+    const onClearAllSort = jest.fn();
+    render(
+      <AppliedFiltersChips
+        meta={META}
+        applied={EMPTY_FILTER_STATE}
+        onRemove={() => {}}
+        onClearAll={() => {}}
+        sortStack={[
+          { key: "status", direction: "asc" },
+          { key: "waiting_seconds", direction: "desc" },
+        ]}
+        sortOptions={[
+          { key: "status", label: "Status" },
+          { key: "waiting_seconds", label: "Sem resposta há" },
+        ]}
+        onRemoveSort={onRemoveSort}
+        onClearAllSort={onClearAllSort}
+      />,
+    );
+    // Os labels aparecem como chips de ordem (ícone + número + texto).
+    expect(screen.getByText("Status")).toBeInTheDocument();
+    expect(screen.getByText("Sem resposta há")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Remover ordenação por Status/,
+      }),
+    );
+    expect(onRemoveSort).toHaveBeenCalledWith("status");
+    fireEvent.click(
+      screen.getByRole("button", { name: /Limpar ordenação/ }),
+    );
+    expect(onClearAllSort).toHaveBeenCalled();
   });
 
   it("status mostra label legível (não o id numérico)", () => {

@@ -12,6 +12,7 @@ import { Plus, Trash2, FolderPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MultiSelectCheckbox } from "@/components/ui/multi-select-checkbox";
 import {
   type Condition,
   type ConditionGroup,
@@ -408,13 +409,7 @@ function ValueInput({ field, operator, value, onChange }: ValueInputProps) {
   if (field.type === "multi_select" || isMultiOp) {
     const arr = Array.isArray(value) ? (value as (string | number)[]) : [];
     const opts = field.options ?? [];
-    const toggle = (optValue: string | number) => {
-      const exists = arr.some((v) => String(v) === String(optValue));
-      const next = exists
-        ? arr.filter((v) => String(v) !== String(optValue))
-        : [...arr, optValue];
-      onChange(next);
-    };
+
     if (opts.length === 0) {
       // Free-form multi: usa input separado por vírgula.
       return (
@@ -435,8 +430,39 @@ function ValueInput({ field, operator, value, onChange }: ValueInputProps) {
         />
       );
     }
+
+    // Quando todas as opções têm value numérico (caso comum: inboxes, teams,
+    // labels, status), reusa o MultiSelectCheckbox compacto — popover com
+    // busca interna + Selecionar todos / Limpar + scroll. Substitui o
+    // "tapete de chips" que estourava o Dialog.
+    const allNumeric = opts.every((o) => typeof o.value === "number");
+    if (allNumeric) {
+      return (
+        <div className="min-w-[200px] max-w-[280px]">
+          <MultiSelectCheckbox
+            label={field.label}
+            options={opts.map((o) => ({
+              id: o.value as number,
+              name: o.label,
+            }))}
+            value={arr.map((v) => Number(v)).filter((n) => Number.isFinite(n))}
+            onChange={(next) => onChange(next)}
+          />
+        </div>
+      );
+    }
+
+    // Fallback para options string: mantém os chips, mas com altura limitada
+    // e scroll interno para não estourar o Dialog quando há muitas opções.
+    const toggle = (optValue: string | number) => {
+      const exists = arr.some((v) => String(v) === String(optValue));
+      const next = exists
+        ? arr.filter((v) => String(v) !== String(optValue))
+        : [...arr, optValue];
+      onChange(next);
+    };
     return (
-      <div className="flex flex-wrap gap-1">
+      <div className="flex max-h-32 max-w-[280px] flex-wrap gap-1 overflow-y-auto rounded-md border border-border/40 bg-background/40 p-1.5">
         {opts.map((opt) => {
           const active = arr.some((v) => String(v) === String(opt.value));
           return (

@@ -1,40 +1,19 @@
 "use client";
 
-// ConversaDrillDown — painel inline de detalhes que aparece ao expandir uma
-// linha da tabela de conversas (Task 10 da release Conversas Poderoso).
-//
-// Mostra contato, tempos, etiquetas e atributos customizados completos sem
-// truncar — colunas equivalentes na tabela passam a ficar invisíveis por
-// default (continuam disponíveis via ColumnsToggle).
+// ConversaDrillDown — painel inline minimalista que expande ao clicar na linha.
+// Mostra APENAS WhatsApp formatado completo + atributos chave:valor sem
+// reticências + botão "Abrir no Chatwoot". Dados que já estão na linha
+// (Nome, Status, Atendente, Estado, Departamento, Prioridade, Tempos) NÃO
+// são repetidos — drill-down só serve pra exibir o que não couber na grade.
 
 import { useState } from "react";
 
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { LabelsChips } from "@/components/reports/labels-chips";
 import { OpenInChatwoot } from "@/components/reports/open-in-chatwoot";
 import { formatPhone } from "@/lib/utils/format-phone";
-import { detectDocument } from "@/lib/utils/format-document";
 import type { ConversaRow } from "@/lib/chatwoot/queries/conversas-list";
 
-const MAX_VISIBLE_ATTRS = 30;
-
-function formatDateTime(iso: string | null): string {
-  if (!iso) return "—";
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return "—";
-    return new Intl.DateTimeFormat("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(d);
-  } catch {
-    return "—";
-  }
-}
+const ATTRS_PER_PAGE = 24;
 
 interface Props {
   row: ConversaRow;
@@ -44,72 +23,46 @@ interface Props {
 export function ConversaDrillDown({ row, accountId }: Props) {
   const phone = row.contact.phone_number
     ? formatPhone(row.contact.phone_number) || row.contact.phone_number
-    : "—";
-  const doc = detectDocument({
-    identifier: row.contact.identifier,
-    additional_attributes: row.contact.additional_attributes,
-  });
-  const docDisplay = doc?.formatted ?? "—";
+    : null;
 
   const attrs = row.custom_attributes ?? {};
   const entries = Object.entries(attrs).filter(
     ([, v]) => v !== null && v !== undefined && v !== "",
   );
   const [showAll, setShowAll] = useState(false);
-  const visible = showAll ? entries : entries.slice(0, MAX_VISIBLE_ATTRS);
-  const hidden = entries.length - visible.length;
+  const visible = showAll ? entries : entries.slice(0, ATTRS_PER_PAGE);
+  const hidden = Math.max(entries.length - visible.length, 0);
 
   return (
     <div
       role="region"
       aria-label={`Detalhes da conversa ${row.display_id}`}
-      className="space-y-4 rounded-lg bg-muted/30 p-4 text-[13px]"
+      className="space-y-3 bg-muted/30 p-4 text-[13px]"
     >
-      <div className="grid gap-4 md:grid-cols-2">
-        <div>
-          <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Contato
-          </h4>
-          <dl className="space-y-1">
-            <DLRow label="Nome" value={row.contact.name ?? "—"} />
-            <DLRow label="WhatsApp" value={phone} mono />
-            <DLRow label="Documento" value={docDisplay} mono />
-          </dl>
-        </div>
-
-        <div>
-          <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Tempos
-          </h4>
-          <dl className="space-y-1">
-            <DLRow label="Criada em" value={formatDateTime(row.created_at)} />
-            <DLRow
-              label="Última atividade"
-              value={formatDateTime(row.last_activity_at)}
-            />
-          </dl>
-        </div>
+      {/* WhatsApp completo (estava com reticências antes). */}
+      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          WhatsApp
+        </span>
+        <span className="font-mono text-[14px] tabular-nums text-foreground">
+          {phone ?? "—"}
+        </span>
       </div>
 
+      {/* Atributos: cada um em chip chave:valor sem truncar. */}
       <div>
-        <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Etiquetas
-        </h4>
-        {row.labels.length > 0 ? (
-          <LabelsChips labels={row.labels} />
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        )}
-      </div>
-
-      <div>
-        <h4 className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Atributos ({entries.length})
-        </h4>
+        <div className="mb-2 flex items-baseline gap-2">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Atributos
+          </span>
+          <span className="text-[11px] text-muted-foreground/70 tabular-nums">
+            ({entries.length})
+          </span>
+        </div>
         {visible.length === 0 ? (
-          <span className="text-muted-foreground">—</span>
+          <span className="text-muted-foreground">— sem atributos</span>
         ) : (
-          <ul className="grid gap-1 md:grid-cols-2">
+          <ul className="grid gap-1.5 md:grid-cols-2 lg:grid-cols-3">
             {visible.map(([k, v]) => {
               const raw =
                 typeof v === "string" ||
@@ -120,7 +73,7 @@ export function ConversaDrillDown({ row, accountId }: Props) {
               return (
                 <li
                   key={k}
-                  className="flex items-baseline gap-2 break-all rounded-md border border-border/30 bg-card px-2 py-1"
+                  className="flex flex-wrap items-baseline gap-x-2 break-all rounded-md border border-border/30 bg-card px-2 py-1"
                 >
                   <span className="text-[11px] font-medium text-muted-foreground/80">
                     {k}:
@@ -137,42 +90,28 @@ export function ConversaDrillDown({ row, accountId }: Props) {
             variant="ghost"
             size="sm"
             onClick={() => setShowAll(true)}
-            className="mt-2"
+            className="mt-2 h-7 text-[11px]"
           >
             Ver mais ({hidden})
           </Button>
         ) : null}
+        {showAll && entries.length > ATTRS_PER_PAGE ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowAll(false)}
+            className="mt-2 h-7 text-[11px]"
+          >
+            Recolher
+          </Button>
+        ) : null}
       </div>
 
-      <div className="flex justify-end border-t border-border pt-3">
+      {/* Ação rápida. */}
+      <div className="flex justify-end pt-1">
         <OpenInChatwoot accountId={accountId} displayId={row.display_id} />
       </div>
-    </div>
-  );
-}
-
-function DLRow({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
-  return (
-    <div className="flex items-baseline gap-2">
-      <dt className="w-32 shrink-0 text-[11px] uppercase tracking-wide text-muted-foreground">
-        {label}
-      </dt>
-      <dd
-        className={cn(
-          "text-[13px] text-foreground/90",
-          mono && "font-mono tabular-nums",
-        )}
-      >
-        {value}
-      </dd>
     </div>
   );
 }

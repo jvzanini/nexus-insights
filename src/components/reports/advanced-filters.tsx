@@ -250,7 +250,10 @@ export function AdvancedFilters({
 
       {/* Linha 2 — Busca + chip Filtros + chip Ordenação */}
       <div className="flex flex-wrap items-center gap-2">
-        <div data-tour="search" className="relative min-w-[260px] flex-1">
+        <div
+          data-tour="search"
+          className="relative w-full max-w-[320px] min-w-[200px] sm:flex-none"
+        >
           <Search
             className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
             aria-hidden="true"
@@ -330,12 +333,18 @@ export function AdvancedFilters({
         </Button>
       </div>
 
-      {/* Linha 3 — Chips aplicados (condicional) */}
+      {/* Linha 3 — Chips aplicados (filtros + ordenação, condicional) */}
       <AppliedFiltersChips
         meta={{ inboxes, teams, assignees, labels }}
         applied={applied}
         onRemove={handleRemoveGroup}
         onClearAll={handleReset}
+        sortStack={sortStack}
+        sortOptions={SORT_OPTIONS}
+        onRemoveSort={(key) =>
+          onSortStackChange(sortStack.filter((r) => r.key !== key))
+        }
+        onClearAllSort={() => onSortStackChange([])}
       />
 
       {/* Linha 4 — Banner pending (condicional) */}

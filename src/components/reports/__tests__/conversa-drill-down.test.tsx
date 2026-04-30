@@ -35,15 +35,19 @@ const baseRow: ConversaRow = {
   labels: [{ name: "VIP", color: "" }],
 };
 
-describe("ConversaDrillDown", () => {
-  it("renderiza WhatsApp formatado, etiqueta e atributos completos", () => {
+describe("ConversaDrillDown (minimal — só WhatsApp + Atributos)", () => {
+  it("renderiza apenas WhatsApp + Atributos sem repetir dados da linha", () => {
     render(<ConversaDrillDown row={baseRow} accountId={1} />);
-    expect(screen.getByText(/Fernando T/i)).toBeInTheDocument();
-    // O telefone aparece formatado em pt-BR. Não validamos a string exata
-    // (o formatPhone pode normalizar), apenas que o WhatsApp label existe.
+    // WhatsApp visível e completo (não truncado).
     expect(screen.getByText("WhatsApp")).toBeInTheDocument();
-    expect(screen.getByText("VIP")).toBeInTheDocument();
+    // Atributos com chave e valor.
     expect(screen.getByText(/wpp_id/i)).toBeInTheDocument();
-    expect(screen.getByText(/Atributos \(2\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Atributos/i)).toBeInTheDocument();
+    expect(screen.getByText(/\(2\)/)).toBeInTheDocument();
+    // Dados que JÁ aparecem na linha não devem ser repetidos no drill-down:
+    // Nome do contato, Etiquetas, Documento, Datas — fora do escopo da v0.9.1.
+    expect(screen.queryByText(/Fernando T/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("VIP")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Criada em/i)).not.toBeInTheDocument();
   });
 });
