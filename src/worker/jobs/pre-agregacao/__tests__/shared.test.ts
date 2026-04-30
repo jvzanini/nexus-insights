@@ -53,8 +53,9 @@ describe("getAccountsToRefresh", () => {
     const sql = mockedQuery.mock.calls[0][0] as string;
     expect(sql).toMatch(/SELECT\s+DISTINCT/i);
     expect(sql).toMatch(/user_account_access/);
-    expect(sql).toMatch(/revoked_at\s+IS\s+NULL/i);
     expect(sql).toMatch(/ORDER BY/i);
+    // Schema atual NÃO tem coluna revoked_at — a query NÃO deve referenciá-la.
+    expect(sql).not.toMatch(/revoked_at/i);
   });
 
   it("retorna array vazio quando não há accounts", async () => {

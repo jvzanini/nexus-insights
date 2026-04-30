@@ -29,14 +29,15 @@ const DIMENSION_TABLE: Record<FactsDimension, string> = {
 };
 
 /**
- * Retorna os Chatwoot account IDs com pelo menos um usuário ativo (acesso
- * não revogado). Cada job de refresh percorre essa lista.
+ * Retorna os Chatwoot account IDs distintos referenciados em `user_account_access`.
+ * O schema atual NÃO tem coluna `revoked_at` — toda linha presente já representa
+ * acesso ativo (revogação se faz por DELETE, não soft-delete). Cada job de
+ * refresh percorre essa lista.
  */
 export async function getAccountsToRefresh(): Promise<number[]> {
   const result = await pgPool.query<{ chatwoot_account_id: number }>(
     `SELECT DISTINCT chatwoot_account_id
      FROM user_account_access
-     WHERE revoked_at IS NULL
      ORDER BY chatwoot_account_id ASC`,
   );
   return result.rows.map((r) => r.chatwoot_account_id);
