@@ -37,6 +37,9 @@ YYYY-MM-DD HH:MM | agent=<agent-id> | commit=<sha7> | scope=<feat|fix|docs|infra
 2026-04-30 18:15 | agent=claude-conversas-v0.10.1-release | run=25181530803 | scope=release | summary=Build da release v0.10.1 verde (6m9s). Container deployed.
 2026-04-30 18:17 | agent=claude-conversas-v0.10.1-release | run=25181929719 | scope=infra | summary=Portainer fix com app_version=v0.10.1 — APP_VERSION env atualizada no service. /api/health retorna version v0.10.1 status ok db<30ms.
 2026-04-30 18:20 | agent=claude-conversas-v0.10.1-release | observation=session-end | summary=v0.10.1 operacional em produção. Active file deletado.
+2026-04-30 18:30 | agent=claude-dashboard-v010-fix | commit=5eadbea | scope=fix | summary=Hotfix UX dashboard v0.10.2 — drill-down central (fix bug de centralização), bar-only nos cards de distribuição, status compactado horizontal, "Abrir no Chatwoot" em todas as tabelas, hint de click nas barras, remove conversas recentes do dashboard.
+2026-04-30 18:42 | agent=claude-dashboard-v010-fix | run=25182308818,25182594386 | scope=release | summary=Build v0.10.2 success + portainer-fix atualizou APP_VERSION. /api/health version=v0.10.2 status=ok.
+2026-04-30 18:43 | agent=claude-dashboard-v010-fix | observation=session-end | summary=Sessão encerrada. Active file deletado.
 ```
 
 > Entradas anteriores aos workflows do dia 2026-04-30 estão capturadas no CHANGELOG.md (não vamos retroagir HISTORY pra trás disso para evitar trabalho inútil).
