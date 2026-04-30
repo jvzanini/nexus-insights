@@ -4,7 +4,9 @@ import { CachedBadge } from "@/components/reports/cached-badge";
 import { StaleBanner } from "@/components/reports/stale-banner";
 import { KpiCard } from "@/components/reports/kpi-card";
 import { DonutWithCenter, EmptyChartState } from "@/components/charts";
+import { ErrorState } from "@/components/error-state";
 import { resolvePeriod } from "@/lib/reports/resolve-period";
+import { shouldExcludeMatrixIA } from "@/lib/reports/exclude-matrix-ia";
 import { statusDistribution } from "@/lib/chatwoot/queries/status-distribution";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
 import { CHART_COLORS } from "@/lib/charts/colors";
@@ -31,10 +33,21 @@ export async function StatusPieContent({
   customStart,
   customEnd,
 }: DashboardContentProps) {
-  const { range } = await resolvePeriod({ period, customStart, customEnd });
-  const filters: ReportFilters = { period: range };
-
-  const result = await statusDistribution({ accountId, filters });
+  let result;
+  try {
+    const { range } = await resolvePeriod({ period, customStart, customEnd });
+    const excludeMatrixIA = await shouldExcludeMatrixIA();
+    const filters: ReportFilters = { period: range, excludeMatrixIA };
+    result = await statusDistribution({ accountId, filters });
+  } catch (err) {
+    console.error("[StatusPieContent] erro:", err);
+    return (
+      <ErrorState
+        title="Não foi possível carregar Status das conversas"
+        message="Tente novamente em instantes ou ajuste o período selecionado."
+      />
+    );
+  }
 
   const map = new Map<number, number>();
   for (const r of result.data) map.set(r.status, r.total);

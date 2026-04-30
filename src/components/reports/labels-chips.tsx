@@ -2,7 +2,25 @@ import { cn } from "@/lib/utils";
 
 interface ConversaLabel {
   name: string;
-  color: string;
+  color?: string;
+}
+
+// Paleta determinística para labels — cor baseada em hash do nome
+const LABEL_COLORS = [
+  "#8b5cf6", // violet
+  "#10b981", // emerald
+  "#f59e0b", // amber
+  "#3b82f6", // blue
+  "#ec4899", // pink
+  "#06b6d4", // cyan
+  "#f97316", // orange
+  "#22c55e", // green
+];
+
+function colorFromName(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0;
+  return LABEL_COLORS[Math.abs(hash) % LABEL_COLORS.length];
 }
 
 interface LabelsChipsProps {
@@ -58,7 +76,7 @@ export function LabelsChips({
   return (
     <div className={cn("inline-flex flex-wrap items-center gap-1", className)}>
       {visible.map((label, idx) => {
-        const bg = isHex(label.color) ? label.color : "#6b7280";
+        const bg = label.color && isHex(label.color) ? label.color : colorFromName(label.name);
         const fg = getContrastColor(bg);
         return (
           <span

@@ -5,7 +5,9 @@ import { StaleBanner } from "@/components/reports/stale-banner";
 import { KpiCard } from "@/components/reports/kpi-card";
 import { GranularitySelector } from "@/components/reports/granularity-selector";
 import { InteractiveAreaChart, EmptyChartState } from "@/components/charts";
+import { ErrorState } from "@/components/error-state";
 import { resolvePeriod } from "@/lib/reports/resolve-period";
+import { shouldExcludeMatrixIA } from "@/lib/reports/exclude-matrix-ia";
 import {
   leadsRecebidos,
   type Granularity,
@@ -41,15 +43,26 @@ export async function LeadsRecebidosContent({
   customEnd,
   granularity,
 }: LeadsRecebidosContentProps) {
-  const { range } = await resolvePeriod({ period, customStart, customEnd });
-  const filters: ReportFilters = { period: range };
-
-  const result = await leadsRecebidos({
-    accountId,
-    filters,
-    granularity,
-    compareWith: true,
-  });
+  let result;
+  try {
+    const { range } = await resolvePeriod({ period, customStart, customEnd });
+    const excludeMatrixIA = await shouldExcludeMatrixIA();
+    const filters: ReportFilters = { period: range, excludeMatrixIA };
+    result = await leadsRecebidos({
+      accountId,
+      filters,
+      granularity,
+      compareWith: true,
+    });
+  } catch (err) {
+    console.error("[LeadsRecebidosContent] erro:", err);
+    return (
+      <ErrorState
+        title="Não foi possível carregar Leads recebidos"
+        message="Tente novamente em instantes ou ajuste o período selecionado."
+      />
+    );
+  }
 
   const rows = result.data.rows;
   const comparison = result.data.comparison;

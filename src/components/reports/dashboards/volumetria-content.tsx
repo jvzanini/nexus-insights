@@ -4,7 +4,9 @@ import { CachedBadge } from "@/components/reports/cached-badge";
 import { StaleBanner } from "@/components/reports/stale-banner";
 import { Heatmap } from "@/components/reports/heatmap";
 import { InteractiveBarChart, EmptyChartState } from "@/components/charts";
+import { ErrorState } from "@/components/error-state";
 import { resolvePeriod } from "@/lib/reports/resolve-period";
+import { shouldExcludeMatrixIA } from "@/lib/reports/exclude-matrix-ia";
 import { volumetriaDow } from "@/lib/chatwoot/queries/volumetria-dow";
 import { volumetriaHeatmap } from "@/lib/chatwoot/queries/volumetria-heatmap";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
@@ -19,13 +21,25 @@ export async function VolumetriaContent({
   customStart,
   customEnd,
 }: DashboardContentProps) {
-  const { range } = await resolvePeriod({ period, customStart, customEnd });
-  const filters: ReportFilters = { period: range };
-
-  const [dowResult, heatmapResult] = await Promise.all([
-    volumetriaDow({ accountId, filters }),
-    volumetriaHeatmap({ accountId, filters }),
-  ]);
+  let dowResult;
+  let heatmapResult;
+  try {
+    const { range } = await resolvePeriod({ period, customStart, customEnd });
+    const excludeMatrixIA = await shouldExcludeMatrixIA();
+    const filters: ReportFilters = { period: range, excludeMatrixIA };
+    [dowResult, heatmapResult] = await Promise.all([
+      volumetriaDow({ accountId, filters }),
+      volumetriaHeatmap({ accountId, filters }),
+    ]);
+  } catch (err) {
+    console.error("[VolumetriaContent] erro:", err);
+    return (
+      <ErrorState
+        title="Não foi possível carregar Volumetria"
+        message="Tente novamente em instantes ou ajuste o período selecionado."
+      />
+    );
+  }
 
   const stale = dowResult.stale || heatmapResult.stale;
   const cachedAt = dowResult.cachedAt ?? heatmapResult.cachedAt;

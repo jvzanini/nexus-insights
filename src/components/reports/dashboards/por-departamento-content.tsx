@@ -3,7 +3,9 @@ import { Building2, Inbox, BarChart3 } from "lucide-react";
 import { CachedBadge } from "@/components/reports/cached-badge";
 import { StaleBanner } from "@/components/reports/stale-banner";
 import { InteractiveBarChart, EmptyChartState } from "@/components/charts";
+import { ErrorState } from "@/components/error-state";
 import { resolvePeriod } from "@/lib/reports/resolve-period";
+import { shouldExcludeMatrixIA } from "@/lib/reports/exclude-matrix-ia";
 import { porDepartamento } from "@/lib/chatwoot/queries/por-departamento";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
 import { formatDuration } from "@/lib/utils/format-time";
@@ -62,10 +64,22 @@ export async function PorDepartamentoContent({
   customStart,
   customEnd,
 }: DashboardContentProps) {
-  const { range } = await resolvePeriod({ period, customStart, customEnd });
-  const filters: ReportFilters = { period: range };
+  let result;
+  try {
+    const { range } = await resolvePeriod({ period, customStart, customEnd });
+    const excludeMatrixIA = await shouldExcludeMatrixIA();
+    const filters: ReportFilters = { period: range, excludeMatrixIA };
+    result = await porDepartamento({ accountId, filters });
+  } catch (err) {
+    console.error("[PorDepartamentoContent] erro:", err);
+    return (
+      <ErrorState
+        title="Não foi possível carregar Por departamento"
+        message="Tente novamente em instantes ou ajuste o período selecionado."
+      />
+    );
+  }
 
-  const result = await porDepartamento({ accountId, filters });
   const rows = result.data;
 
   const chartData = rows.map((r) => ({

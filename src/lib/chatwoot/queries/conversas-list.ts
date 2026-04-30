@@ -2,6 +2,12 @@
  * Lista paginada de conversas com JOINs para contact, inbox (estado),
  * team (departamento) e users (atendente). Inclui:
  *  - `identifier` e `additional_attributes` do contato (para detecção de CPF/CNPJ).
+ *  - `custom_attributes` da conversa (jsonb, para tooltip/colunas opcionais).
+ *  - `created_at` da conversa e `last_activity_at`.
+ *  - `last_message_type`, `last_message_at`, `last_incoming_at`, `last_outgoing_at`
+ *    (subqueries em messages, ignorando `private` e activity).
+ *  - `waiting_seconds` (tempo sem resposta) e `open_seconds` (tempo aberta sem
+ *    novo movimento) calculados via `EXTRACT(EPOCH FROM ...)` no Postgres.
  *  - Labels (taggings + tags) agregadas em JSON.
  *  - Cursor pagination por (last_activity_at DESC, id DESC).
  *
@@ -34,7 +40,34 @@ export interface ConversaRow {
   assignee: { id: number | null; name: string | null };
   status: number;
   priority: number | null;
+  /** Criação da conversa (ISO). */
+  created_at: string | null;
+  /** Última atividade (ISO). */
   last_activity_at: string | null;
+  /** message_type da última msg pública não-activity (0=incoming, 1=outgoing) ou null. */
+  last_message_type: number | null;
+  /** ISO da última msg pública não-activity. */
+  last_message_at: string | null;
+  /** ISO da última msg incoming pública. */
+  last_incoming_at: string | null;
+  /** ISO da última msg outgoing pública. */
+  last_outgoing_at: string | null;
+  /** custom_attributes (jsonb) da conversa. */
+  custom_attributes: Record<string, unknown> | null;
+  /**
+   * Tempo, em segundos, em que a conversa está sem resposta.
+   * - resolvida (status=1): null.
+   * - aberta + última msg incoming: now() - last_incoming_at.
+   * - caso contrário: null.
+   */
+  waiting_seconds: number | null;
+  /**
+   * Tempo, em segundos, em que a conversa está aberta aguardando o cliente.
+   * - resolvida (status=1): null.
+   * - aberta + última msg outgoing: now() - last_outgoing_at.
+   * - caso contrário: null.
+   */
+  open_seconds: number | null;
   labels: ConversaLabel[];
 }
 
@@ -50,6 +83,7 @@ export interface ConversasListCursor {
 }
 
 const DEFAULT_LIMIT = 50;
+const MAX_LIMIT = 10000;
 const DEFAULT_TTL_SECONDS = 30;
 
 interface RawRow {
@@ -57,6 +91,7 @@ interface RawRow {
   display_id: number;
   status: number;
   priority: number | null;
+  conversation_created_at: Date | null;
   last_activity_at: Date | null;
   contact_id: number | null;
   contact_name: string | null;
@@ -69,6 +104,13 @@ interface RawRow {
   team_name: string | null;
   assignee_id: number | null;
   assignee_name: string | null;
+  custom_attributes: Record<string, unknown> | null;
+  last_message_type: number | null;
+  last_message_at: Date | null;
+  last_incoming_at: Date | null;
+  last_outgoing_at: Date | null;
+  waiting_seconds: string | number | null;
+  open_seconds: string | number | null;
   labels: ConversaLabel[] | null;
 }
 
@@ -93,6 +135,12 @@ function decodeCursor(raw: string): ConversasListCursor | null {
   }
 }
 
+function toNumberOrNull(v: string | number | null): number | null {
+  if (v === null || v === undefined) return null;
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
 export async function conversasList(args: {
   accountId: number;
   filters: ReportFilters;
@@ -102,7 +150,7 @@ export async function conversasList(args: {
   cacheScope?: "live" | "historical";
   ttlSeconds?: number;
 }) {
-  const limit = Math.min(Math.max(args.limit ?? DEFAULT_LIMIT, 1), 200);
+  const limit = Math.min(Math.max(args.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
   const cursor = args.cursor ? decodeCursor(args.cursor) : null;
   const cacheScope = args.cacheScope ?? "live";
   const ttl =
@@ -146,7 +194,9 @@ export async function conversasList(args: {
               c.display_id,
               c.status,
               c.priority,
+              c.created_at AS conversation_created_at,
               c.last_activity_at,
+              c.custom_attributes,
               ct.id AS contact_id,
               ct.name AS contact_name,
               ct.phone_number AS contact_phone_number,
@@ -158,9 +208,83 @@ export async function conversasList(args: {
               tm.name AS team_name,
               c.assignee_id,
               u.name AS assignee_name,
+              (
+                SELECT m.message_type FROM messages m
+                WHERE m.conversation_id = c.id
+                  AND m.message_type IN (0, 1)
+                  AND m.private = false
+                ORDER BY m.created_at DESC
+                LIMIT 1
+              ) AS last_message_type,
+              (
+                SELECT m.created_at FROM messages m
+                WHERE m.conversation_id = c.id
+                  AND m.message_type IN (0, 1)
+                  AND m.private = false
+                ORDER BY m.created_at DESC
+                LIMIT 1
+              ) AS last_message_at,
+              (
+                SELECT m.created_at FROM messages m
+                WHERE m.conversation_id = c.id
+                  AND m.message_type = 0
+                  AND m.private = false
+                ORDER BY m.created_at DESC
+                LIMIT 1
+              ) AS last_incoming_at,
+              (
+                SELECT m.created_at FROM messages m
+                WHERE m.conversation_id = c.id
+                  AND m.message_type = 1
+                  AND m.private = false
+                ORDER BY m.created_at DESC
+                LIMIT 1
+              ) AS last_outgoing_at,
+              CASE
+                WHEN c.status = 1 THEN NULL
+                WHEN (
+                  SELECT m.message_type FROM messages m
+                  WHERE m.conversation_id = c.id
+                    AND m.message_type IN (0, 1)
+                    AND m.private = false
+                  ORDER BY m.created_at DESC
+                  LIMIT 1
+                ) = 0 THEN EXTRACT(EPOCH FROM (
+                  NOW() - (
+                    SELECT m.created_at FROM messages m
+                    WHERE m.conversation_id = c.id
+                      AND m.message_type = 0
+                      AND m.private = false
+                    ORDER BY m.created_at DESC
+                    LIMIT 1
+                  )
+                ))
+                ELSE NULL
+              END AS waiting_seconds,
+              CASE
+                WHEN c.status = 1 THEN NULL
+                WHEN (
+                  SELECT m.message_type FROM messages m
+                  WHERE m.conversation_id = c.id
+                    AND m.message_type IN (0, 1)
+                    AND m.private = false
+                  ORDER BY m.created_at DESC
+                  LIMIT 1
+                ) = 1 THEN EXTRACT(EPOCH FROM (
+                  NOW() - (
+                    SELECT m.created_at FROM messages m
+                    WHERE m.conversation_id = c.id
+                      AND m.message_type = 1
+                      AND m.private = false
+                    ORDER BY m.created_at DESC
+                    LIMIT 1
+                  )
+                ))
+                ELSE NULL
+              END AS open_seconds,
               COALESCE(
                 (
-                  SELECT json_agg(json_build_object('name', t.name, 'color', t.color))
+                  SELECT json_agg(json_build_object('name', t.name))
                   FROM taggings tg
                   JOIN tags t ON t.id = tg.tag_id
                   WHERE tg.taggable_id = c.id
@@ -197,9 +321,25 @@ export async function conversasList(args: {
             assignee: { id: r.assignee_id, name: r.assignee_name },
             status: r.status,
             priority: r.priority,
+            created_at: r.conversation_created_at
+              ? r.conversation_created_at.toISOString()
+              : null,
             last_activity_at: r.last_activity_at
               ? r.last_activity_at.toISOString()
               : null,
+            last_message_type: r.last_message_type,
+            last_message_at: r.last_message_at
+              ? r.last_message_at.toISOString()
+              : null,
+            last_incoming_at: r.last_incoming_at
+              ? r.last_incoming_at.toISOString()
+              : null,
+            last_outgoing_at: r.last_outgoing_at
+              ? r.last_outgoing_at.toISOString()
+              : null,
+            custom_attributes: r.custom_attributes,
+            waiting_seconds: toNumberOrNull(r.waiting_seconds),
+            open_seconds: toNumberOrNull(r.open_seconds),
             labels: Array.isArray(r.labels) ? r.labels : [],
           }));
 

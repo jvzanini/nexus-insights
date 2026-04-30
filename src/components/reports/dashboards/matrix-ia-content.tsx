@@ -11,6 +11,7 @@ import { StaleBanner } from "@/components/reports/stale-banner";
 import { KpiCard } from "@/components/reports/kpi-card";
 import { StatusBadge } from "@/components/reports/status-badge";
 import { OpenInChatwoot } from "@/components/reports/open-in-chatwoot";
+import { ErrorState } from "@/components/error-state";
 import { matrixIaMetrics } from "@/lib/chatwoot/queries/matrix-ia";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
 import { formatDuration } from "@/lib/utils/format-time";
@@ -49,7 +50,18 @@ export async function MatrixIaContent({
 }: MatrixIaContentProps) {
   // A query força inbox 31 internamente; sobrescrevemos excludeMatrixIA.
   const filters: ReportFilters = { excludeMatrixIA: false };
-  const result = await matrixIaMetrics({ accountId, filters });
+  let result;
+  try {
+    result = await matrixIaMetrics({ accountId, filters });
+  } catch (err) {
+    console.error("[MatrixIaContent] erro:", err);
+    return (
+      <ErrorState
+        title="Não foi possível carregar Matrix IA"
+        message="Tente novamente em instantes ou ajuste o período selecionado."
+      />
+    );
+  }
   const m = result.data;
 
   return (
