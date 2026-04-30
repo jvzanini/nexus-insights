@@ -1,5 +1,29 @@
 # Changelog
 
+## [v0.10.3] 2026-04-30 — Conversas: hotfix UI (toolbar + sticky + filtros + tour)
+
+> Hotfix em resposta a feedback do João sobre v0.10.1: toolbar com cantos retos destoava do card da tabela, sticky thead "pulava" para baixo na carga inicial, FiltersDialog Modo Simples sem mutex inflava sem fim, Modo Avançado com label duplicada, sem scroll interno; "Limpar filtros/ordenação" só link de texto sem ícone; tour com botão "Próximo" e "1 de 11" quebrando linha.
+
+### Mudou
+
+- **Toolbar arredondado** — `<AdvancedFilters>` agora usa `rounded-2xl + border + shadow-sm` igual ao card da tabela. Antes era `border-b` único, sem cantos.
+- **Sticky thead garantido na primeira pintura** — `useLayoutEffect` síncrono mede o toolbar e seta `--toolbar-h` antes do paint. Antes o thead "pulava" para baixo no primeiro frame porque o fallback (132px) era diferente da altura real medida só no useEffect (depois do paint).
+- **FiltersDialog Modo Simples — accordion mutex** — ao abrir uma seção (Caixa de entrada, Departamento, etc), as outras fecham automaticamente. Evita o "nhocão" reclamado quando várias seções ficavam abertas e o dialog crescia sem fim.
+- **FiltersDialog tamanho + scroll interno** — `max-w-[1100px]` (era 920), `max-h-[85vh]`, header e footer fixos, body com `overflow-y-auto` interno. Funciona pra Simples e Avançado.
+- **Modo Avançado — label do valor sem duplicação** — `ConditionRow` passa `label="Valor"` para o `<MultiSelectCheckbox>` em vez de repetir o label do campo (que já está visível no `<select>` à esquerda). Antes mostrava "Caixa de entrada" no select e "Caixa de entrada" de novo no popover do valor.
+- **Modo Avançado — separação visual de grupos** — grupos aninhados ganham `border-l-2 border-violet-500/40 + bg-violet-500/[0.02]` em vez do card cinza genérico. Cada `ConditionRow` ganha `bg-card`, `h-9` nos selects e botão remover com `hover:text-destructive`.
+- **`STORAGE_COLS` cols-v2 → cols-v3** — migration agressiva remove `phone`, `document`, `labels`, `custom_attributes`, `created_at`, `last_activity_at` mesmo se o usuário tinha re-marcado pelo `<ColumnsToggle>` depois da v0.9.0. Resolve o "WhatsApp ainda aparecendo na grade" pra usuários que tinham reativado.
+- **"Limpar filtros" / "Limpar ordenação"** — agora botões pill com ícone Trash2 + hover destructive. Antes eram links de texto sublinhados sem ícone.
+- **Tour overlay** — popover de 360px → **440px**; footer reorganizado em 2 linhas (dots + "N de M" em cima, botões Pular/Voltar/Próximo embaixo) com `flex-wrap` e `whitespace-nowrap` nos botões. Antes "1 de 11" quebrava a linha porque concorria com 3 botões em 360px.
+
+### Verificação
+
+- `npx tsc --noEmit` → exit 0
+- `npx jest` → 531/531 passing (63 suites)
+- `npm run build` → OK
+
+---
+
 ## [v0.10.2] 2026-04-30 — Dashboard fix de UX (drill central, status compacto, "Abrir no Chatwoot")
 
 > Hotfix de UX do dashboard v0.10.0 a partir do feedback do João: drill-down não estava centralizando direito (parecia side-sheet quebrado), toggle bar/donut atrapalhava a leitura, donut de status ocupava bloco gigante com pouco conteúdo, faltava botão "Abrir no Chatwoot" nas tabelas, faltava afordância visual de click nas barras, e a seção "Conversas recentes" no fim não trazia valor.

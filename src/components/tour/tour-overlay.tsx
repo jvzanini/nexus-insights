@@ -20,7 +20,7 @@ interface TourOverlayProps {
   stepIndex: number;
 }
 
-const POPOVER_WIDTH = 360; // px (default desktop)
+const POPOVER_WIDTH = 440; // px (default desktop) — caber footer com dots + "N de M" + Pular/Voltar/Próximo sem quebrar linha
 const POPOVER_FALLBACK_HEIGHT = 220; // usado apenas no primeiro frame, antes de medir
 const POPOVER_MARGIN = 12; // gap entre target e popover
 const VIEWPORT_PADDING = 16; // distância mínima das bordas
@@ -350,25 +350,30 @@ export function TourOverlay({ config, stepIndex }: TourOverlayProps) {
               {step.description}
             </p>
 
-            <div className="mt-5 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                {config.steps.map((_, i) => (
-                  <span
-                    key={i}
-                    aria-hidden="true"
-                    className={
-                      i === stepIndex
-                        ? "h-1.5 w-5 rounded-full bg-violet-500"
-                        : "h-1.5 w-1.5 rounded-full bg-muted-foreground/30"
-                    }
-                  />
-                ))}
-                <span className="ml-1 text-xs text-muted-foreground">
+            {/* Footer: dots + step counter (em uma linha), botões (em outra) —
+                duas linhas dedicadas evitam que "1 de 11" quebre o layout em
+                viewports estreitos. */}
+            <div className="mt-5 flex flex-col gap-3 border-t border-border/40 pt-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  {config.steps.map((_, i) => (
+                    <span
+                      key={i}
+                      aria-hidden="true"
+                      className={
+                        i === stepIndex
+                          ? "h-1.5 w-5 rounded-full bg-violet-500"
+                          : "h-1.5 w-1.5 rounded-full bg-muted-foreground/30"
+                      }
+                    />
+                  ))}
+                </div>
+                <span className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
                   {stepIndex + 1} de {config.steps.length}
                 </span>
               </div>
 
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={finish}
@@ -383,7 +388,7 @@ export function TourOverlay({ config, stepIndex }: TourOverlayProps) {
                     size="sm"
                     onClick={prev}
                     aria-label="Passo anterior"
-                    className="h-9"
+                    className="h-9 whitespace-nowrap"
                   >
                     <ChevronLeft className="h-3.5 w-3.5" />
                     Voltar
@@ -394,7 +399,7 @@ export function TourOverlay({ config, stepIndex }: TourOverlayProps) {
                   size="sm"
                   onClick={isLast ? finish : next}
                   aria-label={isLast ? "Concluir tour" : "Próximo passo"}
-                  className="h-9 bg-violet-600 text-white hover:bg-violet-500 focus-visible:ring-violet-500/60"
+                  className="h-9 whitespace-nowrap bg-violet-600 text-white hover:bg-violet-500 focus-visible:ring-violet-500/60"
                 >
                   {isLast ? (
                     <>

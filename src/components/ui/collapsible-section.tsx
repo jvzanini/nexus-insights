@@ -17,6 +17,9 @@ interface Props {
   title: string;
   count?: number;
   defaultOpen?: boolean;
+  /** Quando ambos `open` e `onOpenChange` são fornecidos, vira controlado. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   icon?: ReactNode;
   children?: ReactNode;
 }
@@ -25,10 +28,20 @@ export function CollapsibleSection({
   title,
   count = 0,
   defaultOpen = false,
+  open: openProp,
+  onOpenChange,
   icon,
   children,
 }: Props) {
-  const [open, setOpen] = useState(defaultOpen);
+  const isControlled = openProp !== undefined && onOpenChange !== undefined;
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
+  const open = isControlled ? openProp : uncontrolledOpen;
+  const setOpen = isControlled
+    ? (next: boolean | ((v: boolean) => boolean)) => {
+        const value = typeof next === "function" ? next(open) : next;
+        onOpenChange(value);
+      }
+    : setUncontrolledOpen;
 
   return (
     <div className="rounded-xl border border-border/60 bg-background/40">

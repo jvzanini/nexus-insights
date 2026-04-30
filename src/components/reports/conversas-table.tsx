@@ -89,10 +89,12 @@ const PAGE_SIZE_LIMITS: Record<PageSizeOption, number> = {
   all: 10000,
 };
 
-const STORAGE_COLS = "conversas-table-cols-v2";
-const STORAGE_COLS_LEGACY = "conversas-table-cols";
-// Colunas que migraram para o drill-down em v0.9.0 — devem ser removidas do
-// set persistido pra usuários antigos não verem WhatsApp etc. na grade.
+// v0.10.3: bumpamos para v3 com migration agressiva — independentemente do
+// que o usuário tinha customizado depois da v0.9.0, phone/custom_attributes/
+// document/labels nunca devem voltar ao default da grade. Quem quiser pode
+// reativar via <ColumnsToggle>.
+const STORAGE_COLS = "conversas-table-cols-v3";
+const STORAGE_COLS_LEGACY = "conversas-table-cols-v2";
 const MIGRATED_TO_DRILL_DOWN = new Set([
   "phone",
   "document",

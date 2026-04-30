@@ -203,7 +203,7 @@ function GroupEditor({
       className={cn(
         "flex flex-col gap-3",
         depth > 0 &&
-          "rounded-xl border border-border/50 bg-background/30 p-3",
+          "rounded-xl border-l-2 border-violet-500/40 bg-violet-500/[0.02] py-3 pl-3 pr-2",
       )}
     >
       <div className="flex items-center justify-between gap-2">
@@ -218,6 +218,7 @@ function GroupEditor({
             size="icon-sm"
             onClick={onRemove}
             aria-label="Remover grupo"
+            className="h-8 w-8 text-muted-foreground hover:text-destructive"
           >
             <Trash2 className="size-3.5" aria-hidden="true" />
           </Button>
@@ -328,12 +329,12 @@ function ConditionRow({ condition, fields, onChange, onRemove }: ConditionRowPro
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/40 bg-background/40 p-2">
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-card p-2.5">
       <select
         value={condition.field}
         onChange={(e) => handleFieldChange(e.target.value)}
         aria-label="Campo"
-        className="h-8 rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 dark:bg-input/30"
+        className="h-9 min-w-[160px] rounded-md border border-input bg-card px-2.5 text-sm font-medium text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 dark:bg-input/30"
       >
         {fields.map((f) => (
           <option key={f.key} value={f.key}>
@@ -348,7 +349,7 @@ function ConditionRow({ condition, fields, onChange, onRemove }: ConditionRowPro
           onChange({ ...condition, operator: e.target.value as ConditionOperator })
         }
         aria-label="Operador"
-        className="h-8 rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 dark:bg-input/30"
+        className="h-9 min-w-[120px] rounded-md border border-input bg-card px-2.5 text-sm text-muted-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 dark:bg-input/30"
       >
         {operators.map((op) => (
           <option key={op.value} value={op.value}>
@@ -370,9 +371,9 @@ function ConditionRow({ condition, fields, onChange, onRemove }: ConditionRowPro
         size="icon-sm"
         onClick={onRemove}
         aria-label="Remover condição"
-        className="ml-auto"
+        className="ml-auto h-9 w-9 text-muted-foreground hover:text-destructive"
       >
-        <Trash2 className="size-3.5" aria-hidden="true" />
+        <Trash2 className="size-4" aria-hidden="true" />
       </Button>
     </div>
   );
@@ -437,10 +438,13 @@ function ValueInput({ field, operator, value, onChange }: ValueInputProps) {
     // "tapete de chips" que estourava o Dialog.
     const allNumeric = opts.every((o) => typeof o.value === "number");
     if (allNumeric) {
+      // Label do MultiSelectCheckbox vira "Valor" pois o campo já está
+      // identificado pelo <select> à esquerda — evita duplicação visual
+      // (ex.: "Caixa de entrada" no select + "Caixa de entrada" no popover).
       return (
-        <div className="min-w-[200px] max-w-[280px]">
+        <div className="min-w-[220px] max-w-[320px] flex-1">
           <MultiSelectCheckbox
-            label={field.label}
+            label="Valor"
             options={opts.map((o) => ({
               id: o.value as number,
               name: o.label,

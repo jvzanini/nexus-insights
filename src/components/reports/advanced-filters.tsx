@@ -11,7 +11,14 @@
 // ui-ux-pro-max: primary-action (1 CTA por área), progressive-disclosure,
 // state-clarity (chip pulsante quando há pending), spacing-scale 4/8.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 import { ArrowUpDown, Filter, Search } from "lucide-react";
 
@@ -129,9 +136,17 @@ export function AdvancedFilters({
 
   // Mede a altura do toolbar e exporta como `--toolbar-h` no <html>. O thead
   // sticky da tabela usa esse valor como `top: var(--toolbar-h, fallback)`.
-  useEffect(() => {
+  // useLayoutEffect garante que a CSS var é setada SÍNCRONO antes do paint —
+  // sem isso, o thead aparecia "pulando" pra baixo na primeira renderização
+  // porque o fallback (132px) era diferente da altura real medida depois.
+  useLayoutEffect(() => {
     const el = sectionRef.current;
     if (!el) return;
+    // Set inicial síncrono — evita flash com fallback.
+    document.documentElement.style.setProperty(
+      "--toolbar-h",
+      `${Math.ceil(el.getBoundingClientRect().height)}px`,
+    );
     const ro = new ResizeObserver((entries) => {
       const h = Math.ceil(entries[0]?.contentRect.height ?? 0);
       document.documentElement.style.setProperty("--toolbar-h", `${h}px`);
@@ -280,7 +295,7 @@ export function AdvancedFilters({
       role="toolbar"
       aria-label="Filtros avançados"
       data-toolbar="conversas"
-      className="sticky top-0 z-[var(--z-toolbar,30)] -mx-4 space-y-3 border-b border-border/60 bg-card/95 px-4 py-4 backdrop-blur-md sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
+      className="sticky top-0 z-[var(--z-toolbar,30)] space-y-3 rounded-2xl border border-border bg-card/95 p-4 shadow-sm backdrop-blur-md sm:p-5"
     >
       {/* Linha 1 — Período */}
       <div className="flex flex-col gap-2">

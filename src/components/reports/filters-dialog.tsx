@@ -1,8 +1,10 @@
 "use client";
 
-// FiltersDialog — Modal centralizado de filtros avançados (R2 da release Conversas Poderoso).
-// Modo Simples: CollapsibleSections para inbox, team, assignee, status, prioridade e
-// etiquetas, com Apply explícito. Modo Avançado: query builder via <ConditionalFilters>.
+// FiltersDialog — Modal centralizado de filtros avançados.
+// Modo Simples: CollapsibleSections em accordion mutex (1 aberta por vez).
+// Modo Avançado: query builder via <ConditionalFilters>.
+// Layout: max-w 1100px, max-h 85vh, body com overflow-y-auto interno e footer
+// fixo. Apply explícito.
 
 import { useEffect, useState } from "react";
 import {
@@ -57,6 +59,14 @@ const PRIORITY_OPTIONS: MetaItem[] = [
   { id: 2, name: "Média" },
   { id: 3, name: "Baixa" },
 ];
+
+type SimpleSectionKey =
+  | "inboxIds"
+  | "teamIds"
+  | "assigneeIds"
+  | "statuses"
+  | "priorities"
+  | "labelIds";
 
 // Monta a lista de campos do query builder com base nos metadados disponíveis.
 // Cada campo declara seu tipo (string|number|select|multi_select|date) que dita
@@ -166,10 +176,35 @@ export function FiltersDialog({
   labels,
 }: Props) {
   const [draft, setDraft] = useState<FilterState>(applied);
+  // Accordion mutex: apenas uma seção do Modo Simples aberta por vez.
+  // Default: a primeira seção que já tem seleção; se nenhuma, abre Caixa.
+  const [openSection, setOpenSection] = useState<SimpleSectionKey | null>(
+    null,
+  );
 
   // Reset do draft sempre que o modal abrir, capturando o estado aplicado vigente.
   useEffect(() => {
-    if (open) setDraft(applied);
+    if (!open) return;
+    setDraft(applied);
+    // Pré-abrir a primeira seção que já tem seleção (mais útil pro usuário).
+    const order: SimpleSectionKey[] = [
+      "inboxIds",
+      "teamIds",
+      "assigneeIds",
+      "statuses",
+      "priorities",
+      "labelIds",
+    ];
+    const map: Record<SimpleSectionKey, number> = {
+      inboxIds: applied.inboxIds.length,
+      teamIds: applied.teamIds.length,
+      assigneeIds: applied.assigneeIds.length,
+      statuses: applied.statuses.length,
+      priorities: applied.priorities.length,
+      labelIds: applied.labelIds.length,
+    };
+    const firstWithSelection = order.find((k) => map[k] > 0);
+    setOpenSection(firstWithSelection ?? "inboxIds");
   }, [open, applied]);
 
   const isDirty = !isFilterStateEqual(draft, applied);
@@ -180,139 +215,178 @@ export function FiltersDialog({
     setDraft((p) => ({ ...p, [k]: v }));
   }
 
+  // Handler que mantém apenas uma seção aberta por vez.
+  function makeSectionToggle(key: SimpleSectionKey) {
+    return (next: boolean) => {
+      setOpenSection(next ? key : null);
+    };
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[920px]">
-        <DialogTitle>Filtros avançados</DialogTitle>
-        <DialogDescription className="sr-only">
-          Refine a lista de conversas combinando filtros nativos.
-        </DialogDescription>
+      <DialogContent className="flex max-h-[85vh] w-[min(96vw,1100px)] max-w-[96vw] flex-col gap-0 p-0 sm:max-w-[1100px]">
+        {/* Header — fixo */}
+        <div className="border-b border-border px-6 py-4">
+          <DialogTitle>Filtros avançados</DialogTitle>
+          <DialogDescription className="sr-only">
+            Refine a lista de conversas combinando filtros nativos no modo
+            Simples ou condições E/OU em grupos no modo Avançado.
+          </DialogDescription>
+        </div>
 
-        <Tabs
-          value={draft.mode}
-          onValueChange={(v) => update("mode", v as FilterState["mode"])}
-          className="py-4"
-        >
-          <TabsList>
-            <TabsTrigger value="simple">Simples</TabsTrigger>
-            <TabsTrigger value="advanced">Avançado</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="simple" className="mt-3 space-y-3">
-          <CollapsibleSection
-            title="Caixa de entrada"
-            count={draft.inboxIds.length}
-            defaultOpen={draft.inboxIds.length > 0}
-            icon={<Inbox className="h-4 w-4 text-muted-foreground" aria-hidden />}
+        {/* Body — scroll interno */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-4">
+          <Tabs
+            value={draft.mode}
+            onValueChange={(v) => update("mode", v as FilterState["mode"])}
+            className="flex min-h-0 flex-1 flex-col"
           >
-            <MultiSelectCheckbox
-              label="Caixa de entrada"
-              options={inboxes}
-              value={draft.inboxIds}
-              onChange={(v) => update("inboxIds", v)}
-              emptyLabel="Nenhuma caixa disponível."
-              inline
-            />
-          </CollapsibleSection>
+            <TabsList>
+              <TabsTrigger value="simple">Simples</TabsTrigger>
+              <TabsTrigger value="advanced">Avançado</TabsTrigger>
+            </TabsList>
 
-          <CollapsibleSection
-            title="Departamento"
-            count={draft.teamIds.length}
-            defaultOpen={draft.teamIds.length > 0}
-            icon={
-              <Building2 className="h-4 w-4 text-muted-foreground" aria-hidden />
-            }
-          >
-            <MultiSelectCheckbox
-              label="Departamento"
-              options={teams}
-              value={draft.teamIds}
-              onChange={(v) => update("teamIds", v)}
-              emptyLabel="Nenhum departamento disponível."
-              inline
-            />
-          </CollapsibleSection>
+            <TabsContent
+              value="simple"
+              className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1"
+            >
+              <CollapsibleSection
+                title="Caixa de entrada"
+                count={draft.inboxIds.length}
+                open={openSection === "inboxIds"}
+                onOpenChange={makeSectionToggle("inboxIds")}
+                icon={
+                  <Inbox className="h-4 w-4 text-muted-foreground" aria-hidden />
+                }
+              >
+                <MultiSelectCheckbox
+                  label="Caixa de entrada"
+                  options={inboxes}
+                  value={draft.inboxIds}
+                  onChange={(v) => update("inboxIds", v)}
+                  emptyLabel="Nenhuma caixa disponível."
+                  inline
+                />
+              </CollapsibleSection>
 
-          <CollapsibleSection
-            title="Atendente"
-            count={draft.assigneeIds.length}
-            defaultOpen={draft.assigneeIds.length > 0}
-            icon={<User className="h-4 w-4 text-muted-foreground" aria-hidden />}
-          >
-            <MultiSelectCheckbox
-              label="Atendente"
-              options={assignees}
-              value={draft.assigneeIds}
-              onChange={(v) => update("assigneeIds", v)}
-              emptyLabel="Nenhum atendente disponível."
-              inline
-            />
-          </CollapsibleSection>
+              <CollapsibleSection
+                title="Departamento"
+                count={draft.teamIds.length}
+                open={openSection === "teamIds"}
+                onOpenChange={makeSectionToggle("teamIds")}
+                icon={
+                  <Building2
+                    className="h-4 w-4 text-muted-foreground"
+                    aria-hidden
+                  />
+                }
+              >
+                <MultiSelectCheckbox
+                  label="Departamento"
+                  options={teams}
+                  value={draft.teamIds}
+                  onChange={(v) => update("teamIds", v)}
+                  emptyLabel="Nenhum departamento disponível."
+                  inline
+                />
+              </CollapsibleSection>
 
-          <CollapsibleSection
-            title="Status"
-            count={draft.statuses.length}
-            defaultOpen={draft.statuses.length > 0}
-            icon={
-              <Activity className="h-4 w-4 text-muted-foreground" aria-hidden />
-            }
-          >
-            <MultiSelectCheckbox
-              label="Status"
-              options={STATUS_OPTIONS}
-              value={draft.statuses}
-              onChange={(v) => update("statuses", v)}
-              inline
-            />
-          </CollapsibleSection>
+              <CollapsibleSection
+                title="Atendente"
+                count={draft.assigneeIds.length}
+                open={openSection === "assigneeIds"}
+                onOpenChange={makeSectionToggle("assigneeIds")}
+                icon={
+                  <User className="h-4 w-4 text-muted-foreground" aria-hidden />
+                }
+              >
+                <MultiSelectCheckbox
+                  label="Atendente"
+                  options={assignees}
+                  value={draft.assigneeIds}
+                  onChange={(v) => update("assigneeIds", v)}
+                  emptyLabel="Nenhum atendente disponível."
+                  inline
+                />
+              </CollapsibleSection>
 
-          <CollapsibleSection
-            title="Prioridade"
-            count={draft.priorities.length}
-            defaultOpen={draft.priorities.length > 0}
-            icon={
-              <AlertCircle
-                className="h-4 w-4 text-muted-foreground"
-                aria-hidden
+              <CollapsibleSection
+                title="Status"
+                count={draft.statuses.length}
+                open={openSection === "statuses"}
+                onOpenChange={makeSectionToggle("statuses")}
+                icon={
+                  <Activity
+                    className="h-4 w-4 text-muted-foreground"
+                    aria-hidden
+                  />
+                }
+              >
+                <MultiSelectCheckbox
+                  label="Status"
+                  options={STATUS_OPTIONS}
+                  value={draft.statuses}
+                  onChange={(v) => update("statuses", v)}
+                  inline
+                />
+              </CollapsibleSection>
+
+              <CollapsibleSection
+                title="Prioridade"
+                count={draft.priorities.length}
+                open={openSection === "priorities"}
+                onOpenChange={makeSectionToggle("priorities")}
+                icon={
+                  <AlertCircle
+                    className="h-4 w-4 text-muted-foreground"
+                    aria-hidden
+                  />
+                }
+              >
+                <MultiSelectCheckbox
+                  label="Prioridade"
+                  options={PRIORITY_OPTIONS}
+                  value={draft.priorities}
+                  onChange={(v) => update("priorities", v)}
+                  inline
+                />
+              </CollapsibleSection>
+
+              <CollapsibleSection
+                title="Etiquetas"
+                count={draft.labelIds.length}
+                open={openSection === "labelIds"}
+                onOpenChange={makeSectionToggle("labelIds")}
+                icon={
+                  <Tag className="h-4 w-4 text-muted-foreground" aria-hidden />
+                }
+              >
+                <MultiSelectCheckbox
+                  label="Etiquetas"
+                  options={labels}
+                  value={draft.labelIds}
+                  onChange={(v) => update("labelIds", v)}
+                  emptyLabel="Nenhuma etiqueta disponível."
+                  inline
+                />
+              </CollapsibleSection>
+            </TabsContent>
+
+            <TabsContent
+              value="advanced"
+              className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1"
+            >
+              <ConditionalFilters
+                fields={buildFields({ inboxes, teams, assignees, labels })}
+                initial={draft.conditionGroup}
+                onChange={(g) => update("conditionGroup", g)}
               />
-            }
-          >
-            <MultiSelectCheckbox
-              label="Prioridade"
-              options={PRIORITY_OPTIONS}
-              value={draft.priorities}
-              onChange={(v) => update("priorities", v)}
-              inline
-            />
-          </CollapsibleSection>
+            </TabsContent>
+          </Tabs>
+        </div>
 
-          <CollapsibleSection
-            title="Etiquetas"
-            count={draft.labelIds.length}
-            defaultOpen={draft.labelIds.length > 0}
-            icon={<Tag className="h-4 w-4 text-muted-foreground" aria-hidden />}
-          >
-            <MultiSelectCheckbox
-              label="Etiquetas"
-              options={labels}
-              value={draft.labelIds}
-              onChange={(v) => update("labelIds", v)}
-              emptyLabel="Nenhuma etiqueta disponível."
-              inline
-            />
-          </CollapsibleSection>
-          </TabsContent>
-
-          <TabsContent value="advanced" className="mt-3">
-            <ConditionalFilters
-              fields={buildFields({ inboxes, teams, assignees, labels })}
-              initial={draft.conditionGroup}
-              onChange={(g) => update("conditionGroup", g)}
-            />
-          </TabsContent>
-        </Tabs>
-
-        <div className="flex items-center justify-between border-t border-border pt-4">
+        {/* Footer — fixo */}
+        <div className="flex items-center justify-between border-t border-border px-6 py-4">
           <Button
             type="button"
             variant="ghost"
