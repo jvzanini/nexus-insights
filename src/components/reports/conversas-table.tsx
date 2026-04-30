@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useTransition,
   type KeyboardEvent,
@@ -81,10 +82,9 @@ interface ConversasTableProps {
 
 type SortDirection = "asc" | "desc";
 
-type PageSizeOption = "50" | "100" | "all";
+type PageSizeOption = "100" | "all";
 
 const PAGE_SIZE_LIMITS: Record<PageSizeOption, number> = {
-  "50": 50,
   "100": 100,
   all: 10000,
 };
@@ -140,69 +140,6 @@ function formatDateTime(iso: string | null): string {
   } catch {
     return "—";
   }
-}
-
-/**
- * Formata um valor de atributo customizado para exibição inline.
- * Escalares retornam o próprio valor (truncado em 80 chars). Objetos/arrays
- * viram placeholder com tooltip detalhado via JSON.
- */
-function formatAttrValue(value: unknown): { display: string; raw: string } {
-  if (value === null || value === undefined || value === "")
-    return { display: "—", raw: "" };
-  if (typeof value === "string") {
-    const trimmed = value.length > 80 ? value.slice(0, 80) + "…" : value;
-    return { display: trimmed, raw: value };
-  }
-  if (typeof value === "number" || typeof value === "boolean") {
-    return { display: String(value), raw: String(value) };
-  }
-  if (Array.isArray(value)) {
-    return {
-      display: `[${value.length} itens]`,
-      raw: JSON.stringify(value),
-    };
-  }
-  return { display: "[objeto]", raw: JSON.stringify(value) };
-}
-
-/**
- * Renderiza atributos customizados como chips compactos `chave: valor`.
- * Quando não há atributos válidos, retorna `—`.
- */
-function AttributeChips({
-  attrs,
-}: {
-  attrs: Record<string, unknown> | null;
-}) {
-  if (!attrs || typeof attrs !== "object") {
-    return <span className="text-xs text-muted-foreground">—</span>;
-  }
-  const entries = Object.entries(attrs).filter(
-    ([, v]) => v !== null && v !== undefined && v !== "",
-  );
-  if (entries.length === 0) {
-    return <span className="text-xs text-muted-foreground">—</span>;
-  }
-  return (
-    <div className="inline-flex max-w-[320px] flex-wrap gap-1">
-      {entries.map(([k, v]) => {
-        const { display, raw } = formatAttrValue(v);
-        return (
-          <span
-            key={k}
-            title={`${k}: ${raw}`}
-            className="inline-flex max-w-[180px] items-center gap-1 rounded-md border border-border/40 bg-muted/40 px-1.5 py-0.5 text-[11px]"
-          >
-            <span className="truncate font-medium text-muted-foreground/80">
-              {k}:
-            </span>
-            <span className="truncate text-foreground/80">{display}</span>
-          </span>
-        );
-      })}
-    </div>
-  );
 }
 
 /**
@@ -281,22 +218,6 @@ const COLUMNS: ColumnDef[] = [
         </span>
       );
     },
-  },
-  {
-    key: "phone",
-    label: "WhatsApp",
-    // Movido para drill-down — continua disponível via ColumnsToggle.
-    defaultVisible: false,
-    defaultOrder: 2,
-    sortable: true,
-    className: "min-w-[160px]",
-    compareFn: (a, b) =>
-      nullableStringCompare(a.contact.phone_number, b.contact.phone_number),
-    render: (row) => (
-      <span className="whitespace-nowrap text-[13px] text-muted-foreground tabular-nums">
-        {getPhoneDisplay(row.contact.phone_number)}
-      </span>
-    ),
   },
   {
     key: "document",
@@ -489,15 +410,6 @@ const COLUMNS: ColumnDef[] = [
       );
     },
   },
-  {
-    key: "custom_attributes",
-    label: "Atributos",
-    defaultVisible: false,
-    defaultOrder: 14,
-    sortable: false,
-    className: "min-w-[200px]",
-    render: (row) => <AttributeChips attrs={row.custom_attributes} />,
-  },
 ];
 
 /**
@@ -571,10 +483,48 @@ function SortHeaderIcon({ direction, index, total }: SortHeaderIconProps) {
 // ----------------------------------------------------------------------------
 
 const PAGE_SIZE_OPTIONS = [
-  { value: "50", label: "50 por página" },
   { value: "100", label: "100 por página" },
   { value: "all", label: "Todos" },
 ];
+
+// ----------------------------------------------------------------------------
+// Sentinela de infinite scroll
+// ----------------------------------------------------------------------------
+
+/**
+ * Renderiza uma `<tr>` invisível ao final do `<tbody>` que dispara `onIntersect`
+ * quando entra (ou se aproxima de 200px) do viewport do container scroll.
+ * Auto-desliga via `disabled` para evitar fetches duplicados enquanto pendente
+ * ou quando não há mais cursor.
+ */
+function InfiniteScrollSentinel({
+  onIntersect,
+  disabled,
+}: {
+  onIntersect: () => void;
+  disabled: boolean;
+}) {
+  const ref = useRef<HTMLTableRowElement>(null);
+  useEffect(() => {
+    if (disabled) return;
+    if (typeof IntersectionObserver === "undefined") return;
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) onIntersect();
+      },
+      { rootMargin: "200px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [disabled, onIntersect]);
+  return (
+    <tr ref={ref} aria-hidden="true">
+      <td colSpan={99} className="h-1 p-0" />
+    </tr>
+  );
+}
 
 export function ConversasTable({
   initialRows,
@@ -622,8 +572,14 @@ export function ConversasTable({
   );
   const [pageSize, setPageSize] = useLocalStorageState<PageSizeOption>(
     STORAGE_PAGE_SIZE,
-    "50",
+    "100",
   );
+
+  // Migração transparente: usuários que tinham "50" persistido em localStorage
+  // (default da v0.10.3) são rebaixados para "100" — opção "50" foi removida.
+  useEffect(() => {
+    if ((pageSize as string) === "50") setPageSize("100");
+  }, [pageSize, setPageSize]);
 
   // ---- Cabeçalho: ordenação por click / shift+click -----
   // sortStack agora é controlado pelo parent (ConversasPageClient) — o hook de
@@ -717,7 +673,7 @@ export function ConversasTable({
   }, [filteredRows, sortStack, allColumns]);
 
   // ---- Carregar mais -----
-  const loadMore = () => {
+  const loadMore = useCallback(() => {
     if (!cursor || pending) return;
     setError(null);
     const limit = PAGE_SIZE_LIMITS[pageSize];
@@ -735,11 +691,11 @@ export function ConversasTable({
       setRows((prev) => [...prev, ...result.rows]);
       setCursor(result.nextCursor);
     });
-  };
+  }, [cursor, pending, pageSize, filters, accountId]);
 
   // ---- Reset / refetch ao trocar pageSize ----
   const handlePageSizeChange = (next: string) => {
-    if (next !== "50" && next !== "100" && next !== "all") return;
+    if (next !== "100" && next !== "all") return;
     if (next === pageSize) return;
     setPageSize(next);
     setError(null);
@@ -868,17 +824,24 @@ export function ConversasTable({
     >
       {toolbar}
 
-      {/* Desktop / large: tabela. */}
+      {/* Desktop / large: tabela. Container com scroll interno (vertical +
+          horizontal); thead sticky usa top:0 dentro DESTE container. Altura
+          calculada via dvh + vars dinâmicas medidas no <PageHeader> e no
+          <AdvancedFilters>. */}
       <div
         className={cn(
-          "hidden lg:block overflow-x-auto transition-opacity duration-200",
+          "hidden lg:block overflow-x-auto overflow-y-auto transition-opacity duration-200",
           pending && "opacity-60",
         )}
+        style={{
+          maxHeight:
+            "calc(100dvh - var(--page-header-h, 96px) - var(--toolbar-h, 200px) - 64px)",
+        }}
         aria-busy={pending}
       >
         <Table>
           <TableHeader
-            className="sticky top-[var(--toolbar-h,132px)] z-[var(--z-table-thead,20)] bg-card shadow-[0_1px_0_0_rgb(var(--border)_/_0.6)]"
+            className="sticky top-0 z-10 bg-card shadow-[0_1px_0_0_rgb(var(--border)_/_0.6)]"
           >
             <TableRow className="hover:bg-transparent">
               {orderedColumns.map((col) => {
@@ -1004,16 +967,29 @@ export function ConversasTable({
                 </Fragment>
               );
             })}
+            {/* Sentinela: dispara loadMore via IntersectionObserver enquanto há
+                cursor e pageSize="100". Em "all" o cursor é null → não monta. */}
+            {cursor && pageSize === "100" ? (
+              <InfiniteScrollSentinel
+                onIntersect={loadMore}
+                disabled={pending}
+              />
+            ) : null}
           </TableBody>
         </Table>
       </div>
 
-      {/* Mobile / tablet: cards. */}
+      {/* Mobile / tablet: cards com scroll interno. Em viewports menores não
+          há toolbar lateral, então a fórmula desconta apenas o page header e
+          o toolbar interno (~280px de chrome estimado). */}
       <ul
         className={cn(
-          "lg:hidden divide-y divide-border transition-opacity duration-200",
+          "lg:hidden divide-y divide-border overflow-y-auto transition-opacity duration-200",
           pending && "opacity-60",
         )}
+        style={{
+          maxHeight: "calc(100dvh - var(--page-header-h, 96px) - 280px)",
+        }}
         aria-busy={pending}
       >
         {sortedRows.map((row) => {
@@ -1101,13 +1077,16 @@ export function ConversasTable({
         })}
       </ul>
 
-      {/* Footer: error + carregar mais. */}
+      {/* Footer: erro + fallback "Carregar mais". O botão só aparece se a
+          sentinela não está ativa (i.e. `pageSize !== "100"` ou houve erro).
+          Em "100" sem erro, o IntersectionObserver cuida do load. Em "all" o
+          cursor já é null e o footer some naturalmente. */}
       {(cursor || error) && (
         <div className="border-t border-border p-3 flex items-center justify-center gap-3 bg-muted/10">
           {error ? (
             <span className="text-xs text-red-400">{error}</span>
           ) : null}
-          {cursor ? (
+          {cursor && (pageSize !== "100" || error) ? (
             <Button
               variant="outline"
               size="sm"
