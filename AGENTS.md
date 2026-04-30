@@ -1,15 +1,32 @@
 # AGENTS.md
 
-## Coordenação multi-agente (ABSOLUTA)
+## Coordenação multi-agente (REGRA ABSOLUTA)
 
 > **Hoje há 2–3 sessões Claude trabalhando simultaneamente neste repositório, em features distintas.**
-> Sem este protocolo, dá conflito de merge, sobrescrita de trabalho, commits que quebram o build.
+> Sem este protocolo, dá conflito de merge, sobrescrita de trabalho, commits que quebram o build, deploys empilhando.
 
-### Antes de QUALQUER mudança em arquivo
+### Protocolo completo
+
+O protocolo está descrito em **`docs/agents/_README.md`**. Resumo aqui — e os arquivos que materializam:
+
+- **`docs/agents/active/<agent-id>.md`** — quem está trabalhando agora (1 arquivo por agente, criado no início, deletado no fim).
+- **`docs/agents/HISTORY.md`** — log append-only do que foi feito (1 linha por commit relevante).
+- **Este `AGENTS.md`** — checklist obrigatório (abaixo).
+
+### Início da sessão (obrigatório)
 
 1. `git fetch origin main && git status` — pegar o estado mais recente do remoto.
 2. `git log --oneline HEAD..origin/main` (commits remotos novos) e `git log --oneline -10` (atividade recente).
-3. Se houver mudanças remotas, fazer `git pull --rebase origin main` ANTES de começar a editar.
+3. `ls docs/agents/active/` — quais agentes estão ativos.
+4. Para cada `docs/agents/active/<other-agent>.md` ALHEIO: ler, entender o tópico do outro, identificar arquivos compartilhados.
+5. `tail -30 docs/agents/HISTORY.md` — atividade recente registrada.
+6. Se houver mudanças remotas: `git pull --rebase origin main`.
+7. **Criar `docs/agents/active/<meu-agent-id>.md`** descrevendo o que vou fazer.
+
+### Antes de QUALQUER mudança em arquivo
+
+- Se ainda não criei `docs/agents/active/<meu-id>.md` — criar AGORA.
+- Verificar se outro `active/*.md` declarou o mesmo arquivo na seção "Arquivos compartilhados que VOU modificar". Se sim → **PARAR e coordenar**.
 
 ### Antes de mexer em arquivo compartilhado
 
@@ -41,6 +58,24 @@ Antes de tocar:
    - Re-rodar `npm run typecheck` e `npm test`.
 3. Stage **APENAS** os arquivos que você modificou para a sua feature. **Nunca** `git add -A` ou `git add .` — pega trabalho dos outros.
 4. Se aparecer untracked file que não é seu: deixar quieto. Outro agente vai commitar.
+5. **Append uma linha em `docs/agents/HISTORY.md`** quando o commit é "relevante" (bump de versão, migration, mudança em arquivo compartilhado, novo spec/plan, fix urgente). Veja formato no `_README.md`.
+
+### Antes de PUSH (deploy automático)
+
+> Push em `main` dispara CI → Portainer redeploy. Múltiplos pushes em sequência empilham builds (~5 min cada) e o último ganha. Cuidado.
+
+1. `gh run list --limit 5` — verificar se há build queued/in-progress.
+2. Se há build de outro agente em curso:
+   - Esperar terminar OU
+   - Confirmar que o seu push não conflita com o que está sendo deployado.
+3. Verificar status atual de produção (`curl /api/health`) — não pushar se já está caindo.
+4. Push.
+5. (Opcional) `gh run watch <id>` pra acompanhar.
+
+### Fim da sessão
+
+- **Deletar `docs/agents/active/<meu-id>.md`** — sinaliza pros outros que terminou.
+- Última entrada em `HISTORY.md` se ainda não foi.
 
 ### Conflito de spec/plan
 

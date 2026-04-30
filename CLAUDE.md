@@ -168,6 +168,10 @@ Design system industrial (monorepo `@nexusai360/*`). Usar como **fonte de patter
 
 ---
 
+## 8.5 Coordenação multi-agente (regra absoluta)
+
+Há 2–3 sessões Claude no repositório ao mesmo tempo. **Antes de qualquer ação**: ler `docs/agents/_README.md`, listar `docs/agents/active/`, ler `tail docs/agents/HISTORY.md`, executar o checklist do `AGENTS.md`. Criar `docs/agents/active/<agent-id>.md` no início da sessão e deletar no fim. Append linha em `docs/agents/HISTORY.md` a cada commit relevante. Antes de push: `gh run list --limit 5` (não acumular deploys em CI).
+
 ## 9. Conduta autônoma
 
 - **Trabalhar em paralelo sempre que possível** (múltiplas tool calls independentes em uma única mensagem).
