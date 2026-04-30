@@ -198,3 +198,96 @@ describe("getSystemCreatedAt", () => {
     expect(result.toISOString()).toBe(min.toISOString());
   });
 });
+
+describe("usage-stats — BRL aggregates (v0.12.0)", () => {
+  it("inclui totalCostBrl e cost_brl em byDay/byProvider/byModel", async () => {
+    // Ordem do Promise.all em getUsageStats: [summary, byModel, byDay, byProvider]
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            total_cost: 0.1,
+            total_cost_brl: 0.55,
+            total_tokens_input: 100,
+            total_tokens_output: 50,
+            total_calls: 1,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            provider: "openai",
+            model: "gpt-4o",
+            cost: 0.1,
+            cost_brl: 0.55,
+            tokens_input: 100,
+            tokens_output: 50,
+            calls: 1,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            day: "2026-04-30",
+            cost: 0.1,
+            cost_brl: 0.55,
+            tokens: 150,
+            calls: 1,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          { provider: "openai", cost: 0.1, cost_brl: 0.55, calls: 1 },
+        ],
+      });
+
+    const result = await getUsageStats({
+      start: new Date("2026-04-01"),
+      end: new Date("2026-05-01"),
+    });
+
+    expect(result.totalCostBrl).toBeCloseTo(0.55);
+    expect(result.byDay[0].costBrl).toBeCloseTo(0.55);
+    expect(result.byProvider[0].costBrl).toBeCloseTo(0.55);
+    expect(result.byModel[0].costBrl).toBeCloseTo(0.55);
+  });
+
+  it("byDay com cost_brl NULL em rows antigas vira 0", async () => {
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            total_cost: 0,
+            total_cost_brl: null,
+            total_tokens_input: 0,
+            total_tokens_output: 0,
+            total_calls: 0,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            day: "2026-04-30",
+            cost: 0,
+            cost_brl: null,
+            tokens: 0,
+            calls: 0,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const result = await getUsageStats({
+      start: new Date("2026-04-01"),
+      end: new Date("2026-05-01"),
+    });
+
+    expect(result.totalCostBrl).toBe(0);
+    expect(result.byDay[0].costBrl).toBe(0);
+  });
+});

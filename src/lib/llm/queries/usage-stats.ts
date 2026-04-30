@@ -7,6 +7,7 @@ const TZ = "America/Sao_Paulo";
 
 export interface UsageSummary {
   totalCost: number;
+  totalCostBrl: number;
   totalTokensInput: number;
   totalTokensOutput: number;
   totalCalls: number;
@@ -14,6 +15,7 @@ export interface UsageSummary {
     provider: string;
     model: string;
     cost: number;
+    costBrl: number;
     tokensInput: number;
     tokensOutput: number;
     calls: number;
@@ -22,18 +24,21 @@ export interface UsageSummary {
     /** Data ISO (yyyy-mm-dd) no fuso America/Sao_Paulo. */
     day: string;
     cost: number;
+    costBrl: number;
     tokens: number;
     calls: number;
   }>;
   byProvider: Array<{
     provider: string;
     cost: number;
+    costBrl: number;
     calls: number;
   }>;
 }
 
 interface SummaryRow {
   total_cost: string | number | null;
+  total_cost_brl: string | number | null;
   total_tokens_input: string | number | null;
   total_tokens_output: string | number | null;
   total_calls: string | number | null;
@@ -43,6 +48,7 @@ interface ModelRow {
   provider: string;
   model: string;
   cost: string | number | null;
+  cost_brl: string | number | null;
   tokens_input: string | number | null;
   tokens_output: string | number | null;
   calls: string | number | null;
@@ -51,6 +57,7 @@ interface ModelRow {
 interface DayRow {
   day: string;
   cost: string | number | null;
+  cost_brl: string | number | null;
   tokens: string | number | null;
   calls: string | number | null;
 }
@@ -58,6 +65,7 @@ interface DayRow {
 interface ProviderRow {
   provider: string;
   cost: string | number | null;
+  cost_brl: string | number | null;
   calls: string | number | null;
 }
 
@@ -99,6 +107,7 @@ export async function getUsageStats(args: {
     pgPool.query<SummaryRow>(
       `SELECT
          COALESCE(SUM(cost_usd), 0) AS total_cost,
+         COALESCE(SUM(cost_brl), 0) AS total_cost_brl,
          COALESCE(SUM(tokens_input), 0) AS total_tokens_input,
          COALESCE(SUM(tokens_output), 0) AS total_tokens_output,
          COUNT(*) AS total_calls
@@ -111,6 +120,7 @@ export async function getUsageStats(args: {
          provider,
          model,
          COALESCE(SUM(cost_usd), 0) AS cost,
+         COALESCE(SUM(cost_brl), 0) AS cost_brl,
          COALESCE(SUM(tokens_input), 0) AS tokens_input,
          COALESCE(SUM(tokens_output), 0) AS tokens_output,
          COUNT(*) AS calls
@@ -124,6 +134,7 @@ export async function getUsageStats(args: {
       `SELECT
          (date_trunc('day', created_at AT TIME ZONE $3))::date AS day,
          COALESCE(SUM(cost_usd), 0) AS cost,
+         COALESCE(SUM(cost_brl), 0) AS cost_brl,
          COALESCE(SUM(tokens_input + tokens_output), 0) AS tokens,
          COUNT(*) AS calls
        FROM llm_usage
@@ -136,6 +147,7 @@ export async function getUsageStats(args: {
       `SELECT
          provider,
          COALESCE(SUM(cost_usd), 0) AS cost,
+         COALESCE(SUM(cost_brl), 0) AS cost_brl,
          COUNT(*) AS calls
        FROM llm_usage
        WHERE created_at >= $1 AND created_at < $2
@@ -147,6 +159,7 @@ export async function getUsageStats(args: {
 
   const summary = summaryRes.rows[0] ?? {
     total_cost: 0,
+    total_cost_brl: 0,
     total_tokens_input: 0,
     total_tokens_output: 0,
     total_calls: 0,
@@ -154,6 +167,7 @@ export async function getUsageStats(args: {
 
   return {
     totalCost: toNumber(summary.total_cost),
+    totalCostBrl: toNumber(summary.total_cost_brl),
     totalTokensInput: toNumber(summary.total_tokens_input),
     totalTokensOutput: toNumber(summary.total_tokens_output),
     totalCalls: toNumber(summary.total_calls),
@@ -161,6 +175,7 @@ export async function getUsageStats(args: {
       provider: r.provider,
       model: r.model,
       cost: toNumber(r.cost),
+      costBrl: toNumber(r.cost_brl),
       tokensInput: toNumber(r.tokens_input),
       tokensOutput: toNumber(r.tokens_output),
       calls: toNumber(r.calls),
@@ -168,12 +183,14 @@ export async function getUsageStats(args: {
     byDay: dayRes.rows.map((r) => ({
       day: toIsoDay(r.day),
       cost: toNumber(r.cost),
+      costBrl: toNumber(r.cost_brl),
       tokens: toNumber(r.tokens),
       calls: toNumber(r.calls),
     })),
     byProvider: providerRes.rows.map((r) => ({
       provider: r.provider,
       cost: toNumber(r.cost),
+      costBrl: toNumber(r.cost_brl),
       calls: toNumber(r.calls),
     })),
   };
@@ -186,6 +203,8 @@ export interface UsageDetailRow {
   tokensInput: number;
   tokensOutput: number;
   costUsd: number;
+  costBrl: number | null;
+  usdToBrlRate: number | null;
   durationMs: number | null;
   /** ISO string em UTC. */
   createdAt: string;
@@ -227,11 +246,13 @@ export async function getUsageDetails(args: {
       tokens_input: number | string;
       tokens_output: number | string;
       cost_usd: number | string;
+      cost_brl: number | string | null;
+      usd_to_brl_rate: number | string | null;
       duration_ms: number | string | null;
       created_at: Date | string;
     }>(
       `SELECT id, provider, model, tokens_input, tokens_output, cost_usd,
-              duration_ms, created_at
+              cost_brl, usd_to_brl_rate, duration_ms, created_at
          FROM llm_usage
         WHERE created_at >= $1 AND created_at < $2
         ORDER BY created_at DESC
@@ -253,6 +274,12 @@ export async function getUsageDetails(args: {
     tokensInput: toNumber(r.tokens_input),
     tokensOutput: toNumber(r.tokens_output),
     costUsd: toNumber(r.cost_usd),
+    costBrl:
+      r.cost_brl == null ? null : toNumber(r.cost_brl as string | number),
+    usdToBrlRate:
+      r.usd_to_brl_rate == null
+        ? null
+        : toNumber(r.usd_to_brl_rate as string | number),
     durationMs:
       r.duration_ms == null
         ? null
