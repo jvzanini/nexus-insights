@@ -1,5 +1,71 @@
 # Changelog
 
+## [v0.6.0] 2026-04-29 — Refazer fiel ao Roteador + Agente Nex IA + relatórios consolidados
+
+### Corrigido
+- **Filtros que aplicavam automaticamente** virou filtros com botão "Aplicar" via novo `<AdvancedFilters>` (estado interno draft vs URL applied).
+- **Cap artificial de 90 dias** no custom range removido — agora cobre desde a primeira linha do banco.
+- **Loading state ausente** virou skeleton screens em todas as pages (TableSkeleton, CardSkeleton, ChartSkeleton, ProfileCardsSkeleton).
+- **Dashboard sem gráficos** virou /dashboard com line chart Recharts (Recebidas + Resolvidas) + 4 KPIs clicáveis com sparkline + Top 5 cards + Recent Conversations table + drill-down sheets.
+- **/perfil divergente do Roteador** refeito fielmente (4 cards stack vertical: Informações Pessoais com avatar+Membro desde / E-mail / Senha / Aparência 3 toggles).
+- **/usuarios divergente** refeito fielmente (BadgeSelect inline pra Nível/Status, modal único Criar/Editar — sem wizard de 3 passos, lápis + lixeira nas Ações, owner imutável).
+
+### Adicionado
+- **`<BadgeSelect>`** componente reutilizável (dropdown com badges coloridos + ícones) — usado em /usuarios pra Nível/Status inline.
+- **`<AdvancedFilters>`** filtros multi-campo com botão Aplicar (não auto-apply), estado draft vs URL applied, indicador "X filtros pendentes", multi-select por inbox/team/atendente/status/prioridade.
+- **`<SortableTable>`** + **`<GroupableTable>`** + **`useSortableData`** hook — ordenação clicável por coluna (asc/desc/null cycle) + agrupamento + a11y (aria-sort).
+- **`<ConditionalFilters>`** Where-clause builder (AND/OR + 10 operadores eq/neq/gt/lt/contains/in/etc., grupos aninhados) + `applyConditions()` puro.
+- **Charts library** (`src/components/charts/`): InteractivePieChart, DonutWithCenter, InteractiveBarChart, InteractiveAreaChart, InteractiveRadialBarChart, ChartTooltip, EmptyChartState — todos com animação 800ms, hover dim, tooltip rico, prefers-reduced-motion respeitado.
+- **`<ErrorState>`** + **`<ErrorStateRetry>`** + skeleton variants (TableSkeleton, CardSkeleton, ChartSkeleton, ProfileCardsSkeleton).
+- **Dashboard drill-down**: clique em qualquer KPI abre `<DrillDownSheet>` lateral com gráficos detalhados (LineChart + BarChart + AreaChart + tabela) e queries específicas por KPI.
+- **5 super-relatórios** consolidando os 12 antigos:
+  - `/relatorios/visao-geral` (Status pie + Volumetria)
+  - `/relatorios/performance` (Tempos resposta + SLA + CSAT)
+  - `/relatorios/equipe` (Ranking + Por departamento)
+  - `/relatorios/distribuicao` (Por estado + Horário)
+  - `/relatorios/origem-ia` (Leads + Matrix IA)
+- **Standalone**: `/relatorios/conversas`, `/relatorios/mensagens-nao-respondidas`.
+- **Redirects 302** das 10 rotas antigas (status-conversas, sla, tempos-resposta, ranking-atendentes, por-departamento, por-estado, volumetria, leads-recebidos, matrix-ia, csat) para os super-relatórios.
+- **Catálogo de relatórios** + **toggle ON/OFF** em /configuracoes (super_admin) — sidebar respeita imediatamente após salvar (revalidatePath).
+- **Footer "Nexus AI © 2026. Todos os direitos reservados"** fixo no rodapé da sidebar.
+
+### Agente Nex (IA com query no DB Chatwoot)
+- **Bubble flutuante** `<NexBubble>` bottom-right em todas pages protegidas — gradient violet com glow pulsante, indicador online, respeita prefers-reduced-motion.
+- **Chat panel** `<NexChatPanel>` (sheet bottom-right desktop / fullscreen mobile) com markdown rendering, persistência localStorage (40 msgs cap), sugestões iniciais, textarea auto-grow, Enter envia / Shift+Enter quebra.
+- **7 tools (function calling):** `query_conversations`, `query_messages`, `query_users`, `query_contacts`, `aggregate_conversations`, `get_top_agents`, `get_dashboard_summary`.
+- **Multi-provider LLM:**
+  - Adapters via `fetch` puro pra OpenAI / Anthropic / Gemini / OpenRouter — interface comum `ProviderClient.chat({messages, tools})`.
+  - Mock automático quando API key vazia/MOCK (permite UI testável sem key real).
+  - Pricing por modelo (gpt-4o, claude-3-5-sonnet, gemini-2.0-flash, etc.).
+- **UI config** em /configuracoes (super_admin): card "Agente IA (Nex)" com select de provider + modelo + API key (encrypted AES-256-GCM no DB) + botão "Testar conexão" + status badge.
+- **Dashboard de consumo** `/configuracoes/consumo` (super_admin): KPIs (chamadas/tokens/custo), gráficos (custo por dia, distribuição por provider, custo por modelo), tabela paginada, filtros sem cap superior (mín = data de criação do sistema), pill "Tudo" cobre desde o início.
+- Tabelas DB novas: `llm_configs` + `llm_usage` (criadas via `CREATE TABLE IF NOT EXISTS` idempotente).
+- Logging automático de cada chamada do agente em `llm_usage`.
+
+### Mudanças de comportamento
+- `PeriodKey` canônico: 4 valores (`hoje | semana_atual | mes_atual | custom`). Fallback síncrono em `getPeriod` pra chaves legadas (ontem/7d/30d/mes_anterior) ainda funciona via Date local.
+- Filtros condicionais: novo padrão Where-clause builder disponível mas ainda não aplicado em pages (uso futuro).
+- Charts dos relatórios devem usar componentes de `src/components/charts/*` (B6) — Recharts direto agora é exceção.
+
+### Removido
+- 10 pages antigas de relatórios (substituídas por redirects 302 para os super-relatórios).
+- `kpi-clickable.tsx`, `top5-card.tsx` (substituídos por StatsCard / KpiClickableCard / Top5ListCard).
+- `edit-user-dialog.tsx`, `users-table.tsx`, `role-badge.tsx` (consolidados em `users-content.tsx` + `user-form-dialog.tsx`).
+- `conversas-filters.tsx`, `period-selector.tsx` (substituídos por `AdvancedFilters` + `PeriodPills`).
+
+### Tests
+- 241 testes Jest passando (95 → 241 desde v0.5.0).
+- Cobertura: helpers (datetime, filter-state, format-document, generate-temp-password, apply-conditions, calculateCost, charts colors), hooks (useSortableData), tools (Nex definitions + run-nex), providers (mock factory + interface), queries (usage-stats, catalog).
+
+### Stack atualizado
+- Recharts 3 (charts)
+- Framer Motion 12 (animações)
+- date-fns + date-fns-tz (datas com TZ)
+- base-ui (Popover, Dialog, Sheet, Tabs)
+- Lucide (icons)
+
+---
+
 ## [v0.5.0] 2026-04-29 — Foundation + UX shell + dashboards operacionais
 
 ### Crítico (corrigido)
