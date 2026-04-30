@@ -65,11 +65,12 @@ import type {
 export type { MetaItem };
 
 // Critérios de ordenação disponíveis na tabela de conversas — espelha as
-// colunas com `compareFn` definidos em <ConversasTable>.
+// colunas com `compareFn` definidos em <ConversasTable>. WhatsApp foi
+// removido junto com a coluna em v0.10.4 (continua disponível só no
+// drill-down).
 const SORT_OPTIONS: SortRuleOption[] = [
   { key: "display_id", label: "#" },
   { key: "name", label: "Nome" },
-  { key: "phone", label: "WhatsApp" },
   { key: "inbox", label: "Estado" },
   { key: "team", label: "Departamento" },
   { key: "assignee", label: "Atendente" },
@@ -295,7 +296,7 @@ export function AdvancedFilters({
       role="toolbar"
       aria-label="Filtros avançados"
       data-toolbar="conversas"
-      className="sticky top-0 z-[var(--z-toolbar,30)] space-y-3 rounded-2xl border border-border bg-card/95 p-4 shadow-sm backdrop-blur-md sm:p-5"
+      className="space-y-3 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5"
     >
       {/* Linha 1 — Período */}
       <div className="flex flex-col gap-2">
