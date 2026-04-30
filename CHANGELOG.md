@@ -1,5 +1,61 @@
 # Changelog
 
+## [v0.6.1] 2026-04-29 — Tabela Conversas parruda + Busca global + Tour + Toggle Nex/Matrix IA
+
+### Corrigido (crítico)
+- **Erro 500 em `/relatorios/performance`, `/equipe`, `/distribuicao`, `/visao-geral`, `/origem-ia`**: Server Components passavam funções (`render`, `formatValue`) diretamente para Client Components — proibido em React 19/Next 16. Criados 4 client wrappers (tempos-resposta-bar, sla-policies-table, ranking-atendentes-table, por-estado-table) e 10 contents foram envolvidos em try/catch com `<ErrorState>` em vez de propagar exception.
+- **Bug `column t.color does not exist` em /relatorios/conversas**: schema da tabela `tags` do Chatwoot tem só id/name/taggings_count. Removida referência a `t.color`. `<LabelsChips>` agora gera cor determinística via hash do nome.
+- **BadgeSelect dropdown não abria** (status na tabela /usuarios + nível no dialog Editar): classes `scale-95 opacity-0 fill-mode-forwards` deixavam o popover invisível para sempre. Removidas. Z-index elevado para 1000.
+
+### Adicionado
+- **Wizard 3 etapas no Novo/Editar Usuário** voltou: Identidade → Acesso (condicional por nível) → Confirmação. Super_admin pula etapa Acesso (banner "Acesso total"); admin/viewer com multi-select de contas; gerente com contas + departamentos. Stepper visual no topo.
+- **Dropdown Nível de acesso** virou combobox vertical (não pill) com ícone + label semibold + descrição + check, via portal/fixed pra não ser cortado pelo dialog.
+- **Owner immutability total**: owner não pode ser editado/deletado por NINGUÉM (incluindo si mesmo via /usuarios — edita-se via /perfil). Super_admin pode editar/deletar OUTROS super_admin não-owner. 28 testes em `permissions.ts`.
+- **Busca global Cmd/Ctrl+K** na sidebar:
+  - Barrinha no topo da sidebar (substitui o conteúdo onde estava o account switcher)
+  - Modal full-screen com portal + backdrop blur
+  - Busca em Empresas (contas Chatwoot) + Usuários (super_admin/admin) + Páginas
+  - Setas ↑↓ navegam, Enter abre, ESC fecha
+  - Resultados agrupados com contadores
+  - Atalho Cmd+K (Mac) / Ctrl+K (outros) detectado automaticamente
+- **Account Switcher movido pro fundo da sidebar** (acima do user info).
+- **Pill "Todos"** nos filtros de período: cobre desde o epoch (1970-01-01) até agora — pega TUDO do banco.
+- **Custom range ILIMITADO**: removido cap de 90 dias. `mín = primeiro registro do banco` (busca via `getMinReportDate(accountId)`); `máx = hoje`.
+- **`<RefreshButton>`** ícone giratório em todas as pages de relatório (router.refresh + useTransition).
+- **`<LoadingOverlay>`** durante filter transitions com spinner + texto "Carregando relatório...". Provider compartilhado `<FilterTransitionProvider>` envolve `AdvancedFilters` + `PeriodSelectorUrl` + filters.
+- **Toggle Matrix IA** em /configuracoes (super_admin only): Switch ON/OFF na key `reports.include_matrix_ia`. OFF: esconde inbox 31 dos não-super_admin. Super_admin sempre vê tudo. Helper `shouldExcludeMatrixIA()` aplicado em todas queries.
+- **Tabela Conversas parruda** (refatoração 100%):
+  - 16 colunas configuráveis: #, Nome, WhatsApp, **Documento** (CPF/CNPJ via detectDocument), Estado, Departamento, Atendente, Status, Prioridade, Labels, **Sem resposta há**, **Aberta há**, **Criado em**, **Última atualização**, atributos custom, Ações.
+  - **Sort clicável** com cycle `null → asc → desc → null`, indicador `ChevronUp/Down`.
+  - **Multi-sort hierárquico** via Shift+click (badge numerado 1, 2, 3 nos headers).
+  - **Esconder colunas**: botão "Colunas" abre popover com checkboxes (persistido em localStorage chave `conversas-table-cols`). Padrão: todas selecionadas. Atalhos "Selecionar todas" / "Desmarcar todas".
+  - **Selector de quantidade**: 50 / 100 / Todos (max 10000) — persistido em localStorage.
+  - **Tempo sem resposta**: status=1 → "—". Aberta + última msg incoming → `now - last_incoming_at`. Caso contrário → "—".
+  - **Tempo aberta**: status=1 → "—". Aberta + última msg outgoing → `now - last_outgoing_at`. Caso contrário → "—".
+  - Cálculo via `EXTRACT(EPOCH FROM ...)` no Postgres com `CASE` por status.
+  - Mobile vira cards com mesmas informações.
+- **Tour/Tutorial passo-a-passo** com botão "?" no header dos relatórios:
+  - `<TourProvider>` context montado no protected layout
+  - `<TourOverlay>` com SVG-mask spotlight no target + halo violeta + popover adaptivo
+  - Backdrop blur, animações Framer Motion respeitando `prefers-reduced-motion`
+  - Tours definidos: dashboard, conversas, mensagens-não-respondidas
+  - Esc fecha, setas navegam, "Pular tour" disponível
+- **Toggle ON/OFF do Agente Nex bubble** em /configuracoes:
+  - Bloco "Status do agente" no topo do `<LlmConfigCard>` com Switch + dot esmeralda glow (ON) / cinza (OFF)
+  - Setting `nex.bubble_enabled` em `app_settings`. Default: ON quando há LLM config ativa, OFF caso contrário.
+  - Layout protegido renderiza `<NexBubble />` condicionalmente.
+  - Switch desabilitado quando não há config LLM (com tooltip).
+
+### Mudanças de comportamento
+- `PeriodKey` agora tem 5 valores canônicos: `hoje | semana_atual | mes_atual | todos | custom`.
+- Custom range não é mais 90 dias máx — é todo o histórico do banco.
+- Conversas table state (sort/cols/page-size) persistido por usuário em localStorage.
+
+### Tests
+- 279 testes Jest passando (241 → 279 desde v0.6.0).
+
+---
+
 ## [v0.6.0] 2026-04-29 — Refazer fiel ao Roteador + Agente Nex IA + relatórios consolidados
 
 ### Corrigido
