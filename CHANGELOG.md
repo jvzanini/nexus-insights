@@ -1,5 +1,32 @@
 # Changelog
 
+## [v0.10.2] 2026-04-30 — Dashboard fix de UX (drill central, status compacto, "Abrir no Chatwoot")
+
+> Hotfix de UX do dashboard v0.10.0 a partir do feedback do João: drill-down não estava centralizando direito (parecia side-sheet quebrado), toggle bar/donut atrapalhava a leitura, donut de status ocupava bloco gigante com pouco conteúdo, faltava botão "Abrir no Chatwoot" nas tabelas, faltava afordância visual de click nas barras, e a seção "Conversas recentes" no fim não trazia valor.
+
+### Corrigido
+
+- **Drill-down dialog não centralizava no desktop** — `inset-x-0` mobile-first conflitava com a centralização desktop (`inset-x-0` define `left:0` e `right:0`, impedindo `left-1/2 + translate`). Reescrito posicionamento usando `left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2` para todas as breakpoints. Agora abre **no centro** da viewport com o tamanho correto.
+
+### Mudou
+
+- **Removido toggle bar/donut** dos cards de Inboxes e Departamentos — fica **bar-only** (mais legível para ranking, suporta qualquer número de categorias). João: "tem que ser um ou outro".
+- **Status distribution card compactado** — antes era um bloco full-width com donut centralizado e legenda em baixo, ocupando muito espaço pra pouca informação. Agora: donut compacto à esquerda (220×220) + legenda clicável à direita com label, %, contagem e seta `→`. Cada linha da legenda dispara o drill-down.
+- **Cards de distribuição (Inbox e Departamento) ganharam hint visual** — subtítulo "🖱 Clique numa barra para ver as conversas" deixa claro que a tabela é interativa.
+- **Removida seção "Conversas recentes"** do dashboard — não trazia valor próximo aos demais cards. Conversas seguem disponíveis em `/relatorios/conversas` e via drill-downs (todas com botão "Abrir no Chatwoot").
+- **Tour atualizado** — passo "recent" removido; "status" ganhou cópia indicando que a legenda é clicável.
+
+### Adicionado
+
+- **Botão "Abrir no Chatwoot"** em todas as tabelas de drill-down do dashboard (Recebidas, Resolvidas, Abertas, Sem-resposta, Por departamento) e na lista preview do `<NoResponseCard>`. Reusa `<OpenInChatwoot>` (`src/components/reports/open-in-chatwoot.tsx`).
+
+### Verificação
+
+- `npx tsc --noEmit` — verde nos arquivos do dashboard.
+- `npx eslint src/components/dashboard src/components/ui/drill-down-dialog.tsx` — sem warnings.
+
+---
+
 ## [v0.10.1] 2026-04-30 — Conversas: presets + atalhos rápidos + polimento
 
 > Complementos da v0.9.0/v0.9.1 — pendências do feedback do João: filtros salvos, atalhos rápidos, migração de localStorage cols (corrige WhatsApp aparecendo na grade pra usuários antigos), polimento touch-target em mobile. (Originalmente planejado como v0.9.2 — promovido a 0.10.1 porque o release v0.10.0 do dashboard caiu antes.)

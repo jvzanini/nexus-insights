@@ -22,7 +22,6 @@ import { formatDuration } from "@/lib/utils/format-time";
 import { CHART_COLORS } from "@/lib/charts/colors";
 import { ConversationsLineChart } from "./conversations-line-chart";
 import { DashboardFilters } from "./dashboard-filters";
-import { RecentConversationsTable } from "./recent-conversations-table";
 import { Top5ListCard } from "./top5-list-card";
 import { KpiClickableCard } from "./kpi-clickable-card";
 import { Sparkline } from "./sparkline";
@@ -272,7 +271,6 @@ export function DashboardContent({
     byTeam,
     byStatus,
     noResponse,
-    recent,
   } = data;
 
   const resolutionRateLabel =
@@ -410,6 +408,7 @@ export function DashboardContent({
         <motion.div variants={itemVariants} className="lg:col-span-2">
           <NoResponseCard
             data={noResponse}
+            accountId={accountId}
             onSeeAll={() => setDrillDown("noResponse")}
           />
         </motion.div>
@@ -467,11 +466,6 @@ export function DashboardContent({
           data={byStatus}
           onSelect={(status) => setDrillDown({ kind: "status", status })}
         />
-      </motion.div>
-
-      {/* Conversas recentes */}
-      <motion.div variants={itemVariants} data-tour="dashboard-recent">
-        <RecentConversationsTable items={recent} />
       </motion.div>
 
       {/* Drill-down dialogs (KPIs) */}

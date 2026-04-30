@@ -21,6 +21,7 @@ import {
   DrillDownSection,
   DrillDownSkeleton,
 } from "@/components/ui/drill-down-dialog";
+import { OpenInChatwoot } from "@/components/reports/open-in-chatwoot";
 import {
   getNoResponseDrillDownAction,
   type DashboardPeriod,
@@ -197,13 +198,16 @@ export function NoResponseDrillDownContent({
                 <TableHead className="h-9 text-xs font-medium text-muted-foreground">
                   Última msg
                 </TableHead>
+                <TableHead className="h-9 text-xs font-medium text-muted-foreground">
+                  Ação
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.items.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={5}
+                    colSpan={6}
                     className="py-8 text-center text-sm text-muted-foreground"
                   >
                     Nenhuma conversa sem resposta no período.
@@ -232,6 +236,12 @@ export function NoResponseDrillDownContent({
                         addSuffix: true,
                         locale: ptBR,
                       })}
+                    </TableCell>
+                    <TableCell className="py-2.5">
+                      <OpenInChatwoot
+                        accountId={accountId}
+                        displayId={item.displayId}
+                      />
                     </TableCell>
                   </TableRow>
                 ))

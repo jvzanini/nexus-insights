@@ -57,15 +57,7 @@ export const dashboardTour: TourConfig = {
       targetSelector: "[data-tour='dashboard-status']",
       title: "Distribuição por status",
       description:
-        "Donut com aberto, pendente, adiado e resolvido — recortado pelas conversas criadas no período.",
-      placement: "top",
-    },
-    {
-      id: "recent",
-      targetSelector: "[data-tour='dashboard-recent']",
-      title: "Conversas recentes",
-      description:
-        "Últimas 10 conversas com link direto para abrir no Chatwoot.",
+        "Donut com aberto, pendente, adiado e resolvido — recortado pelas conversas criadas no período. Clique num status para abrir a lista.",
       placement: "top",
     },
   ],

@@ -5,6 +5,7 @@ import { AlertCircle, ArrowRight, CheckCircle2 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { OpenInChatwoot } from "@/components/reports/open-in-chatwoot";
 import { cn } from "@/lib/utils";
 import type { DashboardNoResponse } from "@/lib/chatwoot/queries/dashboard-data";
 
@@ -19,6 +20,7 @@ function formatWaiting(seconds: number): string {
 
 export interface NoResponseCardProps {
   data: DashboardNoResponse;
+  accountId: number;
   onSeeAll: () => void;
 }
 
@@ -28,7 +30,11 @@ export interface NoResponseCardProps {
  * Definição (status=0 + última msg do contato + criadas no período) já vem do
  * `dashboard-data.ts`. Aqui apenas apresentamos o resumo + preview + CTA.
  */
-export function NoResponseCard({ data, onSeeAll }: NoResponseCardProps) {
+export function NoResponseCard({
+  data,
+  accountId,
+  onSeeAll,
+}: NoResponseCardProps) {
   const hasItems = data.total > 0;
   const oldestLabel = formatWaiting(data.oldestSeconds);
 
@@ -108,6 +114,10 @@ export function NoResponseCard({ data, onSeeAll }: NoResponseCardProps) {
                   <span className="shrink-0 rounded-md bg-amber-500/10 px-2 py-1 text-xs font-semibold tabular-nums text-amber-400">
                     {formatWaiting(item.waitingSeconds)}
                   </span>
+                  <OpenInChatwoot
+                    accountId={accountId}
+                    displayId={item.displayId}
+                  />
                 </li>
               ))}
             </ul>

@@ -75,14 +75,15 @@ export function DrillDownDialog({
           data-slot="drill-down-dialog"
           aria-describedby={undefined}
           className={cn(
-            // Mobile: full-screen top-down
-            "fixed inset-x-0 top-0 z-50 flex h-[100dvh] w-full flex-col",
-            "bg-card text-foreground outline-none",
-            // Desktop: centralizado com max-width
-            "md:left-1/2 md:top-1/2 md:inset-x-auto md:h-auto md:max-h-[90dvh]",
-            "md:-translate-x-1/2 md:-translate-y-1/2 md:w-[calc(100vw-2rem)]",
-            "md:rounded-2xl md:border md:border-border md:shadow-2xl md:shadow-black/40",
+            // Posicionamento: top-left em 50% e translate -50% — mais robusto
+            // que `inset-x-0` (que define left+right=0 e impede centralização).
+            "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50",
+            // Tamanho: mobile preenche viewport com padding seguro; desktop centralizado.
+            "flex flex-col w-[calc(100vw-1rem)] max-h-[calc(100dvh-1rem)]",
+            "md:max-h-[90dvh] md:w-[calc(100vw-3rem)]",
             SIZE_MAP[size],
+            "bg-card text-foreground outline-none",
+            "rounded-2xl border border-border shadow-2xl shadow-black/40",
             // Animações
             "duration-260 motion-reduce:duration-0",
             "data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95",

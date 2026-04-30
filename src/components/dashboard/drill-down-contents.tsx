@@ -24,6 +24,7 @@ import {
 } from "@/components/charts";
 import { CHART_COLORS } from "@/lib/charts/colors";
 import { StatusBadge } from "@/components/reports/status-badge";
+import { OpenInChatwoot } from "@/components/reports/open-in-chatwoot";
 import {
   Table,
   TableBody,
@@ -35,7 +36,7 @@ import {
 import {
   DrillDownSection,
   DrillDownSkeleton,
-} from "@/components/ui/drill-down-sheet";
+} from "@/components/ui/drill-down-dialog";
 import {
   getOpenDrillDownAction,
   getReceivedDrillDownAction,
@@ -74,21 +75,24 @@ function formatBucket(
 
 function ConversationTable({
   items,
+  accountId,
   emptyMessage,
 }: {
   items: Array<{
     id: number;
+    displayId: number;
     contactName: string | null;
     inboxName: string | null;
     assigneeName: string | null;
     status: number;
     lastActivityAt: string;
   }>;
+  accountId: number;
   emptyMessage: string;
 }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-border">
-      <Table className="min-w-[640px]">
+      <Table className="min-w-[720px]">
         <TableHeader>
           <TableRow className="border-border hover:bg-transparent">
             <TableHead className="h-9 text-xs font-medium text-muted-foreground">
@@ -106,13 +110,16 @@ function ConversationTable({
             <TableHead className="h-9 text-xs font-medium text-muted-foreground">
               Status
             </TableHead>
+            <TableHead className="h-9 text-xs font-medium text-muted-foreground">
+              Ação
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {items.length === 0 ? (
             <TableRow>
               <TableCell
-                colSpan={5}
+                colSpan={6}
                 className="py-8 text-center text-sm text-muted-foreground"
               >
                 {emptyMessage}
@@ -141,6 +148,12 @@ function ConversationTable({
                 </TableCell>
                 <TableCell className="py-2.5">
                   <StatusBadge status={item.status} />
+                </TableCell>
+                <TableCell className="py-2.5">
+                  <OpenInChatwoot
+                    accountId={accountId}
+                    displayId={item.displayId}
+                  />
                 </TableCell>
               </TableRow>
             ))
@@ -274,6 +287,7 @@ export function ReceivedDrillDownContent({
       >
         <ConversationTable
           items={data.recent}
+          accountId={accountId}
           emptyMessage="Nenhuma conversa recebida no período"
         />
       </DrillDownSection>
@@ -391,6 +405,7 @@ export function ResolvedDrillDownContent({
       >
         <ConversationTable
           items={data.recent}
+          accountId={accountId}
           emptyMessage="Nenhuma conversa resolvida no período"
         />
       </DrillDownSection>
@@ -490,6 +505,7 @@ export function OpenDrillDownContent({
       >
         <ConversationTable
           items={data.open}
+          accountId={accountId}
           emptyMessage="Nenhuma conversa em aberto"
         />
       </DrillDownSection>

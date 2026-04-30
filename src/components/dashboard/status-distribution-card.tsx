@@ -1,10 +1,11 @@
 "use client";
 
-import { PieChart as PieChartIcon } from "lucide-react";
+import { ChevronRight, MousePointerClick, PieChart as PieChartIcon } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DonutWithCenter } from "@/components/charts";
 import { CHART_COLORS } from "@/lib/charts/colors";
+import { cn } from "@/lib/utils";
 import type {
   DashboardByStatus,
   DashboardStatusCode,
@@ -48,24 +49,79 @@ export function StatusDistributionCard({
           </span>
           <span className="flex flex-col">
             <span className="leading-none">Distribuição por status</span>
-            <span className="mt-1 text-xs font-normal text-muted-foreground">
-              Conversas criadas no período
+            <span className="mt-1 text-xs font-normal text-muted-foreground inline-flex items-center gap-1">
+              <MousePointerClick className="h-3 w-3" aria-hidden="true" />
+              Clique num status para ver as conversas
             </span>
           </span>
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <DonutWithCenter
-          data={slices}
-          centerLabel="Total"
-          centerValue={total.toLocaleString("pt-BR")}
-          height={300}
-          emptyMessage="Sem conversas no período"
-          onSliceClick={(name) => {
-            const found = data.find((item) => item.label === name);
-            if (found) onSelect(found.status);
-          }}
-        />
+        <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:gap-6">
+          {/* Donut compacto à esquerda */}
+          <div className="w-full max-w-[220px] shrink-0">
+            <DonutWithCenter
+              data={slices}
+              centerLabel="Total"
+              centerValue={total.toLocaleString("pt-BR")}
+              height={220}
+              innerRadius={56}
+              outerRadius={88}
+              emptyMessage="Sem conversas no período"
+              onSliceClick={(name) => {
+                const found = data.find((item) => item.label === name);
+                if (found) onSelect(found.status);
+              }}
+            />
+          </div>
+
+          {/* Legenda + contagens clicáveis à direita */}
+          <ul
+            className="flex w-full flex-1 flex-col gap-2"
+            aria-label="Conversas por status"
+          >
+            {data.map((item) => {
+              const pct = total > 0 ? (item.count / total) * 100 : 0;
+              const isClickable = item.count > 0;
+              return (
+                <li key={item.status}>
+                  <button
+                    type="button"
+                    disabled={!isClickable}
+                    onClick={() => onSelect(item.status)}
+                    className={cn(
+                      "group flex w-full items-center gap-3 rounded-lg border border-border/50 bg-background/40 px-3 py-2 text-left transition-all duration-200",
+                      isClickable
+                        ? "cursor-pointer hover:border-violet-500/50 hover:bg-accent/30"
+                        : "cursor-not-allowed opacity-60",
+                    )}
+                  >
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: STATUS_COLORS[item.status] }}
+                      aria-hidden="true"
+                    />
+                    <span className="flex-1 text-sm font-medium text-foreground">
+                      {item.label}
+                    </span>
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                      {pct.toFixed(1)}%
+                    </span>
+                    <span className="shrink-0 rounded-md bg-muted/40 px-2 py-0.5 text-xs font-semibold tabular-nums text-foreground">
+                      {item.count.toLocaleString("pt-BR")}
+                    </span>
+                    {isClickable ? (
+                      <ChevronRight
+                        className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
+                        aria-hidden="true"
+                      />
+                    ) : null}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       </CardContent>
     </Card>
   );

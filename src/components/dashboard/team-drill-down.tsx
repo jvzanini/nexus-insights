@@ -19,6 +19,7 @@ import {
   DrillDownSection,
   DrillDownSkeleton,
 } from "@/components/ui/drill-down-dialog";
+import { OpenInChatwoot } from "@/components/reports/open-in-chatwoot";
 import {
   getByTeamDrillDownAction,
   type DashboardPeriod,
@@ -134,13 +135,16 @@ export function TeamDrillDownContent({
                 <TableHead className="h-9 text-xs font-medium text-muted-foreground">
                   Status
                 </TableHead>
+                <TableHead className="h-9 text-xs font-medium text-muted-foreground">
+                  Ação
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.items.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={5}
+                    colSpan={6}
                     className="py-8 text-center text-sm text-muted-foreground"
                   >
                     Nenhuma conversa neste departamento no recorte.
@@ -169,6 +173,12 @@ export function TeamDrillDownContent({
                     </TableCell>
                     <TableCell className="py-2.5">
                       <StatusBadge status={item.status} />
+                    </TableCell>
+                    <TableCell className="py-2.5">
+                      <OpenInChatwoot
+                        accountId={accountId}
+                        displayId={item.displayId}
+                      />
                     </TableCell>
                   </TableRow>
                 ))
