@@ -19,10 +19,10 @@ describe("formatRelativeShort", () => {
   it("há Xd", () => {
     expect(formatRelativeShort(new Date("2026-04-27T18:00:00Z"))).toBe("há 3d");
   });
-  it("há X mês", () => {
-    expect(formatRelativeShort(new Date("2026-02-28T18:00:00Z"))).toBe("há 2 mês");
+  it("há Xm (meses, abreviado)", () => {
+    expect(formatRelativeShort(new Date("2026-02-28T18:00:00Z"))).toBe("há 2m");
   });
-  it("há X anos", () => {
-    expect(formatRelativeShort(new Date("2024-04-30T18:00:00Z"))).toBe("há 2 anos");
+  it("há Xa (anos, abreviado)", () => {
+    expect(formatRelativeShort(new Date("2024-04-30T18:00:00Z"))).toBe("há 2a");
   });
 });

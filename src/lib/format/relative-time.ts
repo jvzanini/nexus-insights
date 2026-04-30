@@ -16,7 +16,7 @@ export function formatRelativeShort(date: Date | string): string {
   const day = Math.floor(hr / 24);
   if (day < 30) return `há ${day}d`;
   const mon = Math.floor(day / 30);
-  if (mon < 12) return mon === 1 ? "há 1 mês" : `há ${mon} mês`;
+  if (mon < 12) return `há ${mon}m`;
   const yr = Math.floor(mon / 12);
-  return yr === 1 ? "há 1 ano" : `há ${yr} anos`;
+  return `há ${yr}a`;
 }
