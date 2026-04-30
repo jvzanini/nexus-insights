@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Building2,
@@ -8,15 +8,16 @@ import {
   Inbox,
   LayoutDashboard,
   MessageSquare,
+  PieChart as PieChartIcon,
   TrendingUp,
   Users,
 } from "lucide-react";
+
 import {
   getDashboardData,
   type DashboardActionResult,
   type DashboardPeriod,
 } from "@/lib/actions/dashboard";
-import { switchAccount } from "@/lib/actions/account-switch";
 import { formatDuration } from "@/lib/utils/format-time";
 import { CHART_COLORS } from "@/lib/charts/colors";
 import { ConversationsLineChart } from "./conversations-line-chart";
@@ -25,22 +26,32 @@ import { RecentConversationsTable } from "./recent-conversations-table";
 import { Top5ListCard } from "./top5-list-card";
 import { KpiClickableCard } from "./kpi-clickable-card";
 import { Sparkline } from "./sparkline";
+import { NoResponseCard } from "./no-response-card";
+import { DepartmentDistributionCard } from "./department-distribution-card";
+import { InboxDistributionCard } from "./inbox-distribution-card";
+import { StatusDistributionCard } from "./status-distribution-card";
+import { NoResponseDrillDownContent } from "./no-response-drill-down";
+import { TeamDrillDownContent } from "./team-drill-down";
 import {
   OpenDrillDownContent,
   ReceivedDrillDownContent,
   ResolutionRateDrillDownContent,
   ResolvedDrillDownContent,
 } from "./drill-down-contents";
-import { DrillDownSheet } from "@/components/ui/drill-down-sheet";
+import { DrillDownDialog } from "@/components/ui/drill-down-dialog";
 import { TourButton } from "@/components/tour/tour-button";
 import { FactsFreshness } from "@/components/reports/facts-freshness";
 import { dashboardTour } from "@/lib/tours/dashboard-tour";
+import type { DashboardStatusCode } from "@/lib/chatwoot/queries/dashboard-data";
 
 type DashboardSnapshot = NonNullable<DashboardActionResult["data"]>;
 
 interface DashboardContentProps {
   userName: string;
   initialAccountId: number;
+  /** Timezone da plataforma (lida no server). */
+  tz: string;
+  /** Lista de contas acessíveis — usada apenas para empty state. */
   initialAccounts: Array<{ id: number; name: string }>;
 }
 
@@ -61,7 +72,7 @@ const itemVariants = {
   },
 };
 
-const POLL_INTERVAL = 60_000; // 60s
+const POLL_INTERVAL = 60_000;
 
 const WEEKDAYS = [
   "domingo",
@@ -87,26 +98,40 @@ const MONTHS = [
   "dezembro",
 ];
 
+type DrillDownState =
+  | null
+  | "received"
+  | "resolved"
+  | "open"
+  | "rate"
+  | "noResponse"
+  | { kind: "team"; id: number | null; name: string }
+  | { kind: "inbox"; id: number; name: string }
+  | { kind: "status"; status: DashboardStatusCode };
+
+function isDrillDownObject(
+  d: DrillDownState,
+): d is Exclude<DrillDownState, null | string> {
+  return typeof d === "object" && d !== null;
+}
+
 export function DashboardContent({
   userName,
   initialAccountId,
+  tz,
   initialAccounts,
 }: DashboardContentProps) {
-  const [accountId, setAccountId] = useState(initialAccountId);
+  const [accountId] = useState(initialAccountId);
   const [period, setPeriod] = useState<DashboardPeriod>("today");
   const [data, setData] = useState<DashboardSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const [, startTransition] = useTransition();
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  type DrillDownKind = "received" | "resolved" | "open" | "rate" | null;
-  const [drillDown, setDrillDown] = useState<DrillDownKind>(null);
+  const [drillDown, setDrillDown] = useState<DrillDownState>(null);
   const closeDrillDown = useCallback(() => setDrillDown(null), []);
 
-  // Sparklines extraídos do chart bucketed (declarados antes de qualquer
-  // early return para respeitar `react-hooks/rules-of-hooks`).
   const chartPoints = data?.chart;
   const receivedSpark = useMemo(
     () => (chartPoints ? chartPoints.map((p) => p.received) : []),
@@ -129,15 +154,11 @@ export function DashboardContent({
   const fetchData = useCallback(
     async (showSkeleton = false) => {
       if (showSkeleton) {
-        // Delegado ao próximo microtask para não disparar setState sync em effect.
         await Promise.resolve();
         setIsLoading(true);
       }
       try {
-        const result = await getDashboardData({
-          accountId,
-          period,
-        });
+        const result = await getDashboardData({ accountId, period });
         if (result.success && result.data) {
           setData(result.data);
           setError(null);
@@ -155,13 +176,11 @@ export function DashboardContent({
   );
 
   useEffect(() => {
-    // setState dentro de fetchData ocorre apenas após await (assíncrono),
-    // mas o lint estático sinaliza assim mesmo — silenciamos com justificativa.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchData(isInitialLoad);
 
     timerRef.current = setInterval(() => {
-      void fetchData(false); // polling silencioso
+      void fetchData(false);
     }, POLL_INTERVAL);
 
     return () => {
@@ -176,28 +195,14 @@ export function DashboardContent({
     timerRef.current = setInterval(() => fetchData(false), POLL_INTERVAL);
   }
 
-  function handleAccountChange(id: number) {
-    setAccountId(id);
-    // Persiste cookie no servidor (não bloqueia UI).
-    startTransition(async () => {
-      try {
-        await switchAccount(id);
-      } catch {
-        // ignora — fetchData devolve erro se não houver acesso
-      }
-    });
-  }
-
   function handlePeriodChange(p: DashboardPeriod) {
     setPeriod(p);
   }
 
-  // Greeting de hoje
   const now = new Date();
   const weekday = WEEKDAYS[now.getDay()]!;
   const today = `${weekday.charAt(0).toUpperCase() + weekday.slice(1)}, ${now.getDate()} de ${MONTHS[now.getMonth()]} de ${now.getFullYear()}`;
 
-  // Skeleton inicial
   if (isInitialLoad && !data) {
     return (
       <div className="space-y-8 animate-pulse">
@@ -211,14 +216,14 @@ export function DashboardContent({
           ))}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-          <div className="lg:col-span-2 h-[350px] bg-card border border-border rounded-xl" />
-          <div className="h-[350px] bg-card border border-border rounded-xl" />
+          <div className="lg:col-span-2 h-[200px] bg-card border border-border rounded-xl" />
+          <div className="h-[200px] bg-card border border-border rounded-xl" />
         </div>
+        <div className="h-[350px] bg-card border border-border rounded-xl" />
       </div>
     );
   }
 
-  // Estado de erro permanente
   if (!data && error) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
@@ -258,8 +263,17 @@ export function DashboardContent({
     );
   }
 
-  const { stats, chart, granularity, topAgents, topInboxes, topTeams, recent } =
-    data;
+  const {
+    stats,
+    chart,
+    granularity,
+    topAgents,
+    topInboxes,
+    byTeam,
+    byStatus,
+    noResponse,
+    recent,
+  } = data;
 
   const resolutionRateLabel =
     stats.resolutionRate !== null
@@ -274,14 +288,23 @@ export function DashboardContent({
     value: string;
   } | null {
     if (value === null || value === undefined) return null;
-    const direction =
-      value > 0.05 ? "up" : value < -0.05 ? "down" : "flat";
+    const direction = value > 0.05 ? "up" : value < -0.05 ? "down" : "flat";
     const sign = value > 0 ? "+" : "";
     return {
       direction,
       value: `${sign}${value.toFixed(1)}${suffix}`,
     };
   }
+
+  const teamDrill = isDrillDownObject(drillDown) && drillDown.kind === "team"
+    ? drillDown
+    : null;
+  const inboxDrill = isDrillDownObject(drillDown) && drillDown.kind === "inbox"
+    ? drillDown
+    : null;
+  const statusDrill = isDrillDownObject(drillDown) && drillDown.kind === "status"
+    ? drillDown
+    : null;
 
   return (
     <motion.div
@@ -307,20 +330,17 @@ export function DashboardContent({
         </div>
       </motion.div>
 
-      {/* Filtros */}
+      {/* Filtros (sem account selector — vive no sidebar) */}
       <motion.div variants={itemVariants} data-tour="dashboard-filters">
         <DashboardFilters
-          accounts={initialAccounts}
-          selectedAccountId={accountId}
           selectedPeriod={period}
           isLoading={isLoading}
-          onAccountChange={handleAccountChange}
           onPeriodChange={handlePeriodChange}
           onRefresh={handleRefresh}
         />
       </motion.div>
 
-      {/* Stats cards (clickable) */}
+      {/* KPIs (mesma coorte) */}
       <motion.div
         variants={itemVariants}
         data-tour="dashboard-kpis"
@@ -363,9 +383,8 @@ export function DashboardContent({
           iconBg="bg-amber-500/10"
           iconColor="text-amber-400"
           label="Abertas"
-          sublabel="(agora)"
+          sublabel="(no período)"
           value={stats.open.toLocaleString("pt-BR")}
-          badge="agora"
           onClick={() => setDrillDown("open")}
         />
         <KpiClickableCard
@@ -386,14 +405,13 @@ export function DashboardContent({
         />
       </motion.div>
 
-      {/* Chart + Top 5 atendentes */}
+      {/* Sem resposta (hero) + Atendentes mais rápidos */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-        <motion.div
-          variants={itemVariants}
-          data-tour="dashboard-chart"
-          className="lg:col-span-2"
-        >
-          <ConversationsLineChart data={chart} granularity={granularity} />
+        <motion.div variants={itemVariants} className="lg:col-span-2">
+          <NoResponseCard
+            data={noResponse}
+            onSeeAll={() => setDrillDown("noResponse")}
+          />
         </motion.div>
         <motion.div variants={itemVariants}>
           <Top5ListCard
@@ -411,48 +429,53 @@ export function DashboardContent({
         </motion.div>
       </div>
 
-      {/* Top inboxes + top teams */}
+      {/* Chart por hora/dia */}
+      <motion.div variants={itemVariants} data-tour="dashboard-chart">
+        <ConversationsLineChart
+          data={chart}
+          granularity={granularity}
+          tz={tz}
+        />
+      </motion.div>
+
+      {/* Distribuições por inbox e departamento */}
       <div
-        data-tour="dashboard-tops"
+        data-tour="dashboard-distributions"
         className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6"
       >
         <motion.div variants={itemVariants}>
-          <Top5ListCard
-            icon={Inbox}
-            iconColor="text-amber-400"
-            iconBg="bg-amber-500/10"
-            title="Inboxes em aberto"
-            subtitle="Snapshot atual"
-            items={topInboxes.map((i) => ({
-              name: i.name,
-              value: i.count.toLocaleString("pt-BR"),
-            }))}
-            emptyMessage="Nenhuma inbox com conversas em aberto."
+          <InboxDistributionCard
+            data={topInboxes}
+            onSelect={(inbox) =>
+              setDrillDown({ kind: "inbox", id: inbox.id, name: inbox.name })
+            }
           />
         </motion.div>
         <motion.div variants={itemVariants}>
-          <Top5ListCard
-            icon={Users}
-            iconColor="text-emerald-400"
-            iconBg="bg-emerald-500/10"
-            title="Departamentos com mais resolvidas"
-            subtitle="No período selecionado"
-            items={topTeams.map((t) => ({
-              name: t.name,
-              value: t.count.toLocaleString("pt-BR"),
-            }))}
-            emptyMessage="Nenhum departamento com conversas resolvidas."
+          <DepartmentDistributionCard
+            data={byTeam}
+            onSelect={(team) =>
+              setDrillDown({ kind: "team", id: team.id, name: team.name })
+            }
           />
         </motion.div>
       </div>
 
-      {/* Recent conversations */}
+      {/* Distribuição por status */}
+      <motion.div variants={itemVariants} data-tour="dashboard-status">
+        <StatusDistributionCard
+          data={byStatus}
+          onSelect={(status) => setDrillDown({ kind: "status", status })}
+        />
+      </motion.div>
+
+      {/* Conversas recentes */}
       <motion.div variants={itemVariants} data-tour="dashboard-recent">
         <RecentConversationsTable items={recent} />
       </motion.div>
 
-      {/* Drill-down sheets (sempre montadas mas só carregam dados quando enabled) */}
-      <DrillDownSheet
+      {/* Drill-down dialogs (KPIs) */}
+      <DrillDownDialog
         open={drillDown === "received"}
         onOpenChange={(o) => (o ? setDrillDown("received") : closeDrillDown())}
         title="Conversas recebidas no período"
@@ -467,13 +490,13 @@ export function DashboardContent({
           period={period}
           enabled={drillDown === "received"}
         />
-      </DrillDownSheet>
+      </DrillDownDialog>
 
-      <DrillDownSheet
+      <DrillDownDialog
         open={drillDown === "resolved"}
         onOpenChange={(o) => (o ? setDrillDown("resolved") : closeDrillDown())}
         title="Conversas resolvidas no período"
-        subtitle="Volume, distribuição e últimas resoluções"
+        subtitle="Mesma coorte de criação — taxa coerente"
         icon={CheckCircle2}
         iconColor="text-emerald-400"
         iconBg="bg-emerald-500/10"
@@ -484,13 +507,13 @@ export function DashboardContent({
           period={period}
           enabled={drillDown === "resolved"}
         />
-      </DrillDownSheet>
+      </DrillDownDialog>
 
-      <DrillDownSheet
+      <DrillDownDialog
         open={drillDown === "open"}
         onOpenChange={(o) => (o ? setDrillDown("open") : closeDrillDown())}
-        title="Conversas em aberto agora"
-        subtitle="Snapshot atual — independente do período selecionado"
+        title="Conversas abertas no período"
+        subtitle="Criadas no período e ainda em aberto"
         icon={MessageSquare}
         iconColor="text-amber-400"
         iconBg="bg-amber-500/10"
@@ -498,11 +521,12 @@ export function DashboardContent({
       >
         <OpenDrillDownContent
           accountId={accountId}
+          period={period}
           enabled={drillDown === "open"}
         />
-      </DrillDownSheet>
+      </DrillDownDialog>
 
-      <DrillDownSheet
+      <DrillDownDialog
         open={drillDown === "rate"}
         onOpenChange={(o) => (o ? setDrillDown("rate") : closeDrillDown())}
         title="Análise da taxa de resolução"
@@ -517,7 +541,107 @@ export function DashboardContent({
           period={period}
           enabled={drillDown === "rate"}
         />
-      </DrillDownSheet>
+      </DrillDownDialog>
+
+      {/* Drill-downs novos */}
+      <DrillDownDialog
+        open={drillDown === "noResponse"}
+        onOpenChange={(o) =>
+          o ? setDrillDown("noResponse") : closeDrillDown()
+        }
+        title="Conversas sem resposta"
+        subtitle="Aguardando resposta no período selecionado"
+        icon={MessageSquare}
+        iconColor="text-amber-400"
+        iconBg="bg-amber-500/10"
+        size="xl"
+      >
+        <NoResponseDrillDownContent
+          accountId={accountId}
+          period={period}
+          enabled={drillDown === "noResponse"}
+        />
+      </DrillDownDialog>
+
+      <DrillDownDialog
+        open={teamDrill !== null}
+        onOpenChange={(o) => (o ? null : closeDrillDown())}
+        title={teamDrill ? `Departamento: ${teamDrill.name}` : "Departamento"}
+        subtitle="Aberto + pendente + adiado, no período"
+        icon={Users}
+        iconColor="text-emerald-400"
+        iconBg="bg-emerald-500/10"
+        size="xl"
+      >
+        {teamDrill ? (
+          <TeamDrillDownContent
+            accountId={accountId}
+            period={period}
+            teamId={teamDrill.id}
+            enabled={teamDrill !== null}
+          />
+        ) : null}
+      </DrillDownDialog>
+
+      <DrillDownDialog
+        open={inboxDrill !== null}
+        onOpenChange={(o) => (o ? null : closeDrillDown())}
+        title={inboxDrill ? `Inbox: ${inboxDrill.name}` : "Inbox"}
+        subtitle="Conversas em aberto no período"
+        icon={Inbox}
+        iconColor="text-amber-400"
+        iconBg="bg-amber-500/10"
+        size="xl"
+      >
+        {/* Reuso do drill-down de "open" — sem filtro inbox por enquanto.
+            v0.11 pode adicionar filtro inbox específico. */}
+        {inboxDrill ? (
+          <OpenDrillDownContent
+            accountId={accountId}
+            period={period}
+            enabled={inboxDrill !== null}
+          />
+        ) : null}
+      </DrillDownDialog>
+
+      <DrillDownDialog
+        open={statusDrill !== null}
+        onOpenChange={(o) => (o ? null : closeDrillDown())}
+        title={statusDrill ? `Status: ${labelForStatus(statusDrill.status)}` : "Status"}
+        subtitle="Conversas no recorte do status"
+        icon={PieChartIcon}
+        iconColor="text-violet-400"
+        iconBg="bg-violet-500/10"
+        size="xl"
+      >
+        {/* Para status=0 reusamos OpenDrillDown; para os demais, mostramos
+            uma view simples agora — drill específico em v0.11. */}
+        {statusDrill && statusDrill.status === 0 ? (
+          <OpenDrillDownContent
+            accountId={accountId}
+            period={period}
+            enabled={statusDrill !== null}
+          />
+        ) : statusDrill ? (
+          <div className="rounded-xl border border-border bg-background/40 p-6 text-sm text-muted-foreground">
+            Drill-down detalhado para status &ldquo;{labelForStatus(statusDrill.status)}&rdquo; será adicionado em uma versão futura.
+            Use a tela de Conversas para filtrar por status.
+          </div>
+        ) : null}
+      </DrillDownDialog>
     </motion.div>
   );
+}
+
+function labelForStatus(status: DashboardStatusCode): string {
+  switch (status) {
+    case 0:
+      return "Aberto";
+    case 1:
+      return "Resolvido";
+    case 2:
+      return "Pendente";
+    case 3:
+      return "Adiado";
+  }
 }

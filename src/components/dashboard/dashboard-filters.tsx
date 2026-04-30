@@ -1,16 +1,12 @@
 "use client";
 
-import { Building2, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CustomSelect } from "@/components/ui/custom-select";
 import type { DashboardPeriod } from "@/lib/actions/dashboard";
 
 interface DashboardFiltersProps {
-  accounts: Array<{ id: number; name: string }>;
-  selectedAccountId: number;
   selectedPeriod: DashboardPeriod;
   isLoading: boolean;
-  onAccountChange: (accountId: number) => void;
   onPeriodChange: (period: DashboardPeriod) => void;
   onRefresh: () => void;
 }
@@ -21,35 +17,23 @@ const periods: Array<{ value: DashboardPeriod; label: string }> = [
   { value: "30d", label: "30 dias" },
 ];
 
+/**
+ * Filtros do dashboard (v0.10):
+ *  - Pills de período (Hoje / 7 dias / 30 dias).
+ *  - Botão refresh.
+ *
+ * O seletor de conta foi removido — vive exclusivamente no sidebar
+ * (`AccountSwitcher`) e a escolha é global para a plataforma inteira.
+ */
 export function DashboardFilters({
-  accounts,
-  selectedAccountId,
   selectedPeriod,
   isLoading,
-  onAccountChange,
   onPeriodChange,
   onRefresh,
 }: DashboardFiltersProps) {
   return (
     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
       <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto sm:ml-auto">
-        {/* Filtro de empresa (Conta Chatwoot) */}
-        <CustomSelect
-          value={String(selectedAccountId)}
-          onChange={(val) => {
-            const id = Number.parseInt(val, 10);
-            if (Number.isFinite(id)) onAccountChange(id);
-          }}
-          icon={
-            <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-          }
-          triggerClassName="h-9 min-w-[180px] sm:min-w-[200px]"
-          options={accounts.map((a) => ({
-            value: String(a.id),
-            label: a.name,
-          }))}
-        />
-
         {/* Pills de período */}
         <div className="flex rounded-xl border border-border overflow-hidden bg-card/80">
           {periods.map((p) => (

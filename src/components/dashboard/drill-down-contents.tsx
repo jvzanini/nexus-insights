@@ -56,16 +56,20 @@ interface DrillDownProps {
   enabled: boolean;
 }
 
-function formatBucket(iso: string, granularity: "hour" | "day"): string {
-  const d = new Date(iso);
-  if (granularity === "hour") {
-    return d.toLocaleTimeString("pt-BR", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-  }
-  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+import { formatBucketLabel } from "@/lib/utils/format-bucket";
+import { DEFAULT_TZ } from "@/lib/datetime-core";
+
+/**
+ * v0.10: usa `formatBucketLabel` com timezone explícita para evitar que o
+ * runtime do navegador mude o resultado. Aceita prop opcional `tz` em cada
+ * componente; default = America/Sao_Paulo.
+ */
+function formatBucket(
+  iso: string,
+  granularity: "hour" | "day",
+  tz: string = DEFAULT_TZ,
+): string {
+  return formatBucketLabel(iso, granularity, tz);
 }
 
 function ConversationTable({
@@ -398,11 +402,9 @@ export function ResolvedDrillDownContent({
 
 export function OpenDrillDownContent({
   accountId,
+  period,
   enabled,
-}: {
-  accountId: number;
-  enabled: boolean;
-}) {
+}: DrillDownProps) {
   const [data, setData] = useState<OpenDrillDownData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -412,7 +414,7 @@ export function OpenDrillDownContent({
     let cancelled = false;
     async function run() {
       setLoading(true);
-      const res = await getOpenDrillDownAction({ accountId });
+      const res = await getOpenDrillDownAction({ accountId, period });
       if (cancelled) return;
       if (res.success && res.data) {
         setData(res.data);
@@ -426,7 +428,7 @@ export function OpenDrillDownContent({
     return () => {
       cancelled = true;
     };
-  }, [accountId, enabled]);
+  }, [accountId, period, enabled]);
 
   if (loading && !data) return <DrillDownSkeleton />;
   if (error && !data) return <ErrorState message={error} />;

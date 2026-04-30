@@ -4,6 +4,7 @@ import { PageShell } from "@/components/layout/page-shell";
 import { getCurrentUser } from "@/lib/auth";
 import { getActiveAccountId } from "@/lib/reports/active-account";
 import { getKnownAccounts, getAccessibleAccountIds } from "@/lib/tenant";
+import { getPlatformTz } from "@/lib/datetime";
 import type { AuthUser } from "@/lib/auth-helpers";
 
 export const metadata = { title: "Dashboard | Nexus Insights" };
@@ -26,10 +27,11 @@ export default async function DashboardPage() {
     teamIds: user.teamIds,
   };
 
-  const [activeAccountId, allAccounts, accessibleIds] = await Promise.all([
+  const [activeAccountId, allAccounts, accessibleIds, tz] = await Promise.all([
     getActiveAccountId(),
     getKnownAccounts(),
     getAccessibleAccountIds(authUser),
+    getPlatformTz(),
   ]);
 
   const accounts = allAccounts.filter((a) => accessibleIds.includes(a.id));
@@ -45,6 +47,7 @@ export default async function DashboardPage() {
         userName={user.name}
         initialAccountId={safeAccountId}
         initialAccounts={accounts}
+        tz={tz}
       />
     </PageShell>
   );
