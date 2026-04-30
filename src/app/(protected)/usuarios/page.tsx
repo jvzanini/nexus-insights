@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { PageShell } from "@/components/layout/page-shell";
 import { UsersTabs } from "@/components/users/users-tabs";
 import { getCurrentUser } from "@/lib/auth";
 
@@ -12,5 +13,9 @@ export default async function UsuariosPage() {
   if (user.platformRole === "viewer") redirect("/dashboard");
 
   // CurrentUser e AuthUser têm a mesma forma a partir do shape do session.
-  return <UsersTabs currentUser={user as never} />;
+  return (
+    <PageShell variant="narrow">
+      <UsersTabs currentUser={user as never} />
+    </PageShell>
+  );
 }

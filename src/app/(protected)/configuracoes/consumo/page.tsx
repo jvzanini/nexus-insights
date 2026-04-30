@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { Sparkles } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
+import { PageShell } from "@/components/layout/page-shell";
 import { ConsumoContent } from "@/components/llm/consumo-content";
 import { getCurrentUser } from "@/lib/auth";
 import { getSystemCreatedAt } from "@/lib/llm/queries/usage-stats";
@@ -17,13 +18,13 @@ export default async function ConsumoPage() {
   const minDate = await getSystemCreatedAt();
 
   return (
-    <div>
+    <PageShell variant="wide">
       <PageHeader
         icon={Sparkles}
         title="Consumo do Agente IA"
         subtitle="Tokens, custo e estatísticas de uso da IA por período"
       />
       <ConsumoContent minDate={minDate.toISOString()} />
-    </div>
+    </PageShell>
   );
 }

@@ -8,6 +8,7 @@ import { ConversasTable } from "@/components/reports/conversas-table";
 import { RefreshButton } from "@/components/reports/refresh-button";
 import { FilterTransitionProvider } from "@/components/reports/filter-transition";
 import { ContentLoadingWrapper } from "@/components/reports/content-loading-wrapper";
+import { PageShell } from "@/components/layout/page-shell";
 import { TourButton } from "@/components/tour/tour-button";
 import { conversasTour } from "@/lib/tours/conversas-tour";
 import { getCurrentUser } from "@/lib/auth";
@@ -84,7 +85,7 @@ export default async function ConversasPage({ searchParams }: PageProps) {
     Boolean(usersResult?.stale);
 
   return (
-    <div>
+    <PageShell variant="wide">
       <PageHeader
         icon={MessageSquare}
         title="Conversas"
@@ -126,6 +127,6 @@ export default async function ConversasPage({ searchParams }: PageProps) {
           </ContentLoadingWrapper>
         </div>
       </FilterTransitionProvider>
-    </div>
+    </PageShell>
   );
 }

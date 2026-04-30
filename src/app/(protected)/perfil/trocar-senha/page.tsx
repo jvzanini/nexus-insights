@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { KeyRound } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
+import { PageShell } from "@/components/layout/page-shell";
 import { ChangePasswordForm } from "@/components/profile/change-password-form";
 import { getCurrentUser } from "@/lib/auth";
 
@@ -11,13 +12,13 @@ export default async function Page() {
   if (!user) redirect("/login");
 
   return (
-    <div>
+    <PageShell variant="narrow">
       <PageHeader
         icon={KeyRound}
         title="Trocar senha"
         subtitle="Defina uma nova senha"
       />
       <ChangePasswordForm />
-    </div>
+    </PageShell>
   );
 }

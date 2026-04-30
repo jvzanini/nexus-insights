@@ -7,6 +7,7 @@ import { PeriodSelectorUrl } from "@/components/reports/period-selector-url";
 import { RefreshButton } from "@/components/reports/refresh-button";
 import { FilterTransitionProvider } from "@/components/reports/filter-transition";
 import { ContentLoadingWrapper } from "@/components/reports/content-loading-wrapper";
+import { PageShell } from "@/components/layout/page-shell";
 import { TabsShell } from "@/components/reports/dashboards/tabs-shell";
 import { RankingAtendentesContent } from "@/components/reports/dashboards/ranking-atendentes-content";
 import { PorDepartamentoContent } from "@/components/reports/dashboards/por-departamento-content";
@@ -56,7 +57,7 @@ export default async function Page({ searchParams }: PageProps) {
   const contentProps = { accountId, period, customStart, customEnd };
 
   return (
-    <div>
+    <PageShell variant="wide">
       <PageHeader
         icon={UsersRound}
         title="Equipe"
@@ -95,6 +96,6 @@ export default async function Page({ searchParams }: PageProps) {
           />
         </ContentLoadingWrapper>
       </FilterTransitionProvider>
-    </div>
+    </PageShell>
   );
 }

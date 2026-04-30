@@ -7,6 +7,7 @@ import { PeriodSelectorUrl } from "@/components/reports/period-selector-url";
 import { RefreshButton } from "@/components/reports/refresh-button";
 import { FilterTransitionProvider } from "@/components/reports/filter-transition";
 import { ContentLoadingWrapper } from "@/components/reports/content-loading-wrapper";
+import { PageShell } from "@/components/layout/page-shell";
 import { TabsShell } from "@/components/reports/dashboards/tabs-shell";
 import { TemposRespostaContent } from "@/components/reports/dashboards/tempos-resposta-content";
 import { SlaContent } from "@/components/reports/dashboards/sla-content";
@@ -64,7 +65,7 @@ export default async function Page({ searchParams }: PageProps) {
   const contentProps = { accountId, period, customStart, customEnd };
 
   return (
-    <div>
+    <PageShell variant="wide">
       <PageHeader
         icon={Zap}
         title="Performance"
@@ -112,6 +113,6 @@ export default async function Page({ searchParams }: PageProps) {
           />
         </ContentLoadingWrapper>
       </FilterTransitionProvider>
-    </div>
+    </PageShell>
   );
 }
