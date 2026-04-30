@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Settings, RefreshCcw, Eye } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
+import { PageShell } from "@/components/layout/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PollingSettingsForm } from "@/components/settings/polling-settings-form";
 import { VisibilitySettingsForm } from "@/components/settings/visibility-settings-form";
@@ -81,7 +82,7 @@ export default async function Page() {
   };
 
   return (
-    <div>
+    <PageShell variant="narrow">
       <PageHeader
         icon={Settings}
         title="Configurações"
@@ -138,6 +139,6 @@ export default async function Page() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PageShell>
   );
 }

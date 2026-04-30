@@ -11,6 +11,9 @@ import {
   Plug,
   KeyRound,
   AlertCircle,
+  ExternalLink,
+  CreditCard,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -20,19 +23,22 @@ import {
   CustomSelect,
   type SelectOption,
 } from "@/components/ui/custom-select";
+import {
+  SearchableSelect,
+  type SearchableSelectOption,
+} from "@/components/ui/searchable-select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Switch } from "@/components/ui/switch";
-import {
-  PROVIDER_LABELS,
-  PROVIDER_MODELS,
-} from "@/lib/llm/pricing";
+import { TierBadge } from "@/components/llm/tier-badge";
+import { PROVIDER_CATALOG } from "@/lib/llm/catalog";
 import type { LlmProvider } from "@/lib/llm/types";
 import {
   saveLlmConfig,
   setNexBubbleEnabled,
   testLlmConnection,
+  type TestLlmConnectionResult,
 } from "@/lib/actions/llm-config";
 import { cn } from "@/lib/utils";
 
@@ -45,24 +51,35 @@ interface LlmConfigCardProps {
   initialNexEnabled: boolean;
 }
 
+const CUSTOM_MODEL_VALUE = "__custom__";
+
 const PROVIDER_OPTIONS: SelectOption[] = (
-  Object.keys(PROVIDER_LABELS) as LlmProvider[]
+  Object.keys(PROVIDER_CATALOG) as LlmProvider[]
 ).map((p) => ({
   value: p,
-  label: PROVIDER_LABELS[p],
+  label: PROVIDER_CATALOG[p].label,
   description: p,
 }));
 
-function modelOptionsFor(provider: LlmProvider): SelectOption[] {
-  return PROVIDER_MODELS[provider].map((m) => ({
-    value: m,
-    label: m,
-  }));
+function findInitialModelValue(
+  provider: LlmProvider,
+  model: string | undefined,
+): { selectValue: string; customModel: string } {
+  if (!model) {
+    return { selectValue: PROVIDER_CATALOG[provider].models[0].id, customModel: "" };
+  }
+  const inCatalog = PROVIDER_CATALOG[provider].models.some(
+    (m) => m.id === model,
+  );
+  if (inCatalog) return { selectValue: model, customModel: "" };
+  return { selectValue: CUSTOM_MODEL_VALUE, customModel: model };
 }
 
 interface TestState {
-  status: "idle" | "ok" | "fail";
+  status: "idle" | "ok" | "warn" | "fail";
   message?: string;
+  errorKind?: TestLlmConnectionResult["errorKind"];
+  creditOk?: boolean;
 }
 
 export function LlmConfigCard({
@@ -73,8 +90,17 @@ export function LlmConfigCard({
   const [provider, setProvider] = useState<LlmProvider>(
     initial?.provider ?? "openai",
   );
-  const [model, setModel] = useState<string>(
-    initial?.model ?? PROVIDER_MODELS[initial?.provider ?? "openai"][0],
+
+  const initialResolved = useMemo(
+    () => findInitialModelValue(initial?.provider ?? "openai", initial?.model),
+    [initial],
+  );
+
+  const [modelSelect, setModelSelect] = useState<string>(
+    initialResolved.selectValue,
+  );
+  const [customModel, setCustomModel] = useState<string>(
+    initialResolved.customModel,
   );
   const [apiKey, setApiKey] = useState<string>("");
   const [test, setTest] = useState<TestState>({ status: "idle" });
@@ -83,28 +109,74 @@ export function LlmConfigCard({
   const [nexEnabled, setNexEnabled] = useState<boolean>(initialNexEnabled);
   const [isTogglingNex, startNexToggle] = useTransition();
 
-  const modelOptions = useMemo(() => modelOptionsFor(provider), [provider]);
+  const catalog = PROVIDER_CATALOG[provider];
+
+  const modelOptions = useMemo<SearchableSelectOption[]>(() => {
+    const customOption: SearchableSelectOption = {
+      value: CUSTOM_MODEL_VALUE,
+      label: "Outro (digitar manualmente)",
+      notes: "Especifique um ID de modelo customizado",
+    };
+    const fromCatalog: SearchableSelectOption[] = catalog.models.map((m) => ({
+      value: m.id,
+      label: m.label,
+      notes: m.notes,
+      endAdornment: <TierBadge tier={m.tier} />,
+    }));
+    return [customOption, ...fromCatalog];
+  }, [catalog]);
+
   const isConfigured = Boolean(initial);
+  const usingCustom = modelSelect === CUSTOM_MODEL_VALUE;
+  const resolvedModel = (usingCustom ? customModel : modelSelect).trim();
 
   function handleProviderChange(next: string) {
     const nextProvider = next as LlmProvider;
     setProvider(nextProvider);
-    // Reset modelo ao trocar provider para garantir compatibilidade.
-    setModel(PROVIDER_MODELS[nextProvider][0]);
+    setModelSelect(PROVIDER_CATALOG[nextProvider].models[0].id);
+    setCustomModel("");
     setTest({ status: "idle" });
   }
 
-  function handleModelChange(next: string) {
-    setModel(next);
+  function handleModelSelectChange(next: string) {
+    setModelSelect(next);
+    if (next !== CUSTOM_MODEL_VALUE) {
+      setCustomModel("");
+    }
     setTest({ status: "idle" });
   }
 
   function validateBeforeAction(): string | null {
-    if (!provider || !model) return "Selecione provider e modelo";
+    if (!provider) return "Selecione um provedor";
+    if (!modelSelect) return "Selecione um modelo";
+    if (resolvedModel.length < 3) {
+      return usingCustom
+        ? "Informe o ID do modelo customizado"
+        : "Modelo inválido";
+    }
+    if (resolvedModel.length > 100) {
+      return "ID de modelo muito longo (máx 100 chars)";
+    }
     if (!apiKey || apiKey.trim().length < 10) {
       return "Cole uma API key válida";
     }
     return null;
+  }
+
+  async function persistConfig(): Promise<boolean> {
+    const result = await saveLlmConfig({
+      provider,
+      model: resolvedModel,
+      apiKey: apiKey.trim(),
+    });
+    if (!result.ok) {
+      toast.error(result.error ?? "Erro ao salvar configuração");
+      return false;
+    }
+    setApiKey("");
+    setTest({ status: "idle" });
+    router.refresh();
+    return true;
   }
 
   function handleTest() {
@@ -116,7 +188,7 @@ export function LlmConfigCard({
     startTest(async () => {
       const result = await testLlmConnection({
         provider,
-        model,
+        model: resolvedModel,
         apiKey: apiKey.trim(),
       });
       if (!result.ok) {
@@ -124,16 +196,35 @@ export function LlmConfigCard({
         toast.error(result.error ?? "Erro ao testar conexão");
         return;
       }
-      if (result.data?.reachable) {
-        setTest({ status: "ok", message: result.data.message });
-        toast.success("Conexão OK");
-      } else {
-        setTest({
-          status: "fail",
-          message: result.data?.message ?? "Falha ao conectar",
-        });
-        toast.error(result.data?.message ?? "Falha ao conectar");
+      const data = result.data!;
+
+      if (data.reachable && data.creditOk !== false) {
+        // Auto-save após teste OK.
+        const saved = await persistConfig();
+        if (saved) {
+          setTest({ status: "ok", message: "Conexão OK" });
+          toast.success("Conexão OK · Configuração salva");
+        }
+        return;
       }
+
+      if (data.reachable && data.creditOk === false) {
+        setTest({
+          status: "warn",
+          message:
+            "Conexão OK, mas a conta está sem crédito. Você pode salvar mesmo assim.",
+          creditOk: false,
+        });
+        toast.warning("Conexão OK, mas sem crédito");
+        return;
+      }
+
+      setTest({
+        status: "fail",
+        message: data.message ?? "Falha ao conectar",
+        errorKind: data.errorKind,
+      });
+      toast.error(data.message ?? "Falha ao conectar");
     });
   }
 
@@ -167,19 +258,52 @@ export function LlmConfigCard({
       return;
     }
     startSave(async () => {
-      const result = await saveLlmConfig({
+      // Sempre testa antes de salvar manualmente.
+      const testResult = await testLlmConnection({
         provider,
-        model,
+        model: resolvedModel,
         apiKey: apiKey.trim(),
       });
-      if (!result.ok) {
-        toast.error(result.error ?? "Erro ao salvar configuração");
+      if (!testResult.ok) {
+        toast.error(testResult.error ?? "Erro ao testar conexão");
         return;
       }
-      toast.success("Configuração de IA salva");
-      setApiKey("");
-      setTest({ status: "idle" });
-      router.refresh();
+      const data = testResult.data!;
+
+      if (!data.reachable) {
+        setTest({
+          status: "fail",
+          message: data.message ?? "Falha ao conectar",
+          errorKind: data.errorKind,
+        });
+        toast.error(data.message ?? "Falha ao conectar — não foi salvo");
+        return;
+      }
+
+      if (data.creditOk === false) {
+        const ok =
+          typeof window !== "undefined"
+            ? window.confirm(
+                "Conexão OK, mas a conta está sem crédito. Salvar mesmo assim?",
+              )
+            : true;
+        if (!ok) return;
+      }
+
+      const saved = await persistConfig();
+      if (saved) toast.success("Configuração salva");
+    });
+  }
+
+  function handleSaveAnyway() {
+    const err = validateBeforeAction();
+    if (err) {
+      toast.error(err);
+      return;
+    }
+    startSave(async () => {
+      const saved = await persistConfig();
+      if (saved) toast.success("Configuração salva (sem crédito verificado)");
     });
   }
 
@@ -193,9 +317,7 @@ export function LlmConfigCard({
             <Sparkles className="h-[18px] w-[18px] text-violet-500" />
           </div>
           <div className="flex flex-col gap-0.5">
-            <CardTitle className="text-foreground">
-              Agente IA (Nex)
-            </CardTitle>
+            <CardTitle className="text-foreground">Agente IA (Nex)</CardTitle>
             <p className="text-xs text-muted-foreground">
               Configure o provedor de IA usado pelo agente de consultas. A
               chave é cifrada com AES-256 antes de ser persistida.
@@ -258,9 +380,7 @@ export function LlmConfigCard({
                   onCheckedChange={handleNexToggle}
                   disabled={isTogglingNex || !isConfigured}
                   aria-label={
-                    nexEnabled
-                      ? "Desativar Agente Nex"
-                      : "Ativar Agente Nex"
+                    nexEnabled ? "Desativar Agente Nex" : "Ativar Agente Nex"
                   }
                 />
               </span>
@@ -283,7 +403,7 @@ export function LlmConfigCard({
             )}
             <span className="leading-snug">
               {isConfigured
-                ? `Configurado: ${PROVIDER_LABELS[initial!.provider]} · ${initial!.model} · chave ${initial!.apiKeyMasked}`
+                ? `Configurado: ${PROVIDER_CATALOG[initial!.provider].label} · ${initial!.model} · chave ${initial!.apiKeyMasked}`
                 : "Não configurado — selecione provider, modelo e cole a API key abaixo."}
             </span>
           </div>
@@ -306,19 +426,42 @@ export function LlmConfigCard({
 
             <div className="space-y-1.5">
               <Label htmlFor="llm-model">Modelo</Label>
-              <CustomSelect
-                value={model}
-                onChange={handleModelChange}
+              <SearchableSelect
+                value={modelSelect}
+                onChange={handleModelSelectChange}
                 options={modelOptions}
                 placeholder="Selecionar modelo"
                 disabled={busy}
+                searchPlaceholder="Buscar modelo..."
                 triggerClassName="min-h-[44px]"
               />
               <p className="text-xs text-muted-foreground">
-                Modelos disponíveis no provedor selecionado.
+                Tier $ / $$ / $$$ indica custo aproximado por milhão de tokens.
               </p>
             </div>
           </div>
+
+          {usingCustom ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="llm-custom-model">Modelo customizado</Label>
+              <Input
+                id="llm-custom-model"
+                value={customModel}
+                onChange={(e) => {
+                  setCustomModel(e.currentTarget.value);
+                  setTest({ status: "idle" });
+                }}
+                placeholder="ex: gpt-4o-2024-08-06"
+                autoComplete="off"
+                disabled={busy}
+                className="min-h-[44px]"
+                aria-describedby="llm-custom-model-help"
+              />
+              <p id="llm-custom-model-help" className="text-xs text-muted-foreground">
+                Útil para snapshots datados ou modelos novos não listados ainda.
+              </p>
+            </div>
+          ) : null}
 
           <div className="space-y-1.5">
             <Label htmlFor="llm-api-key" className="gap-2">
@@ -344,6 +487,32 @@ export function LlmConfigCard({
               nova.
             </p>
 
+            {/* Atalhos: criar API key + adicionar crédito (URLs do catálogo). */}
+            <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
+              <a
+                href={catalog.apiKeyUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="llm-shortcut-api-key"
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background/60 px-2 py-1 font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                Criar API key
+              </a>
+              {catalog.topUpUrl ? (
+                <a
+                  href={catalog.topUpUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="llm-shortcut-top-up"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background/60 px-2 py-1 font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                >
+                  <CreditCard className="h-3.5 w-3.5" aria-hidden="true" />
+                  Adicionar crédito
+                </a>
+              ) : null}
+            </div>
+
             {/* Honeypot — evita autofill em browsers que ignoram autocomplete=off. */}
             <Input
               type="text"
@@ -358,16 +527,24 @@ export function LlmConfigCard({
 
           {test.status !== "idle" && (
             <div
-              className={`flex items-start gap-2 rounded-lg px-3 py-2 text-xs ${
-                test.status === "ok"
-                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                  : "bg-destructive/10 text-destructive"
-              }`}
+              className={cn(
+                "flex items-start gap-2 rounded-lg px-3 py-2 text-xs",
+                test.status === "ok" &&
+                  "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+                test.status === "warn" &&
+                  "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+                test.status === "fail" && "bg-destructive/10 text-destructive",
+              )}
               role="status"
               aria-live="polite"
             >
               {test.status === "ok" ? (
                 <CheckCircle2
+                  className="h-4 w-4 shrink-0 mt-0.5"
+                  aria-hidden="true"
+                />
+              ) : test.status === "warn" ? (
+                <AlertTriangle
                   className="h-4 w-4 shrink-0 mt-0.5"
                   aria-hidden="true"
                 />
@@ -377,15 +554,29 @@ export function LlmConfigCard({
                   aria-hidden="true"
                 />
               )}
-              <div className="leading-snug">
+              <div className="leading-snug flex-1">
                 <p className="font-medium">
                   {test.status === "ok"
-                    ? "Conexão verificada"
-                    : "Falha ao conectar"}
+                    ? "Conexão verificada · Configuração salva"
+                    : test.status === "warn"
+                      ? "Conexão OK · Sem crédito"
+                      : "Falha ao conectar"}
                 </p>
                 {test.message && (
                   <p className="opacity-80 break-words">{test.message}</p>
                 )}
+                {test.status === "warn" ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSaveAnyway}
+                    disabled={busy}
+                    className="mt-2 cursor-pointer"
+                  >
+                    Salvar mesmo assim
+                  </Button>
+                ) : null}
               </div>
             </div>
           )}

@@ -9,6 +9,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   ChevronDown,
   ChevronUp,
@@ -109,17 +110,67 @@ function formatDateTime(iso: string | null): string {
   }
 }
 
-function getCustomAttrsTooltip(
-  attrs: Record<string, unknown> | null,
-): string | null {
-  if (!attrs || typeof attrs !== "object") return null;
+/**
+ * Formata um valor de atributo customizado para exibição inline.
+ * Escalares retornam o próprio valor (truncado em 80 chars). Objetos/arrays
+ * viram placeholder com tooltip detalhado via JSON.
+ */
+function formatAttrValue(value: unknown): { display: string; raw: string } {
+  if (value === null || value === undefined || value === "")
+    return { display: "—", raw: "" };
+  if (typeof value === "string") {
+    const trimmed = value.length > 80 ? value.slice(0, 80) + "…" : value;
+    return { display: trimmed, raw: value };
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return { display: String(value), raw: String(value) };
+  }
+  if (Array.isArray(value)) {
+    return {
+      display: `[${value.length} itens]`,
+      raw: JSON.stringify(value),
+    };
+  }
+  return { display: "[objeto]", raw: JSON.stringify(value) };
+}
+
+/**
+ * Renderiza atributos customizados como chips compactos `chave: valor`.
+ * Quando não há atributos válidos, retorna `—`.
+ */
+function AttributeChips({
+  attrs,
+}: {
+  attrs: Record<string, unknown> | null;
+}) {
+  if (!attrs || typeof attrs !== "object") {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
   const entries = Object.entries(attrs).filter(
     ([, v]) => v !== null && v !== undefined && v !== "",
   );
-  if (entries.length === 0) return null;
-  return entries
-    .map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`)
-    .join("\n");
+  if (entries.length === 0) {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+  return (
+    <div className="inline-flex max-w-[320px] flex-wrap gap-1">
+      {entries.map(([k, v]) => {
+        const { display, raw } = formatAttrValue(v);
+        return (
+          <span
+            key={k}
+            title={`${k}: ${raw}`}
+            className="inline-flex max-w-[180px] items-center gap-1 rounded-md border border-border/40 bg-muted/40 px-1.5 py-0.5 text-[11px]"
+          >
+            <span className="truncate font-medium text-muted-foreground/80">
+              {k}:
+            </span>
+            <span className="truncate text-foreground/80">{display}</span>
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 
 /**
@@ -426,41 +477,41 @@ const COLUMNS: ColumnDef[] = [
   {
     key: "custom_attributes",
     label: "Atributos",
-    defaultVisible: false,
+    defaultVisible: true,
     defaultOrder: 14,
     sortable: false,
-    className: "min-w-[120px]",
-    render: (row) => {
-      const tooltip = getCustomAttrsTooltip(row.custom_attributes);
-      if (!tooltip) {
-        return <span className="text-xs text-muted-foreground">—</span>;
-      }
-      const count = Object.keys(row.custom_attributes ?? {}).length;
-      return (
-        <span
-          className="cursor-help rounded-full bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
-          title={tooltip}
-        >
-          {count} atributo{count === 1 ? "" : "s"}
-        </span>
-      );
-    },
-  },
-  {
-    key: "actions",
-    label: "Ações",
-    defaultVisible: true,
-    defaultOrder: 99,
-    sortable: false,
-    className: "w-24",
-    align: "right",
-    render: () => null,
+    className: "min-w-[200px]",
+    render: (row) => <AttributeChips attrs={row.custom_attributes} />,
   },
 ];
 
-const DEFAULT_VISIBLE_KEYS = new Set(
-  COLUMNS.filter((c) => c.defaultVisible).map((c) => c.key),
-);
+/**
+ * Factory das colunas. O `accountId` é injetado em runtime para que a coluna
+ * de Ações renderize `<OpenInChatwoot>` direto via `render`, sem precisar de
+ * branches no body da tabela.
+ */
+function buildColumns(accountId: number): ColumnDef[] {
+  return [
+    ...COLUMNS,
+    {
+      key: "actions",
+      label: "Ações",
+      defaultVisible: true,
+      defaultOrder: 99,
+      sortable: false,
+      className: "w-24",
+      align: "right",
+      render: (row) => (
+        <OpenInChatwoot accountId={accountId} displayId={row.display_id} />
+      ),
+    },
+  ];
+}
+
+const DEFAULT_VISIBLE_KEYS = new Set([
+  ...COLUMNS.filter((c) => c.defaultVisible).map((c) => c.key),
+  "actions",
+]);
 
 // ----------------------------------------------------------------------------
 // Indicador de ordenação (com índice em multi-sort)
@@ -520,6 +571,7 @@ export function ConversasTable({
   const [cursor, setCursor] = useState<string | null>(initialCursor);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const currentSearchParams = useSearchParams();
 
   // ---- Persistências (localStorage) -----
   const [visibleCols, setVisibleCols] = useLocalStorageSet(
@@ -585,10 +637,13 @@ export function ConversasTable({
       }
     };
 
+  // ---- Colunas computadas (factory por accountId) -----
+  const allColumns = useMemo(() => buildColumns(accountId), [accountId]);
+
   // ---- Ordenação aplicada no client (estável). -----
   const sortedRows = useMemo(() => {
     if (sortStack.length === 0) return rows;
-    const cols = new Map(COLUMNS.map((c) => [c.key, c]));
+    const cols = new Map(allColumns.map((c) => [c.key, c]));
     const decorated = rows.map((row, idx) => ({ row, idx }));
     decorated.sort((A, B) => {
       for (const rule of sortStack) {
@@ -601,7 +656,7 @@ export function ConversasTable({
       return A.idx - B.idx; // estabilidade.
     });
     return decorated.map((d) => d.row);
-  }, [rows, sortStack]);
+  }, [rows, sortStack, allColumns]);
 
   // ---- Carregar mais -----
   const loadMore = () => {
@@ -653,19 +708,19 @@ export function ConversasTable({
   // ---- Lista de colunas visíveis (em ordem) -----
   const orderedColumns = useMemo(
     () =>
-      [...COLUMNS]
+      [...allColumns]
         .sort((a, b) => a.defaultOrder - b.defaultOrder)
         .filter((c) => visibleCols.has(c.key)),
-    [visibleCols],
+    [visibleCols, allColumns],
   );
 
   const toggleColumns: ColumnsToggleColumn[] = useMemo(
     () =>
-      [...COLUMNS]
+      [...allColumns]
         .sort((a, b) => a.defaultOrder - b.defaultOrder)
         .filter((c) => c.key !== "actions")
         .map((c) => ({ key: c.key, label: c.label })),
-    [],
+    [allColumns],
   );
 
   // Toolbar -------------------------------------------------------------------
@@ -676,41 +731,56 @@ export function ConversasTable({
           <span className="font-semibold text-foreground">{rows.length}</span>{" "}
           conversa{rows.length === 1 ? "" : "s"}
         </span>
-        {sortStack.length > 0 ? (
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={clearSort}
-            className="h-7 gap-1 text-[11px]"
-            aria-label="Limpar ordenação"
-          >
-            <X className="h-3 w-3" />
-            Limpar ordenação
-            <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-bold text-primary tabular-nums">
-              {sortStack.length}
+        <div data-tour="sorting-chip" className="inline-flex items-center">
+          {sortStack.length > 0 ? (
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={clearSort}
+              className="h-7 gap-1 text-[11px]"
+              aria-label="Limpar ordenação"
+              title="Click no cabeçalho ordena · Shift+click adiciona critério"
+            >
+              <X className="h-3 w-3" />
+              Ordenação
+              <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-bold text-primary tabular-nums">
+                {sortStack.length}
+              </span>
+            </Button>
+          ) : (
+            <span
+              className="hidden items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground/70 sm:inline-flex"
+              title="Click no cabeçalho ordena · Shift+click adiciona critério"
+            >
+              Ordenar: click no cabeçalho
             </span>
-          </Button>
-        ) : null}
+          )}
+        </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <CustomSelect
-          value={pageSize}
-          onChange={handlePageSizeChange}
-          options={PAGE_SIZE_OPTIONS}
-          className="min-w-[160px]"
-          triggerClassName="h-9 text-xs"
-        />
-        <ColumnsToggle
-          columns={toggleColumns}
-          visible={visibleCols}
-          onChange={setVisibleCols}
-        />
+        <div data-tour="page-size">
+          <CustomSelect
+            value={pageSize}
+            onChange={handlePageSizeChange}
+            options={PAGE_SIZE_OPTIONS}
+            className="min-w-[160px]"
+            triggerClassName="h-9 text-xs"
+          />
+        </div>
+        <div data-tour="columns">
+          <ColumnsToggle
+            columns={toggleColumns}
+            visible={visibleCols}
+            onChange={setVisibleCols}
+          />
+        </div>
       </div>
     </div>
   );
 
   // Empty state -------------------------------------------------------------
   if (rows.length === 0) {
+    const hasUrlFilters = currentSearchParams.toString().length > 0;
     return (
       <div className="rounded-2xl border border-border bg-card overflow-hidden">
         {toolbar}
@@ -724,6 +794,15 @@ export function ConversasTable({
           <p className="mt-1 text-xs text-muted-foreground">
             Ajuste os filtros para ver mais resultados.
           </p>
+          {hasUrlFilters ? (
+            <a
+              href="?"
+              className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent"
+            >
+              <X className="h-3.5 w-3.5" />
+              Limpar filtros
+            </a>
+          ) : null}
         </div>
       </div>
     );
@@ -811,15 +890,13 @@ export function ConversasTable({
                       col.align === "right" && "text-right",
                       col.align === "center" && "text-center",
                     )}
+                    data-tour={
+                      col.key === "actions" && idx === 0
+                        ? "open-action"
+                        : undefined
+                    }
                   >
-                    {col.key === "actions" ? (
-                      <OpenInChatwoot
-                        accountId={accountId}
-                        displayId={row.display_id}
-                      />
-                    ) : (
-                      col.render(row)
-                    )}
+                    {col.render(row)}
                   </TableCell>
                 ))}
               </TableRow>

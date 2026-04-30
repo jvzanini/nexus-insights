@@ -49,8 +49,10 @@ export function MatrixIAToggleCard({ initialEnabled }: MatrixIAToggleCardProps) 
               Incluir Matrix IA nos relatórios
             </h2>
             <p className="mt-0.5 text-sm text-muted-foreground">
-              Quando ativo, conversas da inbox Matrix IA aparecem nos relatórios
-              para todos os usuários. Quando desativo, apenas super_admins veem.
+              Quando ativo, a inbox Matrix IA aparece nas tabelas, gráficos,
+              KPIs e dropdowns de filtros para todos os usuários. Quando
+              desativo, apenas super admins veem (a inbox some completamente
+              para os demais).
             </p>
           </div>
         </div>

@@ -13,10 +13,13 @@ import { auth } from "@/auth";
 import { logAudit } from "@/lib/audit";
 import { encrypt } from "@/lib/encryption";
 import { ensureLlmTables } from "@/lib/llm/ensure-tables";
-import { buildLlmClient } from "@/lib/llm/get-client";
 import { getPublicActiveLlmConfig } from "@/lib/llm/get-active-config";
 import { invalidateNexBubbleEnabled } from "@/lib/llm/get-nex-bubble-enabled";
-import { PROVIDER_MODELS } from "@/lib/llm/pricing";
+import {
+  deepTest,
+  describeErrorKind,
+  type ErrorKind,
+} from "@/lib/llm/providers/test-connection";
 import type { LlmProvider } from "@/lib/llm/types";
 import { pgPool } from "@/lib/pg-pool";
 
@@ -62,9 +65,11 @@ function validateInput(input: SaveLlmConfigInput): string | null {
   if (!VALID_PROVIDERS.includes(input.provider)) {
     return "Provider inválido";
   }
-  const allowedModels = PROVIDER_MODELS[input.provider] ?? [];
-  if (!allowedModels.includes(input.model)) {
-    return "Modelo inválido para o provider selecionado";
+  const model = input.model?.trim() ?? "";
+  // A partir do v0.7.0 aceitamos modelo livre (PROVIDER_CATALOG.allowCustomModel
+  // === true para todos). Validação apenas estrutural: 3 a 100 chars.
+  if (model.length < 3 || model.length > 100) {
+    return "Modelo inválido (3 a 100 caracteres)";
   }
   if (!input.apiKey || typeof input.apiKey !== "string") {
     return "API key é obrigatória";
@@ -87,6 +92,7 @@ export async function saveLlmConfig(
 
   await ensureLlmTables();
 
+  const trimmedModel = input.model.trim();
   const encryptedKey = encrypt(input.apiKey.trim());
 
   const client = await pgPool.connect();
@@ -98,7 +104,7 @@ export async function saveLlmConfig(
     await client.query(
       `INSERT INTO llm_configs (id, provider, model, encrypted_api_key, is_active, created_at, updated_at, created_by_id)
        VALUES (gen_random_uuid(), $1, $2, $3, true, NOW(), NOW(), $4)`,
-      [input.provider, input.model, encryptedKey, guard.userId],
+      [input.provider, trimmedModel, encryptedKey, guard.userId],
     );
     await client.query("COMMIT");
   } catch (err) {
@@ -113,7 +119,7 @@ export async function saveLlmConfig(
     userId: guard.userId,
     action: "setting_updated",
     targetType: "llm_config",
-    details: { provider: input.provider, model: input.model },
+    details: { provider: input.provider, model: trimmedModel },
   });
 
   return { ok: true };
@@ -122,14 +128,19 @@ export async function saveLlmConfig(
 export interface TestLlmConnectionResult {
   reachable: boolean;
   message?: string;
+  /** Saldo verificado: true = OK; false = sem crédito; undefined = não verificável. */
+  creditOk?: boolean;
+  /** USD restantes (best-effort, atualmente só OpenRouter). */
+  creditRemainingUsd?: number;
+  errorKind?: ErrorKind;
   tokensInput?: number;
   tokensOutput?: number;
 }
 
 /**
- * Faz uma chamada simples ("ping") para verificar se a API key + modelo são
- * válidos. Não persiste nada. Retorna `reachable=false` quando o adapter
- * lança erro (4xx/5xx) ou quando a key é mock.
+ * Teste profundo de conexão com o provider. Diferencia chave inválida, modelo
+ * inexistente, falta de crédito, rate limit, erro de rede e outros. Quando
+ * possível, valida saldo (atualmente OpenRouter expõe `total_credits`).
  */
 export async function testLlmConnection(
   input: SaveLlmConfigInput,
@@ -140,35 +151,29 @@ export async function testLlmConnection(
   const validationError = validateInput(input);
   if (validationError) return { ok: false, error: validationError };
 
-  const client = buildLlmClient(input.provider, input.apiKey.trim(), input.model);
+  const trimmedModel = input.model.trim();
+  const trimmedKey = input.apiKey.trim();
 
-  try {
-    const result = await client.chat({
-      messages: [
-        {
-          role: "user",
-          content: "Responda apenas com a palavra: ok",
-        },
-      ],
-      maxTokens: 16,
-      temperature: 0,
-    });
-    return {
-      ok: true,
-      data: {
-        reachable: true,
-        message: result.message.slice(0, 200),
-        tokensInput: result.usage.tokensInput,
-        tokensOutput: result.usage.tokensOutput,
-      },
-    };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Erro desconhecido";
-    return {
-      ok: true,
-      data: { reachable: false, message: msg },
-    };
-  }
+  const result = await deepTest(input.provider, trimmedKey, trimmedModel);
+
+  // Mensagem amigável a partir do errorKind (ou mantém a original do provider).
+  const friendly =
+    result.errorKind && result.errorKind !== "other"
+      ? describeErrorKind(result.errorKind, result.message, trimmedModel)
+      : result.message;
+
+  return {
+    ok: true,
+    data: {
+      reachable: result.reachable,
+      message: friendly?.slice(0, 240),
+      errorKind: result.errorKind,
+      creditOk: result.creditOk,
+      creditRemainingUsd: result.creditRemainingUsd,
+      tokensInput: result.tokensInput,
+      tokensOutput: result.tokensOutput,
+    },
+  };
 }
 
 export async function getActiveLlmConfigSummary(): Promise<

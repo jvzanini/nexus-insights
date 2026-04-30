@@ -2,37 +2,35 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Filter, RotateCcw, Search, X } from "lucide-react";
+import { Filter, Search } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { PeriodPills } from "@/components/reports/period-pills";
 import { useFilterTransition } from "@/components/reports/filter-transition";
+import { AppliedFiltersChips } from "@/components/reports/applied-filters-chips";
+import { FiltersDrawer } from "@/components/reports/filters-drawer";
 import {
   EMPTY_FILTER_STATE,
-  type FilterState,
   diffFilterStates,
   isFilterStateEqual,
   serializeFilterState,
+  type FilterState,
 } from "@/lib/reports/filter-state";
 import type { PeriodKey as CanonicalPeriodKey } from "@/lib/datetime-core";
-import { isPeriodKey, type PeriodKey as ExtendedPeriodKey } from "@/lib/reports/period";
+import {
+  isPeriodKey,
+  type PeriodKey as ExtendedPeriodKey,
+} from "@/lib/reports/period";
+import type { MetaItem } from "@/lib/chatwoot/queries/meta-cache";
 
 // ---------------------------------------------------------------------------
 // Tipos públicos
 // ---------------------------------------------------------------------------
 
-export interface MetaItem {
-  id: number;
-  name: string;
-}
+export type { MetaItem };
 
 export interface AdvancedFiltersProps {
   inboxes: MetaItem[];
@@ -44,160 +42,20 @@ export interface AdvancedFiltersProps {
 }
 
 // ---------------------------------------------------------------------------
-// Status / Prioridade — domínio fechado (Chatwoot enum)
+// AdvancedFilters — toolbar compacto + drawer
 // ---------------------------------------------------------------------------
-
-const STATUS_OPTIONS: MetaItem[] = [
-  { id: 0, name: "Aberto" },
-  { id: 1, name: "Resolvido" },
-  { id: 2, name: "Pendente" },
-  { id: 3, name: "Adiado" },
-];
-
-const PRIORITY_OPTIONS: MetaItem[] = [
-  { id: 0, name: "Urgente" },
-  { id: 1, name: "Alta" },
-  { id: 2, name: "Média" },
-  { id: 3, name: "Baixa" },
-];
-
-// ---------------------------------------------------------------------------
-// MultiSelectCheckbox — botão + popover com checkboxes
-// ---------------------------------------------------------------------------
-
-interface MultiSelectCheckboxProps {
-  label: string;
-  options: MetaItem[];
-  value: number[];
-  onChange: (next: number[]) => void;
-  emptyLabel?: string;
-}
-
-function MultiSelectCheckbox({
-  label,
-  options,
-  value,
-  onChange,
-  emptyLabel,
-}: MultiSelectCheckboxProps) {
-  const [open, setOpen] = useState(false);
-  const count = value.length;
-  const total = options.length;
-
-  const toggle = (id: number) => {
-    if (value.includes(id)) {
-      onChange(value.filter((v) => v !== id));
-    } else {
-      onChange([...value, id]);
-    }
-  };
-
-  const clear = () => onChange([]);
-
-  const triggerLabel =
-    count === 0
-      ? label
-      : count === 1
-        ? `${label}: ${options.find((o) => o.id === value[0])?.name ?? "1"}`
-        : `${label} (${count})`;
-
-  const noOptions = total === 0;
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={
-          <button
-            type="button"
-            disabled={noOptions}
-            aria-haspopup="listbox"
-            aria-expanded={open}
-            aria-label={`${label}: ${count} de ${total} selecionados`}
-            className={cn(
-              "inline-flex h-9 w-full items-center justify-between gap-1.5 rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground transition-colors",
-              "hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-              "data-[state=open]:bg-muted/60",
-              count > 0 && "border-primary/50",
-              noOptions && "cursor-not-allowed opacity-60",
-            )}
-          >
-            <span className="truncate">
-              <span className="text-muted-foreground">{label}</span>
-              {count > 0 ? (
-                <span className="ml-1.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-xs font-semibold text-primary">
-                  {count}
-                </span>
-              ) : null}
-            </span>
-            <ChevronDown
-              className={cn(
-                "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
-                open && "rotate-180",
-              )}
-              aria-hidden="true"
-            />
-          </button>
-        }
-      />
-      <PopoverContent
-        align="start"
-        className="w-72 p-0"
-      >
-        <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
-          <span className="text-xs font-semibold text-muted-foreground">
-            {label}
-          </span>
-          {count > 0 ? (
-            <button
-              type="button"
-              onClick={clear}
-              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-3 w-3" aria-hidden="true" />
-              Limpar
-            </button>
-          ) : null}
-        </div>
-        <div
-          role="listbox"
-          aria-multiselectable="true"
-          aria-label={label}
-          className="max-h-64 overflow-y-auto py-1"
-        >
-          {options.length === 0 ? (
-            <p className="px-3 py-3 text-xs text-muted-foreground">
-              {emptyLabel ?? "Sem opções disponíveis."}
-            </p>
-          ) : (
-            options.map((opt) => {
-              const checked = value.includes(opt.id);
-              return (
-                <label
-                  key={opt.id}
-                  className={cn(
-                    "flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm transition-colors",
-                    "hover:bg-accent",
-                    checked && "bg-accent/40",
-                  )}
-                >
-                  <Checkbox
-                    checked={checked}
-                    onCheckedChange={() => toggle(opt.id)}
-                  />
-                  <span className="truncate">{opt.name}</span>
-                </label>
-              );
-            })
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// AdvancedFilters
-// ---------------------------------------------------------------------------
+//
+// Layout (4 linhas verticais, 8dp rhythm):
+//   1. Período → <PeriodPills>
+//   2. Busca + chip "Filtros · N"
+//   3. Chips de filtros aplicados (condicional)
+//   4. Banner "N pendentes — Aplicar agora" (condicional)
+//
+// O drawer concentra todos os multi-selects em seções colapsáveis. A toolbar
+// permanece enxuta, priorizando a leitura rápida do estado atual.
+//
+// ui-ux-pro-max: primary-action (1 CTA por área), progressive-disclosure,
+// state-clarity (chip pulsante quando há pending), spacing-scale 4/8.
 
 export function AdvancedFilters({
   inboxes,
@@ -211,6 +69,7 @@ export function AdvancedFilters({
 
   const [draft, setDraft] = useState<FilterState>(initial);
   const [applied, setApplied] = useState<FilterState>(initial);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const pendingDiff = useMemo(
     () => diffFilterStates(draft, applied),
@@ -219,9 +78,14 @@ export function AdvancedFilters({
   const hasPending = pendingDiff > 0;
   const isDirty = !isFilterStateEqual(draft, applied);
 
-  const isEmpty = useMemo(
-    () => isFilterStateEqual(draft, EMPTY_FILTER_STATE),
-    [draft],
+  const appliedCount = useMemo(
+    () =>
+      applied.inboxIds.length +
+      applied.teamIds.length +
+      applied.assigneeIds.length +
+      applied.statuses.length +
+      applied.priorities.length,
+    [applied],
   );
 
   const pushUrl = useCallback(
@@ -235,8 +99,6 @@ export function AdvancedFilters({
   );
 
   // Period aplica direto: muda draft + applied + URL num só clique.
-  // PeriodPills tipa onChange com a PeriodKey estendida (inclui chaves legadas),
-  // mas só usamos as 4 canônicas — narrowing via isPeriodKey garante runtime safety.
   const handlePeriodChange = useCallback(
     (
       period: ExtendedPeriodKey,
@@ -269,67 +131,73 @@ export function AdvancedFilters({
     pushUrl(EMPTY_FILTER_STATE);
   }, [pushUrl]);
 
-  const updateDraft = <K extends keyof FilterState>(
-    key: K,
-    value: FilterState[K],
-  ) => {
-    setDraft((prev) => ({ ...prev, [key]: value }));
+  // Remove a seleção inteira de um grupo (chip X) e aplica imediatamente.
+  const handleRemoveGroup = useCallback(
+    (key: keyof FilterState) => {
+      const next: FilterState = { ...applied };
+      switch (key) {
+        case "inboxIds":
+          next.inboxIds = [];
+          break;
+        case "teamIds":
+          next.teamIds = [];
+          break;
+        case "assigneeIds":
+          next.assigneeIds = [];
+          break;
+        case "statuses":
+          next.statuses = [];
+          break;
+        case "priorities":
+          next.priorities = [];
+          break;
+        default:
+          return;
+      }
+      setApplied(next);
+      setDraft(next);
+      pushUrl(next);
+    },
+    [applied, pushUrl],
+  );
+
+  // Aplicar do drawer: promove draft → applied e atualiza URL.
+  const handleDrawerApply = useCallback(
+    (next: FilterState) => {
+      setDraft(next);
+      setApplied(next);
+      pushUrl(next);
+    },
+    [pushUrl],
+  );
+
+  const updateSearch = (value: string) => {
+    setDraft((prev) => ({ ...prev, search: value || undefined }));
   };
 
   return (
     <section
       aria-label="Filtros avançados"
-      className="space-y-4 rounded-2xl border border-border/60 bg-card/50 p-4 shadow-sm"
+      className="space-y-3 rounded-2xl border border-border/60 bg-card/50 p-4 shadow-sm"
     >
       {/* Linha 1 — Período */}
       <div className="flex flex-col gap-2">
         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Período
         </span>
-        <PeriodPills
-          value={draft.period}
-          customRange={draft.customRange}
-          onChange={handlePeriodChange}
-          accountId={accountId}
-        />
+        <div data-tour="period">
+          <PeriodPills
+            value={draft.period}
+            customRange={draft.customRange}
+            onChange={handlePeriodChange}
+            accountId={accountId}
+          />
+        </div>
       </div>
 
-      {/* Linha 2 — Multi-selects + busca */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-        <MultiSelectCheckbox
-          label="Caixa de entrada"
-          options={inboxes}
-          value={draft.inboxIds}
-          onChange={(v) => updateDraft("inboxIds", v)}
-          emptyLabel="Nenhuma caixa disponível."
-        />
-        <MultiSelectCheckbox
-          label="Equipe"
-          options={teams}
-          value={draft.teamIds}
-          onChange={(v) => updateDraft("teamIds", v)}
-          emptyLabel="Nenhuma equipe disponível."
-        />
-        <MultiSelectCheckbox
-          label="Atendente"
-          options={assignees}
-          value={draft.assigneeIds}
-          onChange={(v) => updateDraft("assigneeIds", v)}
-          emptyLabel="Nenhum atendente disponível."
-        />
-        <MultiSelectCheckbox
-          label="Status"
-          options={STATUS_OPTIONS}
-          value={draft.statuses}
-          onChange={(v) => updateDraft("statuses", v)}
-        />
-        <MultiSelectCheckbox
-          label="Prioridade"
-          options={PRIORITY_OPTIONS}
-          value={draft.priorities}
-          onChange={(v) => updateDraft("priorities", v)}
-        />
-        <div data-tour="search" className="relative sm:col-span-2 lg:col-span-1">
+      {/* Linha 2 — Busca + chip Filtros */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div data-tour="search" className="relative min-w-[260px] flex-1">
           <Search
             className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
             aria-hidden="true"
@@ -337,9 +205,7 @@ export function AdvancedFilters({
           <Input
             type="search"
             value={draft.search ?? ""}
-            onChange={(e) =>
-              updateDraft("search", e.currentTarget.value || undefined)
-            }
+            onChange={(e) => updateSearch(e.currentTarget.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
@@ -351,59 +217,82 @@ export function AdvancedFilters({
             className="h-9 pl-9"
           />
         </div>
+        <Button
+          data-tour="filters-chip"
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setDrawerOpen(true)}
+          aria-label={`Abrir filtros${appliedCount > 0 ? ` (${appliedCount} aplicados)` : ""}`}
+          className={cn(
+            "relative",
+            appliedCount > 0 && "border-primary/50 text-foreground",
+          )}
+        >
+          <Filter aria-hidden="true" />
+          Filtros
+          {appliedCount > 0 ? (
+            <Badge
+              variant="default"
+              className="ml-1 h-5 min-w-5 px-1.5 tabular-nums"
+            >
+              {appliedCount}
+            </Badge>
+          ) : null}
+          {hasPending ? (
+            <span
+              aria-hidden="true"
+              className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-primary ring-2 ring-card"
+            />
+          ) : null}
+        </Button>
       </div>
 
-      {/* Linha 3 — Status + ações */}
-      <div className="flex flex-col gap-3 border-t border-border/60 pt-3 sm:flex-row sm:items-center sm:justify-between">
+      {/* Linha 3 — Chips aplicados (condicional) */}
+      <AppliedFiltersChips
+        meta={{ inboxes, teams, assignees }}
+        applied={applied}
+        onRemove={handleRemoveGroup}
+        onClearAll={handleReset}
+      />
+
+      {/* Linha 4 — Banner pending (condicional) */}
+      {hasPending ? (
         <div
-          className={cn(
-            "inline-flex items-center gap-2 text-sm",
-            hasPending ? "text-foreground" : "text-muted-foreground",
-          )}
+          role="status"
           aria-live="polite"
+          className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm"
         >
           <Filter
-            className={cn(
-              "h-4 w-4",
-              hasPending ? "text-primary" : "text-muted-foreground",
-            )}
+            className="h-4 w-4 text-primary"
             aria-hidden="true"
           />
-          {hasPending ? (
-            <span>
-              <strong className="font-semibold">{pendingDiff}</strong>{" "}
-              {pendingDiff === 1 ? "filtro pendente" : "filtros pendentes"}
-            </span>
-          ) : (
-            <span>Todos os filtros aplicados</span>
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-foreground">
+            <strong className="font-semibold">{pendingDiff}</strong>{" "}
+            {pendingDiff === 1 ? "filtro pendente" : "filtros pendentes"}
+          </span>
           <Button
             type="button"
-            variant="ghost"
-            size="sm"
-            onClick={handleReset}
-            disabled={isEmpty}
-            aria-label="Limpar todos os filtros"
-          >
-            <RotateCcw aria-hidden="true" />
-            Limpar
-          </Button>
-          <Button
-            type="button"
-            variant="default"
+            variant="link"
             size="sm"
             onClick={handleApply}
-            disabled={!isDirty}
-            aria-label="Aplicar filtros"
+            className="h-auto px-1 py-0 font-semibold text-primary"
           >
-            <Filter aria-hidden="true" />
-            Aplicar filtros
+            Aplicar agora
           </Button>
         </div>
-      </div>
+      ) : null}
+
+      <FiltersDrawer
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        applied={applied}
+        onApply={handleDrawerApply}
+        onClear={handleReset}
+        inboxes={inboxes}
+        teams={teams}
+        assignees={assignees}
+      />
     </section>
   );
 }

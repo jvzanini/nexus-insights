@@ -1,5 +1,60 @@
 # Changelog
 
+## [v0.7.0] 2026-04-29 — Polimento UX + Agente Nex 2.0
+
+> Polimento amplo após release v0.6.1 — atende feedback crítico do usuário sobre sidebar, filtros, conversas, tour e configuração do Agente Nex.
+
+### Adicionado
+
+- **`<PageShell variant="wide" | "narrow">`** — wrapper de largura por contexto. `wide` = 1600 px (relatórios), `narrow` = 1280 px (admin). Substitui o `max-w-7xl` global do layout protegido. Resolve o problema de monitor 27" ficar com sobra inutilizada.
+- **`<Sheet>` + `<CollapsibleSection>` + `<MultiSelectCheckbox>` 2.0 + `<SearchableSelect>` + `<TierBadge>`** — primitivos de UI novos para drawer lateral, seções colapsáveis, multi-select com busca e Selecionar todos/visíveis, single-select com busca, e badge de consumo (FREE / $ / $$ / $$$).
+- **Filtros — toolbar compacta + drawer**: substitui o cards-de-multi-select por toolbar com Período + Busca + chip "Filtros · N" que abre drawer lateral com 5 seções colapsáveis (Caixa de entrada, Departamento, Atendente, Status, Prioridade). Cada seção tem busca interna e Selecionar todos/visíveis. Chips de filtros aplicados aparecem inline com X por grupo + "Limpar tudo".
+- **Tour de Conversas estendido** de 4 → 9 etapas: período, busca, filtros, ordenação (com explicação shift+click), colunas, page size, tabela, abrir no Chatwoot, refresh.
+- **Tours estendidos / criados** para Visão Geral, Performance, Equipe, Distribuição, Origem & IA e Mensagens não respondidas.
+- **`getInboxesForUser()`** — helper que respeita `reports.include_matrix_ia` + role. Aplicado nas páginas de Conversas e Mensagens não respondidas, escondendo a inbox 31 dos dropdowns para não-superadmins quando flag OFF.
+- **Empty state com "Limpar filtros"** na tabela de Conversas quando há filtros aplicados.
+- **PROVIDER_CATALOG (LLM)** — catálogo rico de modelos (abril/2026) por provider, com tier de custo (`free/low/medium/high`), URLs de API key e top-up. OpenAI: GPT-4o, 4.1, o1/o3/o4. Anthropic: Claude 3.5/4.5/4.6/4.7. Gemini: 1.5/2.0/2.5. OpenRouter: ~17 modelos cobrindo open-source free.
+- **Configuração Agente Nex 2.0**:
+  - Select de modelo via `<SearchableSelect>` com busca interna e badge de tier.
+  - Primeira opção sempre **"Outro (digitar manualmente)"** — habilita campo livre.
+  - Atalhos abaixo do API key: "Criar API key" + "Adicionar crédito" (links nativos por provider).
+  - **Teste de conexão profundo**: detecta `invalid_key`, `model_not_found`, `no_credit`, `rate_limit`, `network`. Por provider: OpenAI usa `/v1/models` antes da chat; Anthropic detecta `credit_balance_too_low`; OpenRouter consulta saldo via `/credits`.
+  - **Auto-save após teste OK** (com `creditOk !== false`). Save manual = test + save.
+
+### Mudou
+
+- **Tagline "Relatórios e insights" → "Relatórios Inteligentes"** no login e topo do sidebar.
+- **Sidebar — active state**: pílula sólida sutil (`bg-violet-500/10` + violet text). Submenu ativo: dot violet à esquerda + sem pílula full. Sem mais "borda esquerda violet arredondada".
+- **Sidebar — `isActive` longest-prefix-match**: corrige bug em que clicar em "Consumo IA" marcava também "Configurações" como ativo. Folhas usam exact / sub-rota; grupos usam prefix.
+- **`AdvancedFilters`** completamente refatorado para toolbar+drawer (mantém prop API pública).
+- **"Equipe" → "Departamento"** no filtro (mantém key interna `teamIds`).
+- **Labels da tabela Conversas**: chips neutros (sem cor por hash). Todas as labels visíveis com `flex-wrap` (sem `+N` por padrão).
+- **Atributos da tabela Conversas**: agora exibe chips `chave: valor` (com tooltip completo). `defaultVisible: true`.
+- **Coluna "Ações"** da tabela Conversas: refator via `buildColumns(accountId)` factory; `<OpenInChatwoot>` definido direto no `render`.
+- **Tour overlay**: popover mede altura real via `ResizeObserver` (sem mais estimativa fixa de 200 px que cortava botões); largura adapta-se a viewports < 480 px.
+- **Cópia do toggle Matrix IA** ampliada: deixa explícito que afeta tabelas, gráficos, KPIs e dropdowns.
+- **Origem & IA**: gating Matrix IA agora usa a flag canônica `reports.include_matrix_ia` (antes usava feature flag separada — desconexa do toggle).
+
+### Corrigido
+
+- **`MATRIX_IA_INBOX_ID = 31`** centralizado em `src/lib/constants/matrix-ia.ts` (evita magic number).
+
+### Testes
+
+- 6 novos componentes UI base com cobertura TDD: `Sheet` (3), `CollapsibleSection` (4), `MultiSelectCheckbox` (6), `SearchableSelect` (4), `TierBadge` (4), `PageShell` (3).
+- `getInboxesForUser` (6 cenários: super_admin, manager flag ON/OFF, viewer, admin, stale).
+- `isLeafActive` longest-prefix-match (12 cenários incluindo `/configuracoes/consumo`).
+- `LabelsChips` neutro sem cap (4).
+- Filtros: `AppliedFiltersChips` (8) + `FiltersDrawer` (8).
+- LLM 2.0: `PROVIDER_CATALOG` shape; `deepTest` por provider mocking `fetch`.
+
+### Quebras / migrações
+
+- O `MultiSelectFilter` interno de `mensagens-nao-respondidas-filters.tsx` foi substituído pelo `<MultiSelectCheckbox>` 2.0 (drop-in compatível).
+- Páginas em `src/app/(protected)/*` agora envolvem o conteúdo em `<PageShell>` (não havia `max-w-*` direto no `page.tsx` antes — era do layout). Sem impacto funcional.
+
+---
+
 ## [v0.6.1] 2026-04-29 — Tabela Conversas parruda + Busca global + Tour + Toggle Nex/Matrix IA
 
 ### Corrigido (crítico)

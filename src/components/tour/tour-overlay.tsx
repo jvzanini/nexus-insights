@@ -20,11 +20,12 @@ interface TourOverlayProps {
   stepIndex: number;
 }
 
-const POPOVER_WIDTH = 320; // px
-const POPOVER_EST_HEIGHT = 200; // estimativa para placement automático
+const POPOVER_WIDTH = 360; // px (default desktop)
+const POPOVER_FALLBACK_HEIGHT = 220; // usado apenas no primeiro frame, antes de medir
 const POPOVER_MARGIN = 12; // gap entre target e popover
 const VIEWPORT_PADDING = 16; // distância mínima das bordas
 const SPOTLIGHT_PADDING = 6; // padding do hole sobre o target
+const NARROW_VIEWPORT_BREAKPOINT = 480; // px — abaixo disso, popover ocupa quase a viewport inteira
 
 type Rect = {
   top: number;
@@ -44,41 +45,46 @@ function rectFromDOMRect(domRect: DOMRect): Rect {
 
 /**
  * Calcula posição do popover relativa ao viewport, com fallback automático
- * quando a placement preferida não cabe na tela.
+ * quando a placement preferida não cabe.
+ *
+ * Recebe `popoverWidth` e `popoverHeight` REAIS (medidos via ref) — só usa o
+ * fallback fixo no primeiro frame antes da medição.
  */
 function computePopoverPosition(
   rect: Rect | null,
   preferred: TourStep["placement"] = "bottom",
   viewport: { width: number; height: number },
+  popoverWidth: number,
+  popoverHeight: number,
 ): CSSProperties {
   if (!rect) {
     return {
       top: "50%",
       left: "50%",
       transform: "translate(-50%, -50%)",
+      width: popoverWidth,
     };
   }
 
   const fits = (placement: NonNullable<TourStep["placement"]>): boolean => {
     switch (placement) {
       case "top":
-        return rect.top - POPOVER_EST_HEIGHT - POPOVER_MARGIN >= VIEWPORT_PADDING;
+        return rect.top - popoverHeight - POPOVER_MARGIN >= VIEWPORT_PADDING;
       case "bottom":
         return (
-          rect.top + rect.height + POPOVER_MARGIN + POPOVER_EST_HEIGHT <=
+          rect.top + rect.height + POPOVER_MARGIN + popoverHeight <=
           viewport.height - VIEWPORT_PADDING
         );
       case "left":
-        return rect.left - POPOVER_WIDTH - POPOVER_MARGIN >= VIEWPORT_PADDING;
+        return rect.left - popoverWidth - POPOVER_MARGIN >= VIEWPORT_PADDING;
       case "right":
         return (
-          rect.left + rect.width + POPOVER_MARGIN + POPOVER_WIDTH <=
+          rect.left + rect.width + POPOVER_MARGIN + popoverWidth <=
           viewport.width - VIEWPORT_PADDING
         );
     }
   };
 
-  // Tenta placement preferida; se não cabe, busca um fallback.
   const order: Array<NonNullable<TourStep["placement"]>> = [
     preferred,
     "bottom",
@@ -93,19 +99,19 @@ function computePopoverPosition(
   let left = 0;
   switch (chosen) {
     case "top":
-      top = rect.top - POPOVER_EST_HEIGHT - POPOVER_MARGIN;
-      left = rect.left + rect.width / 2 - POPOVER_WIDTH / 2;
+      top = rect.top - popoverHeight - POPOVER_MARGIN;
+      left = rect.left + rect.width / 2 - popoverWidth / 2;
       break;
     case "bottom":
       top = rect.top + rect.height + POPOVER_MARGIN;
-      left = rect.left + rect.width / 2 - POPOVER_WIDTH / 2;
+      left = rect.left + rect.width / 2 - popoverWidth / 2;
       break;
     case "left":
-      top = rect.top + rect.height / 2 - POPOVER_EST_HEIGHT / 2;
-      left = rect.left - POPOVER_WIDTH - POPOVER_MARGIN;
+      top = rect.top + rect.height / 2 - popoverHeight / 2;
+      left = rect.left - popoverWidth - POPOVER_MARGIN;
       break;
     case "right":
-      top = rect.top + rect.height / 2 - POPOVER_EST_HEIGHT / 2;
+      top = rect.top + rect.height / 2 - popoverHeight / 2;
       left = rect.left + rect.width + POPOVER_MARGIN;
       break;
   }
@@ -113,14 +119,14 @@ function computePopoverPosition(
   // Clamp para garantir que o popover nunca saia da viewport.
   left = Math.max(
     VIEWPORT_PADDING,
-    Math.min(left, viewport.width - POPOVER_WIDTH - VIEWPORT_PADDING),
+    Math.min(left, viewport.width - popoverWidth - VIEWPORT_PADDING),
   );
   top = Math.max(
     VIEWPORT_PADDING,
-    Math.min(top, viewport.height - VIEWPORT_PADDING),
+    Math.min(top, viewport.height - popoverHeight - VIEWPORT_PADDING),
   );
 
-  return { top, left, width: POPOVER_WIDTH };
+  return { top, left, width: popoverWidth };
 }
 
 export function TourOverlay({ config, stepIndex }: TourOverlayProps) {
@@ -141,7 +147,13 @@ export function TourOverlay({ config, stepIndex }: TourOverlayProps) {
         ? { width: window.innerWidth, height: window.innerHeight }
         : { width: 1024, height: 768 },
   );
+  const [popoverHeight, setPopoverHeight] = useState<number>(POPOVER_FALLBACK_HEIGHT);
   const [mounted, setMounted] = useState(false);
+
+  const popoverWidth =
+    viewport.width < NARROW_VIEWPORT_BREAKPOINT
+      ? Math.max(240, viewport.width - VIEWPORT_PADDING * 2)
+      : POPOVER_WIDTH;
 
   useEffect(() => {
     setMounted(true);
@@ -191,14 +203,37 @@ export function TourOverlay({ config, stepIndex }: TourOverlayProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [finish, next, prev, isFirst, isLast]);
 
-  // Move o foco para o popover ao trocar de step (a11y).
+  // Move o foco para o popover ao trocar de step (a11y) + mede altura real.
   useLayoutEffect(() => {
     popoverRef.current?.focus();
-  }, [stepIndex]);
+    if (popoverRef.current) {
+      const h = popoverRef.current.offsetHeight;
+      if (h > 0 && h !== popoverHeight) setPopoverHeight(h);
+    }
+  }, [stepIndex, popoverHeight]);
+
+  // Observa mudanças de altura do popover (textos longos, conteúdo dinâmico).
+  useEffect(() => {
+    const el = popoverRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      const h = el.offsetHeight;
+      if (h > 0) setPopoverHeight(h);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const popoverPos = useMemo(
-    () => computePopoverPosition(rect, step?.placement ?? "bottom", viewport),
-    [rect, step?.placement, viewport],
+    () =>
+      computePopoverPosition(
+        rect,
+        step?.placement ?? "bottom",
+        viewport,
+        popoverWidth,
+        popoverHeight,
+      ),
+    [rect, step?.placement, viewport, popoverWidth, popoverHeight],
   );
 
   if (!step || !mounted) return null;

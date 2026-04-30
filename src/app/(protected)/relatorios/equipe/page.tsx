@@ -7,6 +7,7 @@ import { PeriodSelectorUrl } from "@/components/reports/period-selector-url";
 import { RefreshButton } from "@/components/reports/refresh-button";
 import { FilterTransitionProvider } from "@/components/reports/filter-transition";
 import { ContentLoadingWrapper } from "@/components/reports/content-loading-wrapper";
+import { PageShell } from "@/components/layout/page-shell";
 import { TabsShell } from "@/components/reports/dashboards/tabs-shell";
 import { RankingAtendentesContent } from "@/components/reports/dashboards/ranking-atendentes-content";
 import { PorDepartamentoContent } from "@/components/reports/dashboards/por-departamento-content";
@@ -15,6 +16,8 @@ import {
   CardSkeleton,
   TableSkeleton,
 } from "@/components/ui/skeleton";
+import { TourButton } from "@/components/tour/tour-button";
+import { equipeTour } from "@/lib/tours/equipe-tour";
 import { getCurrentUser } from "@/lib/auth";
 import { getActiveAccountId } from "@/lib/reports/active-account";
 import { parseReportSearchParams } from "@/lib/reports/parse-search-params";
@@ -56,45 +59,55 @@ export default async function Page({ searchParams }: PageProps) {
   const contentProps = { accountId, period, customStart, customEnd };
 
   return (
-    <div>
+    <PageShell variant="wide">
       <PageHeader
         icon={UsersRound}
         title="Equipe"
         subtitle="Ranking de atendentes e departamentos"
+        actions={<TourButton tour={equipeTour} />}
       />
 
       <FilterTransitionProvider>
-        <div className="mb-6 flex items-center gap-2">
+        <div
+          data-tour="equipe-period"
+          className="mb-6 flex items-center gap-2"
+        >
           <PeriodSelectorUrl value={period} accountId={accountId} />
           <RefreshButton />
         </div>
 
         <ContentLoadingWrapper>
-          <TabsShell
-            activeValue={tab ?? "ranking"}
-            tabs={[
-              {
-                value: "ranking",
-                label: "Ranking de atendentes",
-                content: (
-                  <Suspense fallback={<RankingFallback />}>
-                    <RankingAtendentesContent {...contentProps} />
-                  </Suspense>
-                ),
-              },
-              {
-                value: "departamento",
-                label: "Por departamento",
-                content: (
-                  <Suspense fallback={<DepartamentoFallback />}>
-                    <PorDepartamentoContent {...contentProps} />
-                  </Suspense>
-                ),
-              },
-            ]}
-          />
+          <div data-tour="equipe-tabs">
+            <TabsShell
+              activeValue={tab ?? "ranking"}
+              tabs={[
+                {
+                  value: "ranking",
+                  label: "Ranking de atendentes",
+                  content: (
+                    <div data-tour="equipe-tab-ranking">
+                      <Suspense fallback={<RankingFallback />}>
+                        <RankingAtendentesContent {...contentProps} />
+                      </Suspense>
+                    </div>
+                  ),
+                },
+                {
+                  value: "departamento",
+                  label: "Por departamento",
+                  content: (
+                    <div data-tour="equipe-tab-departamento">
+                      <Suspense fallback={<DepartamentoFallback />}>
+                        <PorDepartamentoContent {...contentProps} />
+                      </Suspense>
+                    </div>
+                  ),
+                },
+              ]}
+            />
+          </div>
         </ContentLoadingWrapper>
       </FilterTransitionProvider>
-    </div>
+    </PageShell>
   );
 }

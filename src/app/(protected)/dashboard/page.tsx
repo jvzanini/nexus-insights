@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { DashboardContent } from "@/components/dashboard/dashboard-content";
+import { PageShell } from "@/components/layout/page-shell";
 import { getCurrentUser } from "@/lib/auth";
 import { getActiveAccountId } from "@/lib/reports/active-account";
 import { getKnownAccounts, getAccessibleAccountIds } from "@/lib/tenant";
@@ -39,10 +40,12 @@ export default async function DashboardPage() {
     : (accounts[0]?.id ?? activeAccountId);
 
   return (
-    <DashboardContent
-      userName={user.name}
-      initialAccountId={safeAccountId}
-      initialAccounts={accounts}
-    />
+    <PageShell variant="wide">
+      <DashboardContent
+        userName={user.name}
+        initialAccountId={safeAccountId}
+        initialAccounts={accounts}
+      />
+    </PageShell>
   );
 }

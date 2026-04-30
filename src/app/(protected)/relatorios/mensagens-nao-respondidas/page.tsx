@@ -12,14 +12,12 @@ import { MensagensNaoRespondidasTable } from "@/components/reports/mensagens-nao
 import { RefreshButton } from "@/components/reports/refresh-button";
 import { FilterTransitionProvider } from "@/components/reports/filter-transition";
 import { ContentLoadingWrapper } from "@/components/reports/content-loading-wrapper";
+import { PageShell } from "@/components/layout/page-shell";
 import { TourButton } from "@/components/tour/tour-button";
 import { mensagensNaoRespondidasTour } from "@/lib/tours/mensagens-nao-respondidas-tour";
 import { getCurrentUser } from "@/lib/auth";
-import {
-  getInboxes,
-  getTeams,
-  getUsers,
-} from "@/lib/chatwoot/queries/meta-cache";
+import { getTeams, getUsers } from "@/lib/chatwoot/queries/meta-cache";
+import { getInboxesForUser } from "@/lib/chatwoot/queries/meta-cache-for-user";
 import { fetchMensagensNaoRespondidas } from "@/lib/actions/reports/mensagens-nao-respondidas";
 import { getActiveAccountId } from "@/lib/reports/active-account";
 import { shouldExcludeMatrixIA } from "@/lib/reports/exclude-matrix-ia";
@@ -75,7 +73,7 @@ export default async function MensagensNaoRespondidasPage({
 
   const [inboxesResult, teamsResult, usersResult, dataResult] =
     await Promise.all([
-      getInboxes(accountId).catch(() => null),
+      getInboxesForUser(accountId, user).catch(() => null),
       getTeams(accountId).catch(() => null),
       getUsers(accountId).catch(() => null),
       fetchMensagensNaoRespondidas({
@@ -99,7 +97,7 @@ export default async function MensagensNaoRespondidasPage({
   const oldestLabel = formatDuration(dataResult.oldestWaitingSeconds);
 
   return (
-    <div>
+    <PageShell variant="wide">
       <PageHeader
         icon={MailWarning}
         title="Mensagens não respondidas"
@@ -163,6 +161,6 @@ export default async function MensagensNaoRespondidasPage({
           </div>
         </ContentLoadingWrapper>
       </FilterTransitionProvider>
-    </div>
+    </PageShell>
   );
 }

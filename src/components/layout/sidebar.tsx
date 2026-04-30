@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "@/components/providers/theme-provider";
@@ -26,6 +26,12 @@ import {
 import type { PlatformRole } from "@/generated/prisma/client";
 import { AccountSwitcher } from "@/components/layout/account-switcher";
 import { GlobalSearchTrigger } from "@/components/layout/global-search-trigger";
+import {
+  collectLeafHrefs,
+  isGroupActive,
+  isLeafActive,
+} from "@/lib/utils/sidebar-active-path";
+import { cn } from "@/lib/utils";
 
 interface SidebarUser {
   id: string;
@@ -81,9 +87,11 @@ export function Sidebar({
     enabledReportKeys,
   );
 
-  function isActive(href: string) {
-    if (href === "/dashboard") return pathname === "/dashboard";
-    return pathname.startsWith(href);
+  const allLeafHrefs = useMemo(() => collectLeafHrefs(visibleNav), [visibleNav]);
+
+  function isActive(item: NavItem): boolean {
+    if (item.children?.length) return isGroupActive(item.href, pathname);
+    return isLeafActive(item.href, pathname, allLeafHrefs);
   }
 
   function toggleGroup(href: string) {
@@ -91,7 +99,7 @@ export function Sidebar({
   }
 
   function renderItem(item: NavItem, depth = 0) {
-    const active = isActive(item.href);
+    const active = isActive(item);
     const hasChildren = (item.children?.length ?? 0) > 0;
     const isOpen = openGroups[item.href] ?? false;
 
@@ -100,28 +108,28 @@ export function Sidebar({
         <div key={item.href}>
           <button
             onClick={() => toggleGroup(item.href)}
-            className={`
-              group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium
-              transition-all duration-200 cursor-pointer
-              ${
-                active
-                  ? "bg-muted/50 text-violet-500 border-l-2 border-violet-500 pl-[10px]"
-                  : "text-muted-foreground hover:bg-muted/30 hover:text-foreground"
-              }
-            `}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 cursor-pointer",
+              active
+                ? "bg-violet-500/10 text-violet-600 dark:text-violet-300 hover:bg-violet-500/15"
+                : "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+            )}
           >
             <item.icon
-              className={`h-[18px] w-[18px] transition-colors duration-200 ${
+              className={cn(
+                "h-[18px] w-[18px] shrink-0 transition-colors duration-200",
                 active
-                  ? "text-violet-500"
-                  : "text-muted-foreground group-hover:text-foreground"
-              }`}
+                  ? "text-violet-600 dark:text-violet-300"
+                  : "text-muted-foreground group-hover:text-foreground",
+              )}
             />
             <span className="flex-1 text-left">{item.label}</span>
             <ChevronDown
-              className={`h-4 w-4 transition-transform duration-200 ${
-                isOpen ? "rotate-180" : ""
-              }`}
+              className={cn(
+                "h-4 w-4 shrink-0 transition-transform duration-200",
+                isOpen && "rotate-180",
+              )}
             />
           </button>
           <AnimatePresence initial={false}>
@@ -134,7 +142,7 @@ export function Sidebar({
                 transition={{ duration: 0.18 }}
                 className="overflow-hidden"
               >
-                <div className="mt-1 ml-3 pl-3 border-l border-border space-y-1">
+                <div className="mt-1 ml-3 pl-3 border-l border-border/40 space-y-1">
                   {item.children!.map((child) => renderItem(child, depth + 1))}
                 </div>
               </motion.div>
@@ -144,29 +152,38 @@ export function Sidebar({
       );
     }
 
+    const isSubmenu = depth > 0;
+
     return (
       <Link
         key={item.href}
         href={item.href}
         onClick={() => setMobileOpen(false)}
-        className={`
-          group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium
-          transition-all duration-200 cursor-pointer
-          ${
-            active
-              ? "bg-muted/50 text-violet-500 border-l-2 border-violet-500 pl-[10px]"
-              : "text-muted-foreground hover:bg-muted/30 hover:text-foreground"
-          }
-        `}
+        aria-current={active ? "page" : undefined}
+        className={cn(
+          "group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 cursor-pointer",
+          active
+            ? isSubmenu
+              ? "bg-violet-500/5 text-violet-600 dark:text-violet-300"
+              : "bg-violet-500/10 text-violet-600 dark:text-violet-300 hover:bg-violet-500/15"
+            : "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+        )}
       >
+        {active && isSubmenu ? (
+          <span
+            aria-hidden="true"
+            className="block h-1 w-1 shrink-0 rounded-full bg-violet-500"
+          />
+        ) : null}
         <item.icon
-          className={`h-[16px] w-[16px] transition-colors duration-200 ${
+          className={cn(
+            "h-[16px] w-[16px] shrink-0 transition-colors duration-200",
             active
-              ? "text-violet-500"
-              : "text-muted-foreground group-hover:text-foreground"
-          }`}
+              ? "text-violet-600 dark:text-violet-300"
+              : "text-muted-foreground group-hover:text-foreground",
+          )}
         />
-        <span>{item.label}</span>
+        <span className="truncate">{item.label}</span>
       </Link>
     );
   }
@@ -186,7 +203,7 @@ export function Sidebar({
             Nexus Insights
           </h1>
           <p className="text-[11px] text-muted-foreground leading-none">
-            Relatórios e insights
+            Relatórios Inteligentes
           </p>
         </div>
       </div>

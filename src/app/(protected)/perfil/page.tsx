@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { PageShell } from "@/components/layout/page-shell";
 import { ProfileContent } from "@/components/profile/profile-content";
 
 export const metadata = { title: "Meu Perfil | Nexus Insights" };
@@ -21,12 +22,14 @@ export default async function PerfilPage() {
       : new Date().toISOString();
 
   return (
-    <ProfileContent
-      initialName={user.name}
-      initialEmail={user.email}
-      initialAvatarUrl={user.avatarUrl ?? null}
-      initialTheme={user.theme ?? "system"}
-      createdAt={createdAtIso}
-    />
+    <PageShell variant="narrow">
+      <ProfileContent
+        initialName={user.name}
+        initialEmail={user.email}
+        initialAvatarUrl={user.avatarUrl ?? null}
+        initialTheme={user.theme ?? "system"}
+        createdAt={createdAtIso}
+      />
+    </PageShell>
   );
 }
