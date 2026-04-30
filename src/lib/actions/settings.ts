@@ -1,9 +1,12 @@
 "use server";
 
 import { z } from "zod";
+import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth";
 import { updateSetting as updateSettingDirect } from "@/lib/settings/update";
 import { getAllSettings as getAllSettingsCached } from "@/lib/settings/get";
+import { invalidateDashboardSettings } from "@/lib/dashboard-settings";
+import { logAudit } from "@/lib/audit";
 
 const UpdateInputSchema = z.object({
   key: z.string().min(1),
@@ -54,5 +57,74 @@ export async function updateSetting(
   } catch (err) {
     console.error("[settings.update]", err);
     return { success: false, error: "Erro ao atualizar configuração" };
+  }
+}
+
+export async function saveDashboardSettings(args: {
+  weekStartsOn: number;
+  weekMode: "current" | "rolling";
+  monthMode: "current" | "rolling";
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, error: "Não autenticado" };
+    if (user.platformRole !== "super_admin") {
+      return {
+        success: false,
+        error: "Apenas super admin pode alterar configurações",
+      };
+    }
+
+    const ws =
+      Number.isInteger(args.weekStartsOn) &&
+      args.weekStartsOn >= 0 &&
+      args.weekStartsOn <= 6
+        ? args.weekStartsOn
+        : 1;
+    const wm = args.weekMode === "rolling" ? "rolling" : "current";
+    const mm = args.monthMode === "rolling" ? "rolling" : "current";
+
+    await Promise.all([
+      updateSettingDirect({
+        key: "dashboard.week_starts_on",
+        value: String(ws),
+        category: "dashboard",
+        userId: user.id,
+      }),
+      updateSettingDirect({
+        key: "dashboard.week_mode",
+        value: wm,
+        category: "dashboard",
+        userId: user.id,
+      }),
+      updateSettingDirect({
+        key: "dashboard.month_mode",
+        value: mm,
+        category: "dashboard",
+        userId: user.id,
+      }),
+    ]);
+
+    invalidateDashboardSettings();
+
+    await logAudit({
+      userId: user.id,
+      action: "setting_updated",
+      targetType: "AppSetting",
+      targetId: "dashboard",
+      details: {
+        section: "dashboard",
+        weekStartsOn: ws,
+        weekMode: wm,
+        monthMode: mm,
+      },
+    });
+
+    revalidatePath("/dashboard");
+    revalidatePath("/configuracoes");
+    return { success: true };
+  } catch (err) {
+    console.error("[saveDashboardSettings]", err);
+    return { success: false, error: "Erro ao salvar configurações" };
   }
 }

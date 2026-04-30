@@ -8,9 +8,11 @@ import { VisibilitySettingsForm } from "@/components/settings/visibility-setting
 import { PlatformSettingsCard } from "@/components/settings/platform-settings-card";
 import { EnabledReportsCard } from "@/components/settings/enabled-reports-card";
 import { MatrixIAToggleCard } from "@/components/settings/matrix-ia-toggle-card";
+import { DashboardSettingsCard } from "@/components/settings/dashboard-settings-card";
 import { LlmConfigCard } from "@/components/settings/llm-config-card";
 import { getCurrentUser } from "@/lib/auth";
 import { getAllSettings } from "@/lib/actions/settings";
+import { getDashboardSettings } from "@/lib/dashboard-settings";
 import { getPlatformLocale, getPlatformTz } from "@/lib/datetime";
 import { ALL_REPORT_KEYS } from "@/lib/reports/catalog";
 import {
@@ -58,6 +60,7 @@ export default async function Page() {
     nexBubbleEnabled,
     initialCredentials,
     currentRate,
+    dashboardSettings,
   ] = await Promise.all([
     getPlatformTz(),
     getPlatformLocale(),
@@ -77,6 +80,7 @@ export default async function Page() {
       console.error("[configuracoes] getUsdBrlRate falhou:", err);
       return null;
     }),
+    getDashboardSettings(),
   ]);
 
   const initialSpread = currentRate?.spread ?? DEFAULT_CARD_SPREAD;
@@ -118,6 +122,10 @@ export default async function Page() {
 
         {isSuperAdmin && (
           <EnabledReportsCard initialVisibility={reportVisibilityMap} />
+        )}
+
+        {isSuperAdmin && (
+          <DashboardSettingsCard initial={dashboardSettings} />
         )}
 
         {isSuperAdmin && (
