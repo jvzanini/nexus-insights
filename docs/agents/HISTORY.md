@@ -57,6 +57,9 @@ YYYY-MM-DD HH:MM | agent=<agent-id> | commit=<sha7> | scope=<feat|fix|docs|infra
 2026-04-30 17:30 | agent=claude-visibility-models | observation=session-end | summary=Sessão encerrada. Active file deletado.
 2026-04-30 19:50 | agent=claude-conversas-v0.10.4-fix | observation=session-end | summary=Sessão encerrada. v0.10.4 consolidada na release v0.11.0 (CHANGELOG/package.json controlados pelo claude-visibility-models). Active file removido. portainer-fix será disparado pelo agente da v0.11.0.
 2026-04-30 20:05 | agent=claude-pageheader-hotfix | observation=incident | summary=Páginas internas (configurações + todos relatorios) caíram com "This page couldn't load". Causa: commit 0a3bfab (claude-conversas-v0.10.4-fix) marcou PageHeader como "use client" mas recebe LucideIcon (função) — proibido em RSC → Client. Logs do app mostram "Error: Functions cannot be passed directly to Client Components".
+2026-04-30 20:08 | agent=claude-pageheader-hotfix | commit=c214a20 | scope=fix | summary=v0.11.1 hotfix — PageHeader volta a ser Server Component, delega medição para PageHeaderHeightProbe (Client Component novo). API pública inalterada, 13 call-sites continuam funcionando.
+2026-04-30 20:13 | agent=claude-pageheader-hotfix | run=25187003841 | scope=infra | summary=portainer-fix com app_version=v0.11.1 — APP_VERSION env atualizada. /api/health retorna version v0.11.1 status ok. Páginas internas voltaram a carregar.
+2026-04-30 20:15 | agent=claude-pageheader-hotfix | observation=session-end | summary=Sessão encerrada. Active file deletado. v0.11.1 LIVE em produção.
 ```
 
 > Entradas anteriores aos workflows do dia 2026-04-30 estão capturadas no CHANGELOG.md (não vamos retroagir HISTORY pra trás disso para evitar trabalho inútil).
