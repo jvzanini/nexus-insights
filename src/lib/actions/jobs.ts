@@ -146,6 +146,21 @@ export async function getJobsStatus(): Promise<
 
     return { success: true, data: { rows } };
   } catch (err) {
+    // Caso a migration ainda não tenha rodado (1ª subida do v0.8.0): tratar
+    // "tabela não existe" como empty state silencioso em vez de banner de
+    // erro. Postgres SQLSTATE 42P01 = undefined_table.
+    const code = (err as { code?: string })?.code;
+    const message = (err as { message?: string })?.message ?? "";
+    const isMissingTable =
+      code === "42P01" ||
+      /relation .* does not exist|chatwoot_facts/i.test(message);
+    if (isMissingTable) {
+      console.warn(
+        "[jobs.getJobsStatus] tabela facts ainda não existe — retornando empty state. " +
+          "Verifique se a migration 20260430_pre_agregacao foi aplicada.",
+      );
+      return { success: true, data: { rows: [] } };
+    }
     console.error("[jobs.getJobsStatus]", err);
     return { success: false, error: "Erro ao carregar status dos jobs" };
   }
