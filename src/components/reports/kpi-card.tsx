@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Minus, TrendingDown, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -15,7 +16,7 @@ export interface KpiDelta {
 export interface KpiCardProps {
   icon: LucideIcon;
   label: string;
-  value: string | number;
+  value: ReactNode;
   hint?: string;
   tone?: "default" | "danger" | "success" | "warning";
   delta?: KpiDelta;
@@ -74,7 +75,7 @@ export function KpiCard({
           <p className="text-xs uppercase tracking-wide text-muted-foreground">
             {label}
           </p>
-          <p className="mt-2 text-3xl font-bold tracking-tight">{value}</p>
+          <div className="mt-2 text-3xl font-bold tracking-tight">{value}</div>
           {delta && DeltaIcon ? (
             <p
               className={cn(

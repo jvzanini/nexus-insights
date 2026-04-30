@@ -191,11 +191,11 @@ const usdFmt = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 4,
   maximumFractionDigits: 6,
 });
-const usdFmtCompact = new Intl.NumberFormat("en-US", {
+const brlFmt = new Intl.NumberFormat("pt-BR", {
   style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 4,
+  currency: "BRL",
+  minimumFractionDigits: 4,
+  maximumFractionDigits: 6,
 });
 const dateTimeFmt = new Intl.DateTimeFormat("pt-BR", {
   timeZone: TZ,
@@ -211,10 +211,14 @@ const dayLabelFmt = new Intl.DateTimeFormat("pt-BR", {
   month: "short",
 });
 
-function formatCost(v: number): string {
-  if (!Number.isFinite(v)) return "—";
-  if (v < 0.01 && v > 0) return usdFmt.format(v);
-  return usdFmtCompact.format(v);
+function formatUsd(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return "—";
+  return usdFmt.format(v);
+}
+
+function formatBrl(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return "—";
+  return brlFmt.format(v);
 }
 
 function formatTokens(v: number): string {
@@ -483,7 +487,7 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
     if (!stats) return [];
     return stats.byDay.map((d) => ({
       name: dayLabelFmt.format(isoLocalToDate(d.day)).replace(".", ""),
-      Custo: Number(d.cost.toFixed(6)),
+      Custo: Number(d.costBrl.toFixed(6)),
     }));
   }, [stats]);
 
@@ -491,7 +495,7 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
     if (!stats) return [];
     return stats.byProvider.map((p, i) => ({
       name: providerLabel(p.provider),
-      value: Number(p.cost.toFixed(6)),
+      value: Number(p.costBrl.toFixed(6)),
       color: getColorByIndex(i),
     }));
   }, [stats]);
@@ -500,12 +504,16 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
     if (!stats) return [];
     return stats.byModel.slice(0, 12).map((m) => ({
       name: m.model,
-      Custo: Number(m.cost.toFixed(6)),
+      Custo: Number(m.costBrl.toFixed(6)),
     }));
   }, [stats]);
 
-  const totalCostFormatted = useMemo(
-    () => (stats ? formatCost(stats.totalCost) : "—"),
+  const totalCostBrlFormatted = useMemo(
+    () => (stats ? formatBrl(stats.totalCostBrl) : "—"),
+    [stats],
+  );
+  const totalCostUsdFormatted = useMemo(
+    () => (stats ? formatUsd(stats.totalCost) : "—"),
     [stats],
   );
 
@@ -644,8 +652,15 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
           },
           {
             icon: DollarSign,
-            label: "Custo total (USD)",
-            value: totalCostFormatted,
+            label: "Custo total",
+            value: (
+              <span className="flex flex-col">
+                <span>{totalCostBrlFormatted}</span>
+                <span className="text-xs font-medium text-muted-foreground">
+                  ≈ {totalCostUsdFormatted} USD
+                </span>
+              </span>
+            ),
             tone: "default" as const,
           },
         ].map((card) => (
@@ -686,11 +701,11 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
               <InteractiveAreaChart
                 data={areaData}
                 series={[
-                  { key: "Custo", label: "Custo (USD)", color: CHART_COLORS.violet },
+                  { key: "Custo", label: "Custo (R$)", color: CHART_COLORS.violet },
                 ]}
                 height={300}
-                formatValue={formatCost}
-                ariaLabel="Custo diário em USD"
+                formatValue={formatBrl}
+                ariaLabel="Custo diário em BRL"
                 emptyMessage="Sem custos no período"
                 emptyHint="Tente ampliar o intervalo de datas."
               />
@@ -712,10 +727,10 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
               <DonutWithCenter
                 data={providerPieData}
                 centerLabel="Custo total"
-                centerValue={totalCostFormatted}
+                centerValue={totalCostBrlFormatted}
                 height={300}
-                formatValue={formatCost}
-                ariaLabel="Custo agrupado por provider"
+                formatValue={formatBrl}
+                ariaLabel="Custo agrupado por provider em BRL"
                 emptyMessage="Sem dados de provider"
               />
             )}
@@ -737,14 +752,14 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
             <InteractiveBarChart
               data={modelBarData}
               series={[
-                { key: "Custo", label: "Custo (USD)", color: CHART_COLORS.violet },
+                { key: "Custo", label: "Custo (R$)", color: CHART_COLORS.violet },
               ]}
               height={320}
               layout={modelBarData.length > 6 ? "horizontal" : "vertical"}
               yAxisWidth={180}
-              formatValue={formatCost}
+              formatValue={formatBrl}
               showLegend={false}
-              ariaLabel="Custo agrupado por modelo"
+              ariaLabel="Custo agrupado por modelo em BRL"
               emptyMessage="Sem chamadas por modelo no período"
             />
           )}
@@ -769,14 +784,15 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
                   <TableHead className="hidden md:table-cell text-right">
                     Duração
                   </TableHead>
-                  <TableHead className="text-right">Custo</TableHead>
+                  <TableHead className="text-right">Custo USD</TableHead>
+                  <TableHead className="text-right">Custo BRL</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {details.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={7}
+                      colSpan={8}
                       className="py-8 text-center text-sm text-muted-foreground"
                     >
                       {isPending
@@ -806,7 +822,10 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
                           : `${numberFmt.format(row.durationMs)} ms`}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {formatCost(row.costUsd)}
+                        {formatUsd(row.costUsd)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatBrl(row.costBrl)}
                       </TableCell>
                     </TableRow>
                   ))
