@@ -54,62 +54,83 @@ jobs:
       GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
     steps:
       - name: Trigger Portainer redeploy (Swarm-aware)
+        shell: bash
         run: |
-          if [ -z "$PORTAINER_STACK_ID" ]; then
+          set -uo pipefail
+          if [ -z "${PORTAINER_STACK_ID:-}" ]; then
             echo "PORTAINER_STACK_ID não configurado — pulando."
             exit 0
           fi
 
-          set -u
           AUTH=$(printf '{"username":"jvzanini","password":"%s"}' "$GHCR_TOKEN" | base64 | tr -d '\n')
 
-          # 1) Pull explícito da imagem nova no endpoint (assim o force-update
-          #    pega a `:latest` recém-buildada).
+          # 1) Pull da imagem nova no endpoint
           curl --silent --insecure -X POST \
             -H "X-API-Key: ${PORTAINER_TOKEN}" \
             -H "X-Registry-Auth: ${AUTH}" \
             "${PORTAINER_URL}/api/endpoints/${PORTAINER_ENDPOINT_ID}/docker/images/create?fromImage=ghcr.io/jvzanini/nexus-insights&tag=latest" \
             -o /tmp/pull.log -w "Pull image: HTTP %{http_code}\n" || true
 
-          # 2) Stack info — usado para descobrir o nome do stack (prefixo dos
-          #    services em Swarm).
+          # 2) Descobre nome do stack
           STACK_JSON=$(curl --silent --insecure -H "X-API-Key: ${PORTAINER_TOKEN}" \
             "${PORTAINER_URL}/api/stacks/${PORTAINER_STACK_ID}")
-          STACK_NAME=$(echo "$STACK_JSON" | python3 -c "import sys, json; print(json.load(sys.stdin).get('Name',''))")
+          STACK_NAME=$(echo "$STACK_JSON" | python3 - <<'PY'
+import json, sys
+data=json.load(sys.stdin)
+print(data.get("Name",""))
+PY
+)
           if [ -z "$STACK_NAME" ]; then
-            echo "Falha ao ler nome do stack."; echo "$STACK_JSON" | head -c 500; exit 1
+            echo "Falha ao ler stack:"; echo "$STACK_JSON" | head -c 500; exit 1
           fi
           SERVICE_NAME="${STACK_NAME}_app"
           echo "Stack: ${STACK_NAME} | Service alvo: ${SERVICE_NAME}"
 
-          # 3) Lê service e força redeploy via ForceUpdate++ no spec atual
-          #    (idiomático para Swarm; pega a imagem :latest que acabou de
-          #    ser pulled no passo 1).
-          FILTER=$(python3 -c "import urllib.parse; print(urllib.parse.quote('{\"name\":[\"$SERVICE_NAME\"]}'))")
+          # 3) Lista todos os services e filtra pelo nome
           SVC=$(curl --silent --insecure \
             -H "X-API-Key: ${PORTAINER_TOKEN}" \
-            "${PORTAINER_URL}/api/endpoints/${PORTAINER_ENDPOINT_ID}/docker/services?filters=${FILTER}")
+            "${PORTAINER_URL}/api/endpoints/${PORTAINER_ENDPOINT_ID}/docker/services")
 
-          SVC_ID=$(echo "$SVC" | python3 -c "import sys, json; d=json.load(sys.stdin); print(d[0]['ID'] if d else '')")
+          SVC_ID=$(echo "$SVC" | SERVICE_NAME="$SERVICE_NAME" python3 - <<'PY'
+import json, os, sys
+target=os.environ["SERVICE_NAME"]
+data=json.load(sys.stdin)
+hit=next((s for s in data if s.get("Spec",{}).get("Name")==target), None)
+print(hit["ID"] if hit else "")
+PY
+)
           if [ -z "$SVC_ID" ]; then
-            echo "Service ${SERVICE_NAME} não encontrado."; echo "$SVC" | head -c 500; exit 1
+            echo "Service ${SERVICE_NAME} não encontrado."; exit 1
           fi
 
-          SVC_VER=$(echo "$SVC" | python3 -c "import sys, json; print(json.load(sys.stdin)[0]['Version']['Index'])")
-          NEW_SPEC=$(echo "$SVC" | python3 -c "
-import sys, json
-spec = json.load(sys.stdin)[0]['Spec']
-spec.setdefault('TaskTemplate', {})['ForceUpdate'] = spec.get('TaskTemplate', {}).get('ForceUpdate', 0) + 1
+          SVC_VER=$(echo "$SVC" | SERVICE_NAME="$SERVICE_NAME" python3 - <<'PY'
+import json, os, sys
+target=os.environ["SERVICE_NAME"]
+data=json.load(sys.stdin)
+hit=next((s for s in data if s.get("Spec",{}).get("Name")==target), None)
+print(hit["Version"]["Index"] if hit else "")
+PY
+)
+          NEW_SPEC=$(echo "$SVC" | SERVICE_NAME="$SERVICE_NAME" python3 - <<'PY'
+import json, os, sys
+target=os.environ["SERVICE_NAME"]
+data=json.load(sys.stdin)
+hit=next((s for s in data if s.get("Spec",{}).get("Name")==target), None)
+spec=hit["Spec"]
+tt=spec.setdefault("TaskTemplate", {})
+tt["ForceUpdate"]=tt.get("ForceUpdate", 0) + 1
 print(json.dumps(spec))
-          ")
+PY
+)
 
-          echo "Service ${SVC_ID} version ${SVC_VER} — forçando atualização"
+          echo "Service ID: ${SVC_ID} version: ${SVC_VER} — forçando atualização"
+          echo "$NEW_SPEC" > /tmp/spec.json
           HTTP=$(curl --silent --insecure -o /tmp/upd.log -w "%{http_code}" -X POST \
             -H "X-API-Key: ${PORTAINER_TOKEN}" \
             -H "Content-Type: application/json" \
             -H "X-Registry-Auth: ${AUTH}" \
             "${PORTAINER_URL}/api/endpoints/${PORTAINER_ENDPOINT_ID}/docker/services/${SVC_ID}/update?version=${SVC_VER}" \
-            -d "$NEW_SPEC")
+            --data-binary @/tmp/spec.json)
           echo "Service update: HTTP ${HTTP}"
           if [ "$HTTP" != "200" ]; then
             echo "--- response ---"; cat /tmp/upd.log; echo ""
