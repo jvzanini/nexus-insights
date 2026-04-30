@@ -33,6 +33,7 @@ YYYY-MM-DD HH:MM | agent=<agent-id> | commit=<sha7> | scope=<feat|fix|docs|infra
 2026-04-30 14:30 | agent=claude-dashboard-v010 | observation=session-end | summary=Sessão encerrada. Active file deletado. Pendências v0.11 documentadas no spec/plan e no project_v0.10.0_release.md.
 2026-04-30 14:46 | agent=claude-preagregacao | observation=verify | summary=Worker 100% funcional via portainer-debug logs-worker — 4 jobs refresh-by-* rodando a cada 5 min com {accounts:2, days:14, errors:0}. Modo WORKER detectado corretamente pelo entrypoint, migrations/seed pulados.
 2026-04-30 14:48 | agent=claude-preagregacao | observation=session-end | summary=Sessão encerrada. APP_VERSION env atualizada pra v0.10.0 via portainer-fix. Active file deletado. v0.8.0 (pré-agregação) operacional em produção.
+2026-04-30 17:55 | agent=claude-conversas-v0.10.1-release | commit=d6fe352 | scope=release | summary=Release v0.10.1 (Conversas: presets + atalhos rápidos + migration cols-v2 + polimento touch). Fecha o commit que outro agente paralelo deixou WIP no working tree (CHANGELOG, package.json, tour). Implementação já estava em main pública.
 ```
 
 > Entradas anteriores aos workflows do dia 2026-04-30 estão capturadas no CHANGELOG.md (não vamos retroagir HISTORY pra trás disso para evitar trabalho inútil).
