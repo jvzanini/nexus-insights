@@ -73,6 +73,7 @@ export function DashboardFilters({
           size="icon"
           onClick={onRefresh}
           disabled={isLoading}
+          data-tour="dashboard-refresh"
           className="h-9 w-9 rounded-lg border-border bg-card/80 text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer transition-all duration-200"
           aria-label="Atualizar dashboard"
         >

@@ -86,6 +86,11 @@ describe("deserializeFilterState", () => {
     expect(deserializeFilterState(sp).period).toBe("hoje");
   });
 
+  it("period=todos é aceito como canônico", () => {
+    const sp = new URLSearchParams("period=todos");
+    expect(deserializeFilterState(sp).period).toBe("todos");
+  });
+
   it("custom range com formato inválido cai pra undefined (mas mantém period=custom)", () => {
     const sp = new URLSearchParams(
       "period=custom&custom_start=foo&custom_end=2026-04-30",
