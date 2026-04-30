@@ -12,8 +12,12 @@ import { LlmConfigCard } from "@/components/settings/llm-config-card";
 import { getCurrentUser } from "@/lib/auth";
 import { getAllSettings } from "@/lib/actions/settings";
 import { getPlatformLocale, getPlatformTz } from "@/lib/datetime";
-import { getEnabledReportKeys } from "@/lib/reports/get-enabled-reports";
-import { getMatrixIAIncluded } from "@/lib/reports/matrix-ia-setting";
+import { ALL_REPORT_KEYS } from "@/lib/reports/catalog";
+import {
+  getMatrixIAVisibility,
+  getReportVisibility,
+  type Visibility,
+} from "@/lib/reports/visibility";
 import { getPublicActiveLlmConfig } from "@/lib/llm/get-active-config";
 import { isNexBubbleEnabled } from "@/lib/llm/get-nex-bubble-enabled";
 
@@ -46,18 +50,26 @@ export default async function Page() {
   const [
     platformTimezone,
     platformLocale,
-    enabledReportKeys,
+    reportVisibilityEntries,
     llmConfig,
-    matrixIAIncluded,
+    matrixIaVisibility,
     nexBubbleEnabled,
   ] = await Promise.all([
     getPlatformTz(),
     getPlatformLocale(),
-    getEnabledReportKeys(),
+    Promise.all(
+      ALL_REPORT_KEYS.map(
+        async (k) => [k, await getReportVisibility(k)] as const,
+      ),
+    ),
     getPublicActiveLlmConfig(),
-    getMatrixIAIncluded(),
+    getMatrixIAVisibility(),
     isNexBubbleEnabled(),
   ]);
+
+  const reportVisibilityMap = Object.fromEntries(
+    reportVisibilityEntries,
+  ) as Record<string, Visibility>;
 
   const isSuperAdmin = user.platformRole === "super_admin";
 
@@ -99,13 +111,11 @@ export default async function Page() {
         )}
 
         {isSuperAdmin && (
-          <EnabledReportsCard
-            initialEnabled={Array.from(enabledReportKeys)}
-          />
+          <EnabledReportsCard initialVisibility={reportVisibilityMap} />
         )}
 
         {isSuperAdmin && (
-          <MatrixIAToggleCard initialEnabled={matrixIAIncluded} />
+          <MatrixIAToggleCard initialVisibility={matrixIaVisibility} />
         )}
 
         {isSuperAdmin && (

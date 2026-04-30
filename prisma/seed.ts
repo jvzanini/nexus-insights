@@ -82,6 +82,55 @@ const APP_SETTINGS_DEFAULTS: Array<{
     category: "chatwoot",
     description: "Domínio do Chatwoot para deep-links em conversas.",
   },
+  {
+    key: "reports.visibility.visao-geral",
+    value: "all",
+    category: "visibility",
+    description: "Visibilidade do relatório Visão Geral.",
+  },
+  {
+    key: "reports.visibility.performance",
+    value: "all",
+    category: "visibility",
+    description: "Visibilidade do relatório Performance.",
+  },
+  {
+    key: "reports.visibility.equipe",
+    value: "all",
+    category: "visibility",
+    description: "Visibilidade do relatório Equipe.",
+  },
+  {
+    key: "reports.visibility.distribuicao",
+    value: "all",
+    category: "visibility",
+    description: "Visibilidade do relatório Distribuição.",
+  },
+  {
+    key: "reports.visibility.origem-ia",
+    value: "all",
+    category: "visibility",
+    description: "Visibilidade do relatório Origem & IA.",
+  },
+  {
+    key: "reports.visibility.conversas",
+    value: "all",
+    category: "visibility",
+    description: "Visibilidade do relatório Conversas.",
+  },
+  {
+    key: "reports.visibility.mensagens-nao-respondidas",
+    value: "all",
+    category: "visibility",
+    description: "Visibilidade do relatório Mensagens não respondidas.",
+  },
+  {
+    key: "reports.matrix_ia_visibility",
+    value: "super_admin_only",
+    category: "visibility",
+    description:
+      "Visibilidade do inbox Matrix IA nos relatórios e filtros.",
+  },
 ];
 
 const KNOWN_ACCOUNTS: Array<{ id: number; name: string }> = [
