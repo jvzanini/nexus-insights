@@ -94,12 +94,12 @@ function CustomRangePicker({
   isMobile,
   minDate,
 }: CustomRangePickerProps) {
-  // Montamos o PickerPanel só quando aberto e usamos `key` derivada do
-  // initialRange para garantir que o estado interno é recriado a partir do
-  // valor atual ao reabrir, sem chamar setState dentro de useEffect.
+  // Key estável: só remonta na transição abrir/fechar, evitando perder o
+  // primeiro click do calendário (o state interno do react-day-picker
+  // disparava re-render que invalidava a key derivada do range).
   const panel = open ? (
     <PickerPanel
-      key={`${initialRange?.start ?? ""}-${initialRange?.end ?? ""}`}
+      key="panel-open"
       initialRange={initialRange}
       onApply={(range) => {
         onApply(range);
