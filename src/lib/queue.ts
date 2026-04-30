@@ -25,3 +25,12 @@ export const housekeepingQueue = new Queue("housekeeping", {
   connection: redis,
   defaultJobOptions,
 });
+
+export const refreshByAccountQueue = new Queue("refresh-by-account", {
+  connection: redis,
+  defaultJobOptions: {
+    ...defaultJobOptions,
+    attempts: 3,
+    backoff: { type: "exponential", delay: 5_000 },
+  },
+});
