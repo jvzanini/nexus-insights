@@ -6,7 +6,12 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { changePassword } from "@/lib/actions/profile";
 
 const MIN_LENGTH = 8;
@@ -20,6 +25,7 @@ interface PasswordFieldProps {
   autoComplete?: string;
   describedBy?: string;
   invalid?: boolean;
+  placeholder?: string;
 }
 
 function PasswordField({
@@ -31,6 +37,7 @@ function PasswordField({
   autoComplete,
   describedBy,
   invalid,
+  placeholder = "********",
 }: PasswordFieldProps) {
   const [show, setShow] = useState(false);
   return (
@@ -46,13 +53,14 @@ function PasswordField({
           autoComplete={autoComplete}
           aria-describedby={describedBy}
           aria-invalid={invalid || undefined}
+          placeholder={placeholder}
           className="pr-9"
         />
         <button
           type="button"
           onClick={() => setShow((v) => !v)}
           aria-label={show ? "Ocultar senha" : "Mostrar senha"}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground cursor-pointer"
+          className="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer text-muted-foreground transition-colors hover:text-foreground"
         >
           {show ? (
             <EyeOff className="h-4 w-4" aria-hidden="true" />
@@ -112,9 +120,12 @@ export function PasswordChangeCard() {
 
   return (
     <Card className="rounded-2xl border border-border bg-muted/30 p-2">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-foreground">
-          <KeyRound className="h-4 w-4 text-violet-500" />
+      <CardHeader className="pb-4">
+        <CardTitle className="flex items-center gap-2 text-base text-foreground">
+          <KeyRound
+            className="h-4 w-4 text-muted-foreground"
+            aria-hidden="true"
+          />
           Alterar Senha
         </CardTitle>
       </CardHeader>
@@ -129,16 +140,33 @@ export function PasswordChangeCard() {
             autoComplete="current-password"
           />
 
-          <PasswordField
-            id="new-password"
-            label="Nova senha"
-            value={newPassword}
-            onChange={setNewPassword}
-            disabled={isPending}
-            autoComplete="new-password"
-            describedBy="new-password-help"
-            invalid={newTooShort || sameAsCurrent}
-          />
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="space-y-1.5">
+              <PasswordField
+                id="new-password"
+                label="Nova senha"
+                value={newPassword}
+                onChange={setNewPassword}
+                disabled={isPending}
+                autoComplete="new-password"
+                describedBy="new-password-help"
+                invalid={newTooShort || sameAsCurrent}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <PasswordField
+                id="confirm-password"
+                label="Confirmar nova senha"
+                value={confirmPassword}
+                onChange={setConfirmPassword}
+                disabled={isPending}
+                autoComplete="new-password"
+                describedBy={mismatch ? "confirm-error" : undefined}
+                invalid={mismatch}
+              />
+            </div>
+          </div>
+
           {newTooShort ? (
             <p
               id="new-password-help"
@@ -157,23 +185,7 @@ export function PasswordChangeCard() {
               <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
               A nova senha deve ser diferente da atual.
             </p>
-          ) : (
-            <p id="new-password-help" className="text-xs text-muted-foreground">
-              Use no mínimo {MIN_LENGTH} caracteres.
-            </p>
-          )}
-
-          <PasswordField
-            id="confirm-password"
-            label="Confirmar nova senha"
-            value={confirmPassword}
-            onChange={setConfirmPassword}
-            disabled={isPending}
-            autoComplete="new-password"
-            describedBy={mismatch ? "confirm-error" : undefined}
-            invalid={mismatch}
-          />
-          {mismatch ? (
+          ) : mismatch ? (
             <p
               id="confirm-error"
               role="alert"
@@ -189,10 +201,13 @@ export function PasswordChangeCard() {
               type="submit"
               variant="outline"
               disabled={!canSubmit}
-              className="h-11 cursor-pointer px-4"
+              className="h-10 cursor-pointer px-4"
             >
               {isPending ? (
-                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />
+                <Loader2
+                  className="mr-1.5 h-4 w-4 animate-spin"
+                  aria-hidden="true"
+                />
               ) : (
                 <KeyRound className="mr-1.5 h-4 w-4" aria-hidden="true" />
               )}

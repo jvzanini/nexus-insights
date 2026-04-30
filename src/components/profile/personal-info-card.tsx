@@ -1,20 +1,24 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, Loader2, Save, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { updateProfile } from "@/lib/actions/profile";
 
 interface PersonalInfoCardProps {
-  user: {
-    name: string;
-    avatarUrl: string | null;
-  };
+  initialName: string;
+  initialAvatarUrl: string | null;
+  createdAt: string;
 }
 
 const AVATAR_MAX_SIZE = 128;
@@ -47,12 +51,32 @@ function resizeImage(file: File, maxSize: number): Promise<string> {
   });
 }
 
-export function PersonalInfoCard({ user }: PersonalInfoCardProps) {
+function formatMemberSince(iso: string): string {
+  try {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return "";
+    return new Intl.DateTimeFormat("pt-BR", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    }).format(date);
+  } catch {
+    return "";
+  }
+}
+
+export function PersonalInfoCard({
+  initialName,
+  initialAvatarUrl,
+  createdAt,
+}: PersonalInfoCardProps) {
   const router = useRouter();
-  const [name, setName] = useState(user.name);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(user.avatarUrl);
+  const [name, setName] = useState(initialName);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(initialAvatarUrl);
   const [isPending, start] = useTransition();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const memberSince = useMemo(() => formatMemberSince(createdAt), [createdAt]);
 
   async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -85,31 +109,38 @@ export function PersonalInfoCard({ user }: PersonalInfoCardProps) {
     });
   }
 
-  const initials = (name.trim().charAt(0) || user.name.charAt(0) || "?").toUpperCase();
+  const initials = (
+    name.trim().charAt(0) ||
+    initialName.charAt(0) ||
+    "?"
+  ).toUpperCase();
 
   return (
     <Card className="rounded-2xl border border-border bg-muted/30 p-2">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-foreground">
-          <UserIcon className="h-4 w-4 text-violet-500" />
+      <CardHeader className="pb-4">
+        <CardTitle className="flex items-center gap-2 text-base text-foreground">
+          <UserIcon
+            className="h-4 w-4 text-muted-foreground"
+            aria-hidden="true"
+          />
           Informações Pessoais
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-start">
-          <div className="group relative">
+          <div className="group relative shrink-0">
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={isPending}
               aria-label="Trocar foto do perfil"
-              className="relative flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border-2 border-border bg-muted outline-none transition-all duration-200 hover:border-violet-500/60 focus-visible:border-violet-500 focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
+              className="relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border-2 border-border bg-muted outline-none transition-all duration-200 hover:border-violet-500/60 focus-visible:border-violet-500 focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
             >
               {avatarUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={avatarUrl}
-                  alt={`Foto de ${user.name}`}
+                  alt={`Foto de ${initialName}`}
                   className="h-full w-full object-cover"
                 />
               ) : (
@@ -117,9 +148,8 @@ export function PersonalInfoCard({ user }: PersonalInfoCardProps) {
                   {initials}
                 </span>
               )}
-              <span className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/55 text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-visible:opacity-100">
+              <span className="absolute inset-0 flex items-center justify-center bg-black/60 text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-visible:opacity-100">
                 <Camera className="h-5 w-5" aria-hidden="true" />
-                <span className="text-[11px] font-medium">Trocar foto</span>
               </span>
             </button>
             <input
@@ -134,7 +164,7 @@ export function PersonalInfoCard({ user }: PersonalInfoCardProps) {
           </div>
 
           <div className="flex w-full flex-1 flex-col gap-1.5">
-            <Label htmlFor="profile-name">Nome completo</Label>
+            <Label htmlFor="profile-name">Nome</Label>
             <Input
               id="profile-name"
               type="text"
@@ -144,9 +174,11 @@ export function PersonalInfoCard({ user }: PersonalInfoCardProps) {
               maxLength={120}
               autoComplete="name"
             />
-            <p className="text-xs text-muted-foreground">
-              Como você quer ser chamado na plataforma.
-            </p>
+            {memberSince ? (
+              <p className="text-xs text-muted-foreground">
+                Membro desde {memberSince}
+              </p>
+            ) : null}
           </div>
         </div>
 
@@ -154,14 +186,17 @@ export function PersonalInfoCard({ user }: PersonalInfoCardProps) {
           <Button
             onClick={handleSave}
             disabled={isPending}
-            className="h-11 cursor-pointer px-4"
+            className="h-10 cursor-pointer bg-violet-600 px-4 text-white hover:bg-violet-700"
           >
             {isPending ? (
-              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />
+              <Loader2
+                className="mr-1.5 h-4 w-4 animate-spin"
+                aria-hidden="true"
+              />
             ) : (
               <Save className="mr-1.5 h-4 w-4" aria-hidden="true" />
             )}
-            Salvar alterações
+            Salvar
           </Button>
         </div>
       </CardContent>

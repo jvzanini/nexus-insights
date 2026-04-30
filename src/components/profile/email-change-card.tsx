@@ -6,16 +6,21 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { requestEmailChange } from "@/lib/actions/profile";
 
 interface EmailChangeCardProps {
-  email: string;
+  currentEmail: string;
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function EmailChangeCard({ email }: EmailChangeCardProps) {
+export function EmailChangeCard({ currentEmail }: EmailChangeCardProps) {
   const [newEmail, setNewEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -30,7 +35,7 @@ export function EmailChangeCard({ email }: EmailChangeCardProps) {
       toast.error("Digite um e-mail válido");
       return;
     }
-    if (trimmed === email.toLowerCase()) {
+    if (trimmed === currentEmail.toLowerCase()) {
       toast.error("O novo e-mail é igual ao atual");
       return;
     }
@@ -40,7 +45,10 @@ export function EmailChangeCard({ email }: EmailChangeCardProps) {
     }
 
     start(async () => {
-      const result = await requestEmailChange({ newEmail: trimmed, password });
+      const result = await requestEmailChange({
+        newEmail: trimmed,
+        password,
+      });
       if (result.success) {
         setSentTo(trimmed);
         setNewEmail("");
@@ -54,9 +62,12 @@ export function EmailChangeCard({ email }: EmailChangeCardProps) {
 
   return (
     <Card className="rounded-2xl border border-border bg-muted/30 p-2">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-foreground">
-          <Mail className="h-4 w-4 text-violet-500" />
+      <CardHeader className="pb-4">
+        <CardTitle className="flex items-center gap-2 text-base text-foreground">
+          <Mail
+            className="h-4 w-4 text-muted-foreground"
+            aria-hidden="true"
+          />
           E-mail
         </CardTitle>
       </CardHeader>
@@ -66,10 +77,11 @@ export function EmailChangeCard({ email }: EmailChangeCardProps) {
           <Input
             id="current-email"
             type="email"
-            value={email}
+            value={currentEmail}
             disabled
             readOnly
             aria-readonly="true"
+            className="bg-muted text-muted-foreground"
           />
         </div>
 
@@ -78,7 +90,10 @@ export function EmailChangeCard({ email }: EmailChangeCardProps) {
             role="status"
             className="flex items-start gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-sm text-emerald-400"
           >
-            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <CheckCircle2
+              className="mt-0.5 h-4 w-4 shrink-0"
+              aria-hidden="true"
+            />
             <div className="space-y-1">
               <p className="font-medium">
                 E-mail enviado, verifique sua caixa de entrada.
@@ -90,7 +105,7 @@ export function EmailChangeCard({ email }: EmailChangeCardProps) {
               <button
                 type="button"
                 onClick={() => setSentTo(null)}
-                className="text-xs font-medium text-emerald-400 underline-offset-4 hover:underline cursor-pointer"
+                className="cursor-pointer text-xs font-medium text-emerald-400 underline-offset-4 hover:underline"
               >
                 Solicitar novamente
               </button>
@@ -113,13 +128,14 @@ export function EmailChangeCard({ email }: EmailChangeCardProps) {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="email-password">Senha atual</Label>
+              <Label htmlFor="email-password">Senha atual (confirmação)</Label>
               <div className="relative">
                 <Input
                   id="email-password"
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  placeholder="********"
                   disabled={isPending}
                   autoComplete="current-password"
                   className="pr-9"
@@ -129,7 +145,7 @@ export function EmailChangeCard({ email }: EmailChangeCardProps) {
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
                   aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground cursor-pointer"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer text-muted-foreground transition-colors hover:text-foreground"
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4" aria-hidden="true" />
@@ -138,9 +154,6 @@ export function EmailChangeCard({ email }: EmailChangeCardProps) {
                   )}
                 </button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Confirmamos sua identidade antes de enviar o link.
-              </p>
             </div>
 
             <div className="flex justify-end">
@@ -148,10 +161,13 @@ export function EmailChangeCard({ email }: EmailChangeCardProps) {
                 type="submit"
                 variant="outline"
                 disabled={isPending || !newEmail || !password}
-                className="h-11 cursor-pointer px-4"
+                className="h-10 cursor-pointer px-4"
               >
                 {isPending ? (
-                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />
+                  <Loader2
+                    className="mr-1.5 h-4 w-4 animate-spin"
+                    aria-hidden="true"
+                  />
                 ) : (
                   <Mail className="mr-1.5 h-4 w-4" aria-hidden="true" />
                 )}

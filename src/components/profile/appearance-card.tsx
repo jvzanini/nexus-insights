@@ -3,14 +3,19 @@
 import { useTransition } from "react";
 import { Monitor, Moon, Palette, Sun } from "lucide-react";
 import { toast } from "sonner";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { useTheme } from "@/components/providers/theme-provider";
 import { updateProfile } from "@/lib/actions/profile";
 
 type ThemeOption = "dark" | "light" | "system";
 
 interface AppearanceCardProps {
-  currentTheme: ThemeOption;
+  initialTheme: ThemeOption;
 }
 
 const THEME_OPTIONS: Array<{
@@ -34,17 +39,16 @@ const THEME_OPTIONS: Array<{
   {
     value: "system",
     label: "Sistema",
-    description: "Segue o sistema",
+    description: "Segue o sistema operacional",
     icon: Monitor,
   },
 ];
 
-export function AppearanceCard({ currentTheme }: AppearanceCardProps) {
+export function AppearanceCard({ initialTheme }: AppearanceCardProps) {
   const { theme, setTheme } = useTheme();
   const [isPending, start] = useTransition();
 
-  // Mantém o tema do contexto como fonte primária; usa currentTheme só como fallback inicial.
-  const active: ThemeOption = (theme as ThemeOption | undefined) ?? currentTheme;
+  const active: ThemeOption = (theme as ThemeOption | undefined) ?? initialTheme;
 
   function handleSelect(option: ThemeOption) {
     if (option === active) return;
@@ -59,9 +63,12 @@ export function AppearanceCard({ currentTheme }: AppearanceCardProps) {
 
   return (
     <Card className="rounded-2xl border border-border bg-muted/30 p-2">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-foreground">
-          <Palette className="h-4 w-4 text-violet-500" />
+      <CardHeader className="pb-4">
+        <CardTitle className="flex items-center gap-2 text-base text-foreground">
+          <Palette
+            className="h-4 w-4 text-muted-foreground"
+            aria-hidden="true"
+          />
           Aparência
         </CardTitle>
       </CardHeader>
@@ -69,7 +76,7 @@ export function AppearanceCard({ currentTheme }: AppearanceCardProps) {
         <div
           role="radiogroup"
           aria-label="Tema da plataforma"
-          className="grid grid-cols-3 gap-3"
+          className="grid grid-cols-1 gap-3 sm:grid-cols-3"
         >
           {THEME_OPTIONS.map((option) => {
             const Icon = option.icon;
@@ -84,17 +91,30 @@ export function AppearanceCard({ currentTheme }: AppearanceCardProps) {
                 onClick={() => handleSelect(option.value)}
                 disabled={isPending}
                 className={[
-                  "flex h-full min-h-[7rem] flex-col items-center justify-center gap-2 rounded-xl border p-4 text-center outline-none transition-all duration-200 cursor-pointer",
+                  "flex h-28 flex-col items-center justify-center gap-2 rounded-xl border p-4 text-center outline-none transition-all duration-200 cursor-pointer",
                   "focus-visible:ring-2 focus-visible:ring-ring/50",
                   "disabled:cursor-not-allowed disabled:opacity-60",
                   selected
-                    ? "border-violet-500 bg-violet-500/10 text-violet-300 ring-2 ring-violet-500/40"
-                    : "border-border bg-background/40 text-muted-foreground hover:bg-muted/50 hover:text-foreground hover:border-muted-foreground/30",
+                    ? "border-violet-500 bg-violet-500/5 text-violet-300 ring-2 ring-violet-500"
+                    : "border-border bg-muted/30 text-muted-foreground hover:border-muted-foreground/30 hover:bg-muted/50 hover:text-foreground",
                 ].join(" ")}
               >
-                <Icon className="h-5 w-5" aria-hidden="true" />
-                <span className="text-sm font-medium">{option.label}</span>
-                <span className="text-[11px] leading-tight text-muted-foreground">
+                <Icon
+                  className={[
+                    "h-5 w-5",
+                    selected ? "text-violet-400" : "",
+                  ].join(" ")}
+                  aria-hidden="true"
+                />
+                <span
+                  className={[
+                    "text-sm font-semibold",
+                    selected ? "text-violet-200" : "text-foreground",
+                  ].join(" ")}
+                >
+                  {option.label}
+                </span>
+                <span className="text-xs leading-tight text-muted-foreground">
                   {option.description}
                 </span>
               </button>
