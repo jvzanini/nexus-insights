@@ -33,6 +33,7 @@ import {
 } from "./drill-down-contents";
 import { DrillDownSheet } from "@/components/ui/drill-down-sheet";
 import { TourButton } from "@/components/tour/tour-button";
+import { FactsFreshness } from "@/components/reports/facts-freshness";
 import { dashboardTour } from "@/lib/tours/dashboard-tour";
 
 type DashboardSnapshot = NonNullable<DashboardActionResult["data"]>;
@@ -300,7 +301,10 @@ export function DashboardContent({
           </h1>
           <p className="text-sm text-muted-foreground mt-1">{today}</p>
         </div>
-        <TourButton tour={dashboardTour} />
+        <div className="flex items-center gap-2">
+          <FactsFreshness accountId={accountId} />
+          <TourButton tour={dashboardTour} />
+        </div>
       </motion.div>
 
       {/* Filtros */}

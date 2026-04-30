@@ -3,6 +3,7 @@ import { UsersRound } from "lucide-react";
 import { redirect } from "next/navigation";
 
 import { PageHeader } from "@/components/page-header";
+import { FactsFreshness } from "@/components/reports/facts-freshness";
 import { PeriodSelectorUrl } from "@/components/reports/period-selector-url";
 import { RefreshButton } from "@/components/reports/refresh-button";
 import { FilterTransitionProvider } from "@/components/reports/filter-transition";
@@ -64,7 +65,12 @@ export default async function Page({ searchParams }: PageProps) {
         icon={UsersRound}
         title="Equipe"
         subtitle="Ranking de atendentes e departamentos"
-        actions={<TourButton tour={equipeTour} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <FactsFreshness accountId={accountId} />
+            <TourButton tour={equipeTour} />
+          </div>
+        }
       />
 
       <FilterTransitionProvider>

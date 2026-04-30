@@ -3,6 +3,7 @@ import { LayoutDashboard } from "lucide-react";
 import { redirect } from "next/navigation";
 
 import { PageHeader } from "@/components/page-header";
+import { FactsFreshness } from "@/components/reports/facts-freshness";
 import { PeriodSelectorUrl } from "@/components/reports/period-selector-url";
 import { RefreshButton } from "@/components/reports/refresh-button";
 import {
@@ -59,6 +60,7 @@ export default async function Page({ searchParams }: PageProps) {
         icon={LayoutDashboard}
         title="Visão Geral"
         subtitle="Status das conversas e volumetria geral"
+        actions={<FactsFreshness accountId={accountId} />}
       />
 
       <FilterTransitionProvider>

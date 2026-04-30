@@ -3,6 +3,7 @@ import { Map } from "lucide-react";
 import { redirect } from "next/navigation";
 
 import { PageHeader } from "@/components/page-header";
+import { FactsFreshness } from "@/components/reports/facts-freshness";
 import { PeriodSelectorUrl } from "@/components/reports/period-selector-url";
 import { RefreshButton } from "@/components/reports/refresh-button";
 import { FilterTransitionProvider } from "@/components/reports/filter-transition";
@@ -62,7 +63,12 @@ export default async function Page({ searchParams }: PageProps) {
         icon={Map}
         title="Distribuição"
         subtitle="Estados, inboxes e horários de pico"
-        actions={<TourButton tour={distribuicaoTour} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <FactsFreshness accountId={accountId} />
+            <TourButton tour={distribuicaoTour} />
+          </div>
+        }
       />
 
       <FilterTransitionProvider>
