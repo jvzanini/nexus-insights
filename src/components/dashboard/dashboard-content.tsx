@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { motion } from "framer-motion";
 import {
   Building2,
@@ -18,11 +18,20 @@ import {
 } from "@/lib/actions/dashboard";
 import { switchAccount } from "@/lib/actions/account-switch";
 import { formatDuration } from "@/lib/utils/format-time";
+import { CHART_COLORS } from "@/lib/charts/colors";
 import { ConversationsLineChart } from "./conversations-line-chart";
 import { DashboardFilters } from "./dashboard-filters";
 import { RecentConversationsTable } from "./recent-conversations-table";
-import { StatsCard } from "./stats-card";
 import { Top5ListCard } from "./top5-list-card";
+import { KpiClickableCard } from "./kpi-clickable-card";
+import { Sparkline } from "./sparkline";
+import {
+  OpenDrillDownContent,
+  ReceivedDrillDownContent,
+  ResolutionRateDrillDownContent,
+  ResolvedDrillDownContent,
+} from "./drill-down-contents";
+import { DrillDownSheet } from "@/components/ui/drill-down-sheet";
 
 type DashboardSnapshot = NonNullable<DashboardActionResult["data"]>;
 
@@ -88,6 +97,31 @@ export function DashboardContent({
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [, startTransition] = useTransition();
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  type DrillDownKind = "received" | "resolved" | "open" | "rate" | null;
+  const [drillDown, setDrillDown] = useState<DrillDownKind>(null);
+  const closeDrillDown = useCallback(() => setDrillDown(null), []);
+
+  // Sparklines extraídos do chart bucketed (declarados antes de qualquer
+  // early return para respeitar `react-hooks/rules-of-hooks`).
+  const chartPoints = data?.chart;
+  const receivedSpark = useMemo(
+    () => (chartPoints ? chartPoints.map((p) => p.received) : []),
+    [chartPoints],
+  );
+  const resolvedSpark = useMemo(
+    () => (chartPoints ? chartPoints.map((p) => p.resolved) : []),
+    [chartPoints],
+  );
+  const rateSpark = useMemo(
+    () =>
+      chartPoints
+        ? chartPoints.map((p) =>
+            p.received > 0 ? (p.resolved / p.received) * 100 : 0,
+          )
+        : [],
+    [chartPoints],
+  );
 
   const fetchData = useCallback(
     async (showSkeleton = false) => {
@@ -229,6 +263,23 @@ export function DashboardContent({
       ? `${stats.resolutionRate.toFixed(1)}%`
       : "—";
 
+  function trendFor(
+    value: number | null | undefined,
+    suffix = "%",
+  ): {
+    direction: "up" | "down" | "flat";
+    value: string;
+  } | null {
+    if (value === null || value === undefined) return null;
+    const direction =
+      value > 0.05 ? "up" : value < -0.05 ? "down" : "flat";
+    const sign = value > 0 ? "+" : "";
+    return {
+      direction,
+      value: `${sign}${value.toFixed(1)}${suffix}`,
+    };
+  }
+
   return (
     <motion.div
       variants={containerVariants}
@@ -262,43 +313,70 @@ export function DashboardContent({
         />
       </motion.div>
 
-      {/* Stats cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <StatsCard
-          label="Conversas recebidas"
-          value={stats.received.toLocaleString("pt-BR")}
+      {/* Stats cards (clickable) */}
+      <motion.div
+        variants={itemVariants}
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"
+      >
+        <KpiClickableCard
           icon={Inbox}
           iconBg="bg-violet-500/10"
           iconColor="text-violet-400"
-          comparison={stats.comparison.received}
+          label="Conversas recebidas"
+          value={stats.received.toLocaleString("pt-BR")}
+          trend={trendFor(stats.comparison.received, "%")}
+          miniChart={
+            <Sparkline
+              data={receivedSpark}
+              color={CHART_COLORS.violet}
+              ariaLabel="Tendência de recebidas no período"
+            />
+          }
+          onClick={() => setDrillDown("received")}
         />
-        <StatsCard
-          label="Conversas resolvidas"
-          value={stats.resolved.toLocaleString("pt-BR")}
+        <KpiClickableCard
           icon={CheckCircle2}
           iconBg="bg-emerald-500/10"
           iconColor="text-emerald-400"
-          comparison={stats.comparison.resolved}
+          label="Conversas resolvidas"
+          value={stats.resolved.toLocaleString("pt-BR")}
+          trend={trendFor(stats.comparison.resolved, "%")}
+          miniChart={
+            <Sparkline
+              data={resolvedSpark}
+              color={CHART_COLORS.emerald}
+              ariaLabel="Tendência de resolvidas no período"
+            />
+          }
+          onClick={() => setDrillDown("resolved")}
         />
-        <StatsCard
-          label="Em aberto"
-          sublabel="(agora)"
-          value={stats.open.toLocaleString("pt-BR")}
+        <KpiClickableCard
           icon={MessageSquare}
           iconBg="bg-amber-500/10"
           iconColor="text-amber-400"
+          label="Em aberto"
+          sublabel="(agora)"
+          value={stats.open.toLocaleString("pt-BR")}
           badge="agora"
+          onClick={() => setDrillDown("open")}
         />
-        <StatsCard
-          label="Taxa de resolução"
-          value={resolutionRateLabel}
+        <KpiClickableCard
           icon={TrendingUp}
           iconBg="bg-violet-500/10"
           iconColor="text-violet-400"
-          comparison={stats.comparison.resolutionRate}
-          comparisonSuffix="pp"
+          label="Taxa de resolução"
+          value={resolutionRateLabel}
+          trend={trendFor(stats.comparison.resolutionRate, "pp")}
+          miniChart={
+            <Sparkline
+              data={rateSpark}
+              color={CHART_COLORS.violet}
+              ariaLabel="Histórico da taxa de resolução"
+            />
+          }
+          onClick={() => setDrillDown("rate")}
         />
-      </div>
+      </motion.div>
 
       {/* Chart + Top 5 atendentes */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
@@ -357,6 +435,74 @@ export function DashboardContent({
       <motion.div variants={itemVariants}>
         <RecentConversationsTable items={recent} />
       </motion.div>
+
+      {/* Drill-down sheets (sempre montadas mas só carregam dados quando enabled) */}
+      <DrillDownSheet
+        open={drillDown === "received"}
+        onOpenChange={(o) => (o ? setDrillDown("received") : closeDrillDown())}
+        title="Conversas recebidas no período"
+        subtitle="Volume, distribuição e últimas chegadas"
+        icon={Inbox}
+        iconColor="text-violet-400"
+        iconBg="bg-violet-500/10"
+        size="xl"
+      >
+        <ReceivedDrillDownContent
+          accountId={accountId}
+          period={period}
+          enabled={drillDown === "received"}
+        />
+      </DrillDownSheet>
+
+      <DrillDownSheet
+        open={drillDown === "resolved"}
+        onOpenChange={(o) => (o ? setDrillDown("resolved") : closeDrillDown())}
+        title="Conversas resolvidas no período"
+        subtitle="Volume, distribuição e últimas resoluções"
+        icon={CheckCircle2}
+        iconColor="text-emerald-400"
+        iconBg="bg-emerald-500/10"
+        size="xl"
+      >
+        <ResolvedDrillDownContent
+          accountId={accountId}
+          period={period}
+          enabled={drillDown === "resolved"}
+        />
+      </DrillDownSheet>
+
+      <DrillDownSheet
+        open={drillDown === "open"}
+        onOpenChange={(o) => (o ? setDrillDown("open") : closeDrillDown())}
+        title="Conversas em aberto agora"
+        subtitle="Snapshot atual — independente do período selecionado"
+        icon={MessageSquare}
+        iconColor="text-amber-400"
+        iconBg="bg-amber-500/10"
+        size="xl"
+      >
+        <OpenDrillDownContent
+          accountId={accountId}
+          enabled={drillDown === "open"}
+        />
+      </DrillDownSheet>
+
+      <DrillDownSheet
+        open={drillDown === "rate"}
+        onOpenChange={(o) => (o ? setDrillDown("rate") : closeDrillDown())}
+        title="Análise da taxa de resolução"
+        subtitle="Atual vs anterior, histórico e top atendentes"
+        icon={TrendingUp}
+        iconColor="text-violet-400"
+        iconBg="bg-violet-500/10"
+        size="xl"
+      >
+        <ResolutionRateDrillDownContent
+          accountId={accountId}
+          period={period}
+          enabled={drillDown === "rate"}
+        />
+      </DrillDownSheet>
     </motion.div>
   );
 }
