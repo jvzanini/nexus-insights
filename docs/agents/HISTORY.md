@@ -50,6 +50,12 @@ YYYY-MM-DD HH:MM | agent=<agent-id> | commit=<sha7> | scope=<feat|fix|docs|infra
 2026-04-30 16:30 | agent=claude-visibility-models | commit=4c2504f | scope=feat | summary=Card Incluir Matrix IA usa VisibilitySelect (T5)
 2026-04-30 16:30 | agent=claude-visibility-models | commit=5b96e49 | scope=feat | summary=Seed defaults + configuracoes/page lê Visibility (T10)
 2026-04-30 16:45 | agent=claude-visibility-models | commit=cb50b23 | scope=feat | summary=Sidebar + 7 page guards aplicam visibility por role (T6)
+2026-04-30 17:05 | agent=claude-visibility-models | commit=99b0f3c | scope=feat | summary=meta-cache-for-user esconde Matrix IA via isMatrixIAVisibleForUser (T7)
+2026-04-30 17:05 | agent=claude-visibility-models | commit=fae51ae | scope=feat | summary=PROVIDER_CATALOG abril/2026 — GPT-5.x, Claude 4.7, Gemini 2.5, OpenRouter ~40 (T8)
+2026-04-30 17:05 | agent=claude-visibility-models | commit=edd0d6b | scope=fix | summary=searchable-select portalizado via Popover + olhinho da API key centralizado (T9)
+2026-04-30 17:25 | agent=claude-visibility-models | scope=release | summary=Release v0.11.0 — visibilidade granular (3 níveis) + catálogo LLM 2024+ + bugs UI. CHANGELOG/STATUS atualizados, package.json bumpado.
+2026-04-30 17:30 | agent=claude-visibility-models | observation=session-end | summary=Sessão encerrada. Active file deletado.
+2026-04-30 19:50 | agent=claude-conversas-v0.10.4-fix | observation=session-end | summary=Sessão encerrada. v0.10.4 consolidada na release v0.11.0 (CHANGELOG/package.json controlados pelo claude-visibility-models). Active file removido. portainer-fix será disparado pelo agente da v0.11.0.
 ```
 
 > Entradas anteriores aos workflows do dia 2026-04-30 estão capturadas no CHANGELOG.md (não vamos retroagir HISTORY pra trás disso para evitar trabalho inútil).
