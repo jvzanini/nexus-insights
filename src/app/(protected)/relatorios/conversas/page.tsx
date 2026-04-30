@@ -134,6 +134,7 @@ export default async function ConversasPage({ searchParams }: PageProps) {
                 ? filterState.conditionGroup
                 : undefined
             }
+            currentChatwootUserId={null}
           />
         </div>
       </FilterTransitionProvider>

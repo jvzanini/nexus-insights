@@ -24,6 +24,10 @@ import { useFilterTransition } from "@/components/reports/filter-transition";
 import { AppliedFiltersChips } from "@/components/reports/applied-filters-chips";
 import { FiltersDialog } from "@/components/reports/filters-dialog";
 import {
+  PresetsPopover,
+} from "@/components/reports/presets-popover";
+import { QuickFiltersPopover } from "@/components/reports/quick-filters-popover";
+import {
   SortingDialog,
   type SortRule,
   type SortRuleOption,
@@ -41,6 +45,11 @@ import {
   type PeriodKey as ExtendedPeriodKey,
 } from "@/lib/reports/period";
 import type { MetaItem } from "@/lib/chatwoot/queries/meta-cache";
+import type { QuickFilterKey } from "@/lib/reports/quick-filters";
+import type {
+  FilterPreset,
+  UseFilterPresets,
+} from "@/lib/hooks/use-filter-presets";
 
 // ---------------------------------------------------------------------------
 // Tipos públicos
@@ -77,6 +86,18 @@ export interface AdvancedFiltersProps {
   /** Stack de critérios de ordenação. Cabeada bidirecionalmente com a tabela. */
   sortStack: SortRule[];
   onSortStackChange: (next: SortRule[]) => void;
+  /** Atalhos rápidos ativos (transient). */
+  quickFilters: Set<QuickFilterKey>;
+  onToggleQuick: (key: QuickFilterKey) => void;
+  onRemoveQuick: (key: QuickFilterKey) => void;
+  /** Mapping User Nexus → user Chatwoot. Null oculta atalho "Minhas". */
+  currentChatwootUserId: number | null;
+  /** API de presets (CRUD localStorage) cabeada do parent. */
+  presetsApi: UseFilterPresets;
+  /** Aplicar preset: chamado depois de updates internos do `<AdvancedFilters>`. */
+  onApplyPreset: (preset: FilterPreset) => void;
+  /** Abrir o `<PresetsDialog>` de gerenciamento. */
+  onOpenPresetsManager: () => void;
 }
 
 export function AdvancedFilters({
@@ -88,6 +109,13 @@ export function AdvancedFilters({
   accountId,
   sortStack,
   onSortStackChange,
+  quickFilters,
+  onToggleQuick,
+  onRemoveQuick,
+  currentChatwootUserId,
+  presetsApi,
+  onApplyPreset,
+  onOpenPresetsManager,
 }: AdvancedFiltersProps) {
   const router = useRouter();
   const { startTransition } = useFilterTransition();
@@ -188,6 +216,27 @@ export function AdvancedFilters({
     [pushUrl],
   );
 
+  // Aplicar um preset: replica o handleDialogApply para o FilterState
+  // gravado, dispara onSortStackChange para a stack salva e notifica o
+  // parent (que pode fechar o `<PresetsDialog>` se estiver aberto).
+  const handleApplyPresetInternal = useCallback(
+    (preset: FilterPreset) => {
+      setDraft(preset.state);
+      setApplied(preset.state);
+      pushUrl(preset.state);
+      onSortStackChange(preset.sortStack);
+      onApplyPreset(preset);
+    },
+    [pushUrl, onSortStackChange, onApplyPreset],
+  );
+
+  const handleCreatePreset = useCallback(
+    (name: string) => {
+      presetsApi.create(name, applied, sortStack);
+    },
+    [presetsApi, applied, sortStack],
+  );
+
   // Remove a seleção inteira de um grupo (chip X) e aplica imediatamente.
   const handleRemoveGroup = useCallback(
     (key: keyof FilterState) => {
@@ -274,6 +323,21 @@ export function AdvancedFilters({
           />
         </div>
 
+        <PresetsPopover
+          presets={presetsApi.presets}
+          isAtCap={presetsApi.isAtCap}
+          onApply={handleApplyPresetInternal}
+          onCreate={handleCreatePreset}
+          onOpenManager={onOpenPresetsManager}
+          validateName={(n) => presetsApi.validateName(n)}
+        />
+
+        <QuickFiltersPopover
+          active={quickFilters}
+          onToggle={onToggleQuick}
+          currentChatwootUserId={currentChatwootUserId}
+        />
+
         <Button
           data-tour="filters-chip"
           type="button"
@@ -333,7 +397,7 @@ export function AdvancedFilters({
         </Button>
       </div>
 
-      {/* Linha 3 — Chips aplicados (filtros + ordenação, condicional) */}
+      {/* Linha 3 — Chips aplicados (filtros + ordenação + atalhos, condicional) */}
       <AppliedFiltersChips
         meta={{ inboxes, teams, assignees, labels }}
         applied={applied}
@@ -345,6 +409,8 @@ export function AdvancedFilters({
           onSortStackChange(sortStack.filter((r) => r.key !== key))
         }
         onClearAllSort={() => onSortStackChange([])}
+        quickFilters={quickFilters}
+        onRemoveQuick={onRemoveQuick}
       />
 
       {/* Linha 4 — Banner pending (condicional) */}

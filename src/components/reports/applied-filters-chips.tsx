@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, X } from "lucide-react";
+import { ArrowDown, ArrowUp, X, Zap } from "lucide-react";
 
 import type { FilterState } from "@/lib/reports/filter-state";
 import type { MetaItem } from "@/lib/chatwoot/queries/meta-cache";
@@ -8,6 +8,10 @@ import type {
   SortRule,
   SortRuleOption,
 } from "@/components/reports/sorting-dialog";
+import {
+  QUICK_FILTER_DEFS,
+  type QuickFilterKey,
+} from "@/lib/reports/quick-filters";
 
 /**
  * AppliedFiltersChips — chips compactos resumindo filtros já aplicados.
@@ -47,6 +51,9 @@ interface Props {
   sortOptions?: SortRuleOption[];
   onRemoveSort?: (key: string) => void;
   onClearAllSort?: () => void;
+  /** Atalhos rápidos ativos (opcional). */
+  quickFilters?: Set<QuickFilterKey>;
+  onRemoveQuick?: (key: QuickFilterKey) => void;
 }
 
 const STATUS_LABELS: Record<number, string> = {
@@ -89,6 +96,8 @@ export function AppliedFiltersChips({
   sortOptions,
   onRemoveSort,
   onClearAllSort,
+  quickFilters,
+  onRemoveQuick,
 }: Props) {
   const chips: Array<{ key: keyof FilterState; label: string }> = [];
 
@@ -143,23 +152,56 @@ export function AppliedFiltersChips({
       })
     : [];
 
-  if (chips.length === 0 && sortChips.length === 0) return null;
+  const quickChips =
+    quickFilters && quickFilters.size > 0
+      ? QUICK_FILTER_DEFS.filter((d) => quickFilters.has(d.key)).map((d) => ({
+          key: d.key,
+          label: d.label,
+        }))
+      : [];
+
+  if (
+    chips.length === 0 &&
+    sortChips.length === 0 &&
+    quickChips.length === 0
+  )
+    return null;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
+      {quickChips.map((q) => (
+        <span
+          key={`quick-${q.key}`}
+          className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs text-foreground"
+        >
+          <Zap className="h-3 w-3 text-amber-400" aria-hidden="true" />
+          <span className="truncate">{q.label}</span>
+          {onRemoveQuick ? (
+            <button
+              type="button"
+              onClick={() => onRemoveQuick(q.key)}
+              aria-label={`Remover atalho ${q.label}`}
+              className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            >
+              <X className="h-3 w-3" aria-hidden="true" />
+            </button>
+          ) : null}
+        </span>
+      ))}
+
       {chips.map((c) => {
         const groupName = c.label.split(":")[0] ?? c.label;
         return (
           <span
             key={c.key}
-            className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/40 px-2.5 py-1 text-xs text-foreground"
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-border/60 bg-muted/40 px-2.5 py-1 text-xs text-foreground"
           >
             <span className="truncate">{c.label}</span>
             <button
               type="button"
               onClick={() => onRemove(c.key)}
               aria-label={`Remover ${groupName}`}
-              className="inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >
               <X className="h-3 w-3" aria-hidden="true" />
             </button>
@@ -170,7 +212,7 @@ export function AppliedFiltersChips({
       {sortChips.map((c) => (
         <span
           key={`sort-${c.key}`}
-          className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/40 bg-violet-500/10 px-2.5 py-1 text-xs text-foreground"
+          className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-violet-500/40 bg-violet-500/10 px-2.5 py-1 text-xs text-foreground"
         >
           <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-violet-500/20 text-[9px] font-bold text-violet-300 tabular-nums">
             {c.index}
@@ -186,7 +228,7 @@ export function AppliedFiltersChips({
               type="button"
               onClick={() => onRemoveSort(c.key)}
               aria-label={`Remover ordenação por ${c.label}`}
-              className="inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >
               <X className="h-3 w-3" aria-hidden="true" />
             </button>
