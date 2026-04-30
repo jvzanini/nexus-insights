@@ -53,6 +53,8 @@ describe("isNexBubbleEnabled", () => {
       provider: "openai",
       model: "gpt-4o-mini",
       apiKey: "sk-test",
+      credentialId: null,
+      credentialLabel: null,
     });
 
     const { isNexBubbleEnabled } = loadFresh();
@@ -82,6 +84,8 @@ describe("isNexBubbleEnabled", () => {
       provider: "openai",
       model: "gpt-4o-mini",
       apiKey: "sk-test",
+      credentialId: null,
+      credentialLabel: null,
     });
 
     const { isNexBubbleEnabled } = loadFresh();
