@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  KeyRound,
   Plus,
   Pencil,
   RefreshCw,
@@ -15,7 +14,6 @@ import {
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,10 +47,22 @@ type DialogState =
   | { mode: "rename"; cred: CredentialSummary }
   | { mode: "rotate"; cred: CredentialSummary };
 
-export function LlmCredentialsCard({ initial, activeCredentialId }: Props) {
+/**
+ * Componente "headless" (sem `<Card>` wrapper) que gerencia a lista de
+ * credenciais por provider + dialogs de criar/renomear/trocar.
+ *
+ * Renderizado dentro de `LlmConfigCard` na aba "Chaves de API".
+ */
+export function LlmCredentialsManager({ initial, activeCredentialId }: Props) {
   const router = useRouter();
   const [items, setItems] = useState<CredentialSummary[]>(initial);
   const [pending, startTransition] = useTransition();
+
+  // Sincroniza estado local quando o pai re-renderiza com lista nova
+  // (router.refresh() depois de uma mutação).
+  useEffect(() => {
+    setItems(initial);
+  }, [initial]);
 
   const grouped = useMemo(() => {
     const map: Record<LlmProvider, CredentialSummary[]> = {
@@ -104,133 +114,114 @@ export function LlmCredentialsCard({ initial, activeCredentialId }: Props) {
   }
 
   return (
-    <Card className="rounded-2xl border border-border bg-muted/30 p-2">
-      <CardHeader>
-        <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/10">
-            <KeyRound className="h-[18px] w-[18px] text-violet-500" />
-          </div>
-          <div className="flex flex-col gap-0.5">
-            <CardTitle className="text-foreground">Chaves de API</CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Gerencie as chaves de API por provedor. A chave em uso pelo
-              Agente Nex aparece destacada.
-            </p>
-          </div>
-        </div>
-      </CardHeader>
+    <div className="space-y-4">
+      {PROVIDERS.map((p) => {
+        const list = grouped[p] ?? [];
+        return (
+          <section
+            key={p}
+            data-testid={`credentials-section-${p}`}
+            className="rounded-xl border border-border bg-background/40 p-3"
+          >
+            <header className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-foreground">
+                {PROVIDER_CATALOG[p].label}
+              </h3>
+              <Button
+                size="sm"
+                variant="outline"
+                className="cursor-pointer"
+                onClick={() => setDialogState({ mode: "create", provider: p })}
+                disabled={pending}
+                aria-label={`Nova chave para ${PROVIDER_CATALOG[p].label}`}
+              >
+                <Plus className="mr-1 h-4 w-4" /> Nova
+              </Button>
+            </header>
 
-      <CardContent className="space-y-4">
-        {PROVIDERS.map((p) => {
-          const list = grouped[p] ?? [];
-          return (
-            <section
-              key={p}
-              data-testid={`credentials-section-${p}`}
-              className="rounded-xl border border-border bg-background/40 p-3"
-            >
-              <header className="flex items-center justify-between">
-                <h3 className="text-sm font-medium text-foreground">
-                  {PROVIDER_CATALOG[p].label}
-                </h3>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="cursor-pointer"
-                  onClick={() =>
-                    setDialogState({ mode: "create", provider: p })
-                  }
-                  disabled={pending}
-                  aria-label={`Nova chave para ${PROVIDER_CATALOG[p].label}`}
-                >
-                  <Plus className="mr-1 h-4 w-4" /> Nova
-                </Button>
-              </header>
-
-              {list.length === 0 ? (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  — Nenhuma chave cadastrada
-                </p>
-              ) : (
-                <ul className="mt-2 divide-y divide-border">
-                  {list.map((c) => {
-                    const isActive = c.id === activeCredentialId;
-                    return (
-                      <li
-                        key={c.id}
-                        data-testid={`credential-row-${c.id}`}
-                        className="flex items-center justify-between gap-3 py-2"
-                      >
-                        <div className="flex min-w-0 items-center gap-2">
-                          <span
-                            data-testid={
-                              isActive
-                                ? `credential-active-dot-${c.id}`
-                                : `credential-inactive-dot-${c.id}`
-                            }
-                            className={cn(
-                              "h-2 w-2 shrink-0 rounded-full",
-                              isActive
-                                ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]"
-                                : "bg-zinc-400 dark:bg-zinc-600",
-                            )}
-                            aria-hidden
-                            title={
-                              isActive ? "Chave em uso pelo Agente Nex" : ""
-                            }
-                          />
-                          <span className="truncate text-sm font-medium">
-                            {c.label}
-                          </span>
-                          <span className="font-mono text-xs text-muted-foreground">
-                            ••••••{c.last4}
-                          </span>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-1">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="cursor-pointer"
-                            disabled={pending}
-                            onClick={() =>
-                              setDialogState({ mode: "rename", cred: c })
-                            }
-                            aria-label={`Renomear ${c.label}`}
-                          >
-                            <Pencil className="h-3.5 w-3.5" /> Renomear
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="cursor-pointer"
-                            disabled={pending}
-                            onClick={() =>
-                              setDialogState({ mode: "rotate", cred: c })
-                            }
-                            aria-label={`Trocar chave ${c.label}`}
-                          >
-                            <RefreshCw className="h-3.5 w-3.5" /> Trocar
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="cursor-pointer text-destructive hover:text-destructive"
-                            disabled={pending}
-                            aria-label={`Deletar ${c.label}`}
-                            onClick={() => handleDelete(c)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </section>
-          );
-        })}
-      </CardContent>
+            {list.length === 0 ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                — Nenhuma chave cadastrada
+              </p>
+            ) : (
+              <ul className="mt-2 divide-y divide-border">
+                {list.map((c) => {
+                  const isActive = c.id === activeCredentialId;
+                  return (
+                    <li
+                      key={c.id}
+                      data-testid={`credential-row-${c.id}`}
+                      className="flex items-center justify-between gap-3 py-2"
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span
+                          data-testid={
+                            isActive
+                              ? `credential-active-dot-${c.id}`
+                              : `credential-inactive-dot-${c.id}`
+                          }
+                          className={cn(
+                            "h-2 w-2 shrink-0 rounded-full",
+                            isActive
+                              ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]"
+                              : "bg-zinc-400 dark:bg-zinc-600",
+                          )}
+                          aria-hidden
+                          title={
+                            isActive ? "Chave em uso pelo Agente Nex" : ""
+                          }
+                        />
+                        <span className="truncate text-sm font-medium">
+                          {c.label}
+                        </span>
+                        <span className="font-mono text-xs text-muted-foreground">
+                          ••••••{c.last4}
+                        </span>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="cursor-pointer"
+                          disabled={pending}
+                          onClick={() =>
+                            setDialogState({ mode: "rename", cred: c })
+                          }
+                          aria-label={`Renomear ${c.label}`}
+                        >
+                          <Pencil className="h-3.5 w-3.5" /> Renomear
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="cursor-pointer"
+                          disabled={pending}
+                          onClick={() =>
+                            setDialogState({ mode: "rotate", cred: c })
+                          }
+                          aria-label={`Trocar chave ${c.label}`}
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" /> Trocar
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="cursor-pointer text-destructive hover:text-destructive"
+                          disabled={pending}
+                          aria-label={`Deletar ${c.label}`}
+                          onClick={() => handleDelete(c)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        );
+      })}
 
       <CredentialDialog
         state={dialogState}
@@ -247,7 +238,7 @@ export function LlmCredentialsCard({ initial, activeCredentialId }: Props) {
           refreshFromServer();
         }}
       />
-    </Card>
+    </div>
   );
 }
 

@@ -32,6 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { TierBadge } from "@/components/llm/tier-badge";
+import { LlmCredentialsManager } from "@/components/settings/llm-credentials-manager";
 import { PROVIDER_CATALOG } from "@/lib/llm/catalog";
 import type { LlmProvider } from "@/lib/llm/types";
 import {
@@ -46,6 +47,8 @@ import { setCardSpreadAction } from "@/lib/actions/exchange-rate";
 import type { CredentialSummary } from "@/lib/llm/credentials";
 import type { PublicLlmConfig } from "@/lib/llm/get-active-config";
 import { cn } from "@/lib/utils";
+
+type TabId = "config" | "credentials";
 
 interface LlmConfigCardProps {
   initial: PublicLlmConfig | null;
@@ -92,7 +95,7 @@ function buildCredentialOptions(
   opts.push({
     value: NEW_CREDENTIAL_VALUE,
     label: "+ Nova chave",
-    description: "Cadastre no card 'Chaves de API' abaixo",
+    description: "Cadastre na aba 'Chaves de API'",
   });
   return opts;
 }
@@ -111,6 +114,7 @@ export function LlmConfigCard({
   initialSpread,
 }: LlmConfigCardProps) {
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState<TabId>("config");
   const [provider, setProvider] = useState<LlmProvider>(
     initial?.provider ?? "openai",
   );
@@ -223,9 +227,9 @@ export function LlmConfigCard({
 
   function handleCredentialChange(next: string) {
     if (next === NEW_CREDENTIAL_VALUE) {
-      toast.info(
-        "Use o card 'Chaves de API' abaixo para cadastrar uma nova chave.",
-      );
+      // Em vez de mandar pra outro card, troca pra aba interna "Chaves de API".
+      setActiveTab("credentials");
+      toast.info("Cadastre a nova chave abaixo na aba 'Chaves de API'.");
       return;
     }
     setSelectedCredentialIdByUser(next);
@@ -461,6 +465,11 @@ export function LlmConfigCard({
   const selectedCredentialValue =
     credentialId ?? (hasNoCredentials ? NEW_CREDENTIAL_VALUE : "");
 
+  const tabDescription =
+    activeTab === "config"
+      ? "Configure o provedor de IA usado pelo agente de consultas."
+      : "Gerencie as chaves de API por provedor.";
+
   return (
     <Card className="rounded-2xl border border-border bg-muted/30 p-2">
       <CardHeader>
@@ -470,17 +479,82 @@ export function LlmConfigCard({
           </div>
           <div className="flex flex-col gap-0.5">
             <CardTitle className="text-foreground">Agente Nex</CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Configure o provedor de IA usado pelo agente de consultas. As
-              chaves são gerenciadas no card &quot;Chaves de API&quot;.
-            </p>
+            <p className="text-xs text-muted-foreground">{tabDescription}</p>
           </div>
         </div>
       </CardHeader>
 
       <CardContent>
-        <div className="space-y-6">
-          {/* Toggle global da bolha do Agente Nex. */}
+        {/* Segmented control (abas internas). */}
+        <div
+          role="tablist"
+          aria-label="Seções do Agente Nex"
+          className="mb-6 inline-flex items-center gap-1 rounded-lg border border-border bg-muted/40 p-1"
+        >
+          <button
+            type="button"
+            role="tab"
+            id="llm-tab-config"
+            aria-selected={activeTab === "config"}
+            aria-pressed={activeTab === "config"}
+            aria-controls="llm-tabpanel-config"
+            data-testid="llm-tab-config"
+            onClick={() => setActiveTab("config")}
+            className={cn(
+              "min-h-[36px] rounded-md px-4 text-sm font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+              activeTab === "config"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "bg-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            Configuração
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="llm-tab-credentials"
+            aria-selected={activeTab === "credentials"}
+            aria-pressed={activeTab === "credentials"}
+            aria-controls="llm-tabpanel-credentials"
+            data-testid="llm-tab-credentials"
+            onClick={() => setActiveTab("credentials")}
+            className={cn(
+              "min-h-[36px] rounded-md px-4 text-sm font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+              activeTab === "credentials"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "bg-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            Chaves de API
+          </button>
+        </div>
+
+        {/* Aba "Chaves de API" — renderiza apenas quando ativa pra evitar
+            montagens duplicadas/efeitos colaterais. */}
+        {activeTab === "credentials" ? (
+          <div
+            role="tabpanel"
+            id="llm-tabpanel-credentials"
+            aria-labelledby="llm-tab-credentials"
+          >
+            <LlmCredentialsManager
+              initial={initialCredentials}
+              activeCredentialId={initial?.credentialId ?? null}
+            />
+          </div>
+        ) : null}
+
+        {/* Aba "Configuração" — sempre montada (preserva estado de form, spread,
+            transitions), apenas escondida via CSS quando inativa. */}
+        <div
+          role="tabpanel"
+          id="llm-tabpanel-config"
+          aria-labelledby="llm-tab-config"
+          hidden={activeTab !== "config"}
+          aria-hidden={activeTab !== "config"}
+        >
+          <div className="space-y-6">
+            {/* Toggle global da bolha do Agente Nex. */}
           <div
             className="flex items-center justify-between gap-4 rounded-xl border border-border bg-background/40 px-4 py-3"
             role="group"
@@ -641,8 +715,8 @@ export function LlmConfigCard({
             />
             <p className="text-xs text-muted-foreground">
               {hasNoCredentials
-                ? `Nenhuma chave cadastrada para ${catalog.label}. Use o card "Chaves de API" abaixo para adicionar.`
-                : "Selecione qual chave salva o agente deve usar. As chaves são gerenciadas separadamente."}
+                ? `Nenhuma chave cadastrada para ${catalog.label}. Use a aba "Chaves de API" para adicionar.`
+                : "Selecione qual chave salva o agente deve usar. As chaves são gerenciadas na aba 'Chaves de API'."}
             </p>
 
             {/* Atalhos: criar API key + adicionar crédito (URLs do catálogo). */}
@@ -800,11 +874,12 @@ export function LlmConfigCard({
             >
               Sem chaves cadastradas para {catalog.label} — botões desativados.
             </p>
-          ) : selectedCredential ? (
-            <p className="sr-only" aria-live="polite">
-              Chave selecionada: {selectedCredential.label}
-            </p>
-          ) : null}
+            ) : selectedCredential ? (
+              <p className="sr-only" aria-live="polite">
+                Chave selecionada: {selectedCredential.label}
+              </p>
+            ) : null}
+          </div>
         </div>
       </CardContent>
     </Card>

@@ -17,6 +17,9 @@ import type { CredentialSummary } from "@/lib/llm/credentials";
 const saveLlmConfig = jest.fn();
 const setNexBubbleEnabled = jest.fn();
 const testLlmCredentialAction = jest.fn();
+const createLlmCredentialAction = jest.fn();
+const updateLlmCredentialAction = jest.fn();
+const deleteLlmCredentialAction = jest.fn();
 const setCardSpreadAction = jest.fn();
 const refresh = jest.fn();
 
@@ -28,6 +31,12 @@ jest.mock("@/lib/actions/llm-config", () => ({
 jest.mock("@/lib/actions/llm-credentials", () => ({
   testLlmCredentialAction: (...args: unknown[]) =>
     testLlmCredentialAction(...args),
+  createLlmCredentialAction: (...args: unknown[]) =>
+    createLlmCredentialAction(...args),
+  updateLlmCredentialAction: (...args: unknown[]) =>
+    updateLlmCredentialAction(...args),
+  deleteLlmCredentialAction: (...args: unknown[]) =>
+    deleteLlmCredentialAction(...args),
 }));
 
 jest.mock("@/lib/actions/exchange-rate", () => ({
@@ -432,5 +441,81 @@ describe("LlmConfigCard", () => {
         credentialId: "cred-fixed",
       }),
     );
+  });
+
+  it("aba 'Configuração' está ativa por padrão e aba 'Chaves de API' renderiza o manager ao clicar", () => {
+    render(
+      <LlmConfigCard
+        initial={null}
+        initialNexEnabled={false}
+        initialCredentials={[cred()]}
+        initialSpread={1.1}
+      />,
+    );
+
+    const tabConfig = screen.getByTestId("llm-tab-config");
+    const tabCreds = screen.getByTestId("llm-tab-credentials");
+
+    expect(tabConfig).toHaveAttribute("aria-selected", "true");
+    expect(tabCreds).toHaveAttribute("aria-selected", "false");
+
+    // Spread cartão (campo único da aba "Configuração") deve estar presente.
+    expect(
+      screen.getByLabelText(/Spread cartão \(multiplicador USD\/BRL\)/i),
+    ).toBeInTheDocument();
+
+    // Manager de credenciais NÃO renderiza enquanto a aba está fechada.
+    expect(
+      screen.queryByTestId("credentials-section-openai"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(tabCreds);
+
+    expect(tabCreds).toHaveAttribute("aria-selected", "true");
+    expect(tabConfig).toHaveAttribute("aria-selected", "false");
+    // Agora as 4 seções por provider aparecem.
+    expect(
+      screen.getByTestId("credentials-section-openai"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("credentials-section-anthropic"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("credentials-section-gemini"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("credentials-section-openrouter"),
+    ).toBeInTheDocument();
+  });
+
+  it("selecionar '+ Nova chave' no select de credenciais alterna pra aba 'Chaves de API'", async () => {
+    render(
+      <LlmConfigCard
+        initial={null}
+        initialNexEnabled={false}
+        initialCredentials={[cred({ id: "c1", label: "Principal", last4: "1234" })]}
+        initialSpread={1.1}
+      />,
+    );
+
+    const tabCreds = screen.getByTestId("llm-tab-credentials");
+    expect(tabCreds).toHaveAttribute("aria-selected", "false");
+
+    // Abre o select de credenciais (mostra "Principal · ••••1234").
+    const credentialTrigger = screen
+      .getAllByRole("button")
+      .find((b) => b.textContent?.includes("Principal · ••••1234"));
+    expect(credentialTrigger).toBeTruthy();
+    fireEvent.click(credentialTrigger!);
+
+    const novaItem = await screen.findByText(/\+ Nova chave/);
+    fireEvent.click(novaItem);
+
+    // Aba Chaves passa a ativa + manager renderizado.
+    expect(tabCreds).toHaveAttribute("aria-selected", "true");
+    expect(
+      screen.getByTestId("credentials-section-openai"),
+    ).toBeInTheDocument();
+    expect(toastMock.info).toHaveBeenCalled();
   });
 });

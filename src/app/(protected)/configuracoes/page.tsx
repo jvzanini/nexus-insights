@@ -9,7 +9,6 @@ import { PlatformSettingsCard } from "@/components/settings/platform-settings-ca
 import { EnabledReportsCard } from "@/components/settings/enabled-reports-card";
 import { MatrixIAToggleCard } from "@/components/settings/matrix-ia-toggle-card";
 import { LlmConfigCard } from "@/components/settings/llm-config-card";
-import { LlmCredentialsCard } from "@/components/settings/llm-credentials-card";
 import { getCurrentUser } from "@/lib/auth";
 import { getAllSettings } from "@/lib/actions/settings";
 import { getPlatformLocale, getPlatformTz } from "@/lib/datetime";
@@ -139,13 +138,6 @@ export default async function Page() {
             initialNexEnabled={nexBubbleEnabled}
             initialCredentials={initialCredentials}
             initialSpread={initialSpread}
-          />
-        )}
-
-        {isSuperAdmin && (
-          <LlmCredentialsCard
-            initial={initialCredentials}
-            activeCredentialId={llmConfig?.credentialId ?? null}
           />
         )}
 

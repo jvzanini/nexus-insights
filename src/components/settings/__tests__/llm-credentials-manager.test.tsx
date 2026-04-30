@@ -44,7 +44,7 @@ jest.mock("sonner", () => ({
   toast: toastMock,
 }));
 
-import { LlmCredentialsCard } from "../llm-credentials-card";
+import { LlmCredentialsManager } from "../llm-credentials-manager";
 
 const cred = (
   overrides: Partial<CredentialSummary> = {},
@@ -57,7 +57,7 @@ const cred = (
   updatedAt: overrides.updatedAt ?? "2026-04-30T00:00:00.000Z",
 });
 
-describe("LlmCredentialsCard", () => {
+describe("LlmCredentialsManager", () => {
   beforeEach(() => {
     createLlmCredentialAction.mockReset();
     updateLlmCredentialAction.mockReset();
@@ -72,7 +72,7 @@ describe("LlmCredentialsCard", () => {
 
   it("renderiza 4 seções (uma por provider)", () => {
     render(
-      <LlmCredentialsCard initial={[]} activeCredentialId={null} />,
+      <LlmCredentialsManager initial={[]} activeCredentialId={null} />,
     );
     expect(
       screen.getByTestId("credentials-section-openai"),
@@ -90,7 +90,7 @@ describe("LlmCredentialsCard", () => {
 
   it("ponto verde aparece somente na credencial ativa", () => {
     render(
-      <LlmCredentialsCard
+      <LlmCredentialsManager
         initial={[
           cred({ id: "active", label: "Ativa", last4: "1111" }),
           cred({ id: "outra", label: "Outra", last4: "2222" }),
@@ -117,14 +117,12 @@ describe("LlmCredentialsCard", () => {
     });
 
     render(
-      <LlmCredentialsCard initial={[]} activeCredentialId={null} />,
+      <LlmCredentialsManager initial={[]} activeCredentialId={null} />,
     );
 
-    // Clica no "+ Nova" do OpenAI.
     const novaBtn = screen.getByLabelText("Nova chave para OpenAI");
     fireEvent.click(novaBtn);
 
-    // Dialog renderiza título.
     expect(
       await screen.findByText(/Nova chave — OpenAI/i),
     ).toBeInTheDocument();
@@ -157,7 +155,7 @@ describe("LlmCredentialsCard", () => {
 
   it("clicar 'Renomear' abre dialog em modo rename pré-preenchido", async () => {
     render(
-      <LlmCredentialsCard
+      <LlmCredentialsManager
         initial={[cred({ id: "c1", label: "Atual", last4: "1234" })]}
         activeCredentialId={null}
       />,
@@ -169,7 +167,6 @@ describe("LlmCredentialsCard", () => {
     ).toBeInTheDocument();
     const labelInput = screen.getByLabelText("Label") as HTMLInputElement;
     expect(labelInput.value).toBe("Atual");
-    // No modo rename, o campo API key NÃO é renderizado.
     expect(screen.queryByLabelText("API key")).not.toBeInTheDocument();
   });
 
@@ -180,7 +177,7 @@ describe("LlmCredentialsCard", () => {
     });
 
     render(
-      <LlmCredentialsCard
+      <LlmCredentialsManager
         initial={[cred({ id: "c1", label: "Atual", last4: "1234" })]}
         activeCredentialId={null}
       />,
@@ -191,7 +188,6 @@ describe("LlmCredentialsCard", () => {
       await screen.findByText(/Trocar chave — OpenAI/i),
     ).toBeInTheDocument();
 
-    // Modo rotate: campo Label NÃO é renderizado.
     expect(screen.queryByLabelText("Label")).not.toBeInTheDocument();
 
     const apiKeyInput = screen.getByLabelText("API key") as HTMLInputElement;
@@ -221,13 +217,12 @@ describe("LlmCredentialsCard", () => {
         "Esta chave está em uso pelo Agente Nex. Selecione outra antes de deletar.",
     });
 
-    // Mock window.confirm para retornar true.
     const confirmSpy = jest
       .spyOn(window, "confirm")
       .mockImplementation(() => true);
 
     render(
-      <LlmCredentialsCard
+      <LlmCredentialsManager
         initial={[cred({ id: "active", label: "Em uso", last4: "0000" })]}
         activeCredentialId="active"
       />,
