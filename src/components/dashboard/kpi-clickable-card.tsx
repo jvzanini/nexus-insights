@@ -125,25 +125,25 @@ export function KpiClickableCard({
               {badge}
             </Badge>
           ) : trend ? (
-            <span
-              className={cn("inline-flex items-center gap-0.5", trendClass)}
-            >
+            <span className={cn("inline-flex items-center gap-0.5", trendClass)}>
               <TrendIcon className="h-3.5 w-3.5" aria-hidden />
               {trend.value}
             </span>
-          ) : (
-            <Badge
-              variant="outline"
-              className="border-border text-xs text-muted-foreground"
-            >
-              Novo
-            </Badge>
-          )}
+          ) : null}
         </div>
       </div>
 
+      {/* Hint "ver detalhes" — discreto, alinhado à direita, abaixo do trend */}
+      <span
+        aria-hidden
+        className="mt-1 self-end inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-violet-400/80 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100"
+      >
+        ver detalhes
+        <ArrowRight className="h-3 w-3" />
+      </span>
+
       {/* Valor + label */}
-      <div className="mt-4">
+      <div className="mt-3">
         <p className="font-heading text-2xl font-bold tabular-nums text-foreground">
           {value}
         </p>
@@ -153,7 +153,7 @@ export function KpiClickableCard({
         </p>
       </div>
 
-      {/* Sparkline opcional - reserva espaço (h-9) sempre que presente */}
+      {/* Sparkline — ocupa o final do card sem competir com texto */}
       {miniChart ? (
         <div
           aria-hidden
@@ -162,15 +162,6 @@ export function KpiClickableCard({
           {miniChart}
         </div>
       ) : null}
-
-      {/* Hint sutil de "expandir" — só visível ao foco/hover */}
-      <span
-        aria-hidden
-        className="pointer-events-none absolute right-3 bottom-3 inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-violet-400 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100"
-      >
-        ver detalhes
-        <ArrowRight className="h-3 w-3" />
-      </span>
     </motion.button>
   );
 }
