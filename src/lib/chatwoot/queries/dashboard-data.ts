@@ -200,10 +200,11 @@ export async function dashboardData(args: DashboardDataInput) {
     tz,
   };
 
-  // Cache key v2 — bump força invalidação dos caches v1 que tinham coortes diferentes.
+  // Cache key v4 — bump força invalidação ao trocar shape do bucket (timestamp
+  // sem TZ → timestamptz UTC explícito) e qualquer mudança nas coortes.
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-data-v3",
+    name: "dashboard-data-v4",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -265,7 +266,7 @@ export async function dashboardData(args: DashboardDataInput) {
             granularity === "hour"
               ? `
               SELECT
-                date_trunc('hour', c.created_at AT TIME ZONE $4)::timestamp AS bucket,
+                (date_trunc('hour', c.created_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
                 COUNT(*)::bigint AS received,
                 COUNT(*) FILTER (WHERE c.status = 1)::bigint AS resolved
               FROM conversations c
@@ -278,7 +279,7 @@ export async function dashboardData(args: DashboardDataInput) {
             `
               : `
               SELECT
-                date_trunc('day', c.created_at AT TIME ZONE $4)::timestamp AS bucket,
+                (date_trunc('day', c.created_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
                 COUNT(*)::bigint AS received,
                 COUNT(*) FILTER (WHERE c.status = 1)::bigint AS resolved
               FROM conversations c

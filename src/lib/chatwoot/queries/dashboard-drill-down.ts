@@ -264,7 +264,7 @@ export async function getReceivedDrillDown(
 
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-drill-received-v2",
+    name: "dashboard-drill-received-v3",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -290,7 +290,7 @@ export async function getReceivedDrillDown(
             granularity === "hour"
               ? `
               SELECT
-                date_trunc('hour', c.created_at AT TIME ZONE $4)::timestamp AS bucket,
+                (date_trunc('hour', c.created_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
                 COUNT(*)::bigint AS received,
                 COUNT(*) FILTER (WHERE c.status = 1)::bigint AS resolved
               FROM conversations c
@@ -303,7 +303,7 @@ export async function getReceivedDrillDown(
             `
               : `
               SELECT
-                date_trunc('day', c.created_at AT TIME ZONE $4)::timestamp AS bucket,
+                (date_trunc('day', c.created_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
                 COUNT(*)::bigint AS received,
                 COUNT(*) FILTER (WHERE c.status = 1)::bigint AS resolved
               FROM conversations c
@@ -460,7 +460,7 @@ export async function getResolvedDrillDown(
 
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-drill-resolved-v2",
+    name: "dashboard-drill-resolved-v3",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -489,7 +489,7 @@ export async function getResolvedDrillDown(
             granularity === "hour"
               ? `
               SELECT
-                date_trunc('hour', c.created_at AT TIME ZONE $4)::timestamp AS bucket,
+                (date_trunc('hour', c.created_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
                 0::bigint AS received,
                 COUNT(*)::bigint AS resolved
               FROM conversations c
@@ -503,7 +503,7 @@ export async function getResolvedDrillDown(
             `
               : `
               SELECT
-                date_trunc('day', c.created_at AT TIME ZONE $4)::timestamp AS bucket,
+                (date_trunc('day', c.created_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
                 0::bigint AS received,
                 COUNT(*)::bigint AS resolved
               FROM conversations c
@@ -885,7 +885,7 @@ export async function getResolutionRateDrillDown(args: DrillDownPeriodInput) {
   };
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-drill-resolution-v2",
+    name: "dashboard-drill-resolution-v3",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -905,7 +905,7 @@ export async function getResolutionRateDrillDown(args: DrillDownPeriodInput) {
             granularity === "hour"
               ? `
               SELECT
-                date_trunc('hour', c.created_at AT TIME ZONE $4)::timestamp AS bucket,
+                (date_trunc('hour', c.created_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
                 COUNT(*)::bigint AS received,
                 COUNT(*) FILTER (WHERE c.status = 1)::bigint AS resolved
               FROM conversations c
@@ -918,7 +918,7 @@ export async function getResolutionRateDrillDown(args: DrillDownPeriodInput) {
             `
               : `
               SELECT
-                date_trunc('day', c.created_at AT TIME ZONE $4)::timestamp AS bucket,
+                (date_trunc('day', c.created_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
                 COUNT(*)::bigint AS received,
                 COUNT(*) FILTER (WHERE c.status = 1)::bigint AS resolved
               FROM conversations c
