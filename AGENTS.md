@@ -104,6 +104,33 @@ Se não está claro se uma mudança vai colidir com trabalho de outro agente —
 
 ---
 
+## Regras de runtime (Next.js 16)
+
+### Server Actions — apenas funções async no export
+
+Arquivos `src/lib/actions/**/*.ts` (ou qualquer outro com a diretiva `"use server"` no topo) **só podem exportar funções `async`**. TypeScript types e interfaces também são permitidos (são erased no build).
+
+**PROIBIDO** em qualquer arquivo `"use server"`:
+- `export const FOO = 123;` ou outras constantes runtime.
+- `export { FOO };` re-exportando uma const/objeto/classe vinda de outro módulo.
+- `export function fn() {...}` síncrona — só `async function`.
+- `export default <objeto/classe>`.
+
+Next.js 16 valida em **runtime** (não no build/typecheck/jest) e lança o erro fatal:
+
+```
+⨯ Error: A "use server" file can only export async functions, found <type>.
+  digest: '<hash>@E352'
+```
+
+Isso aparece como tela full-screen "This page couldn't load — A server error occurred" + logout. Para o usuário fica completamente quebrado em produção.
+
+Se precisa expor uma constante derivada da action: importe-a direto da lib não-server (`@/lib/llm/exchange-rate`, `@/lib/...`) no consumer. Não re-exporte do arquivo da action.
+
+Histórico: incidente v0.12.0–v0.12.1 (commit `327655a`/`5f3788f` ainda continham o problema; corrigido em v0.12.2).
+
+---
+
 ## Dev environment tips
 - Install dependencies with `npm install` before running scaffolds.
 - Use `npm run dev` for the interactive TypeScript session that powers local experimentation.

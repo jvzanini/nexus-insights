@@ -1,12 +1,19 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-04-30
-**Versão atual em produção:** v0.12.1
+**Versão atual em produção:** v0.12.2
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.12.1)
+## Em produção (v0.12.2)
+
+### Hotfix v0.12.2 (2026-04-30) — root cause "couldn't load"
+
+- **Causa raiz finalmente identificada e corrigida.** `src/lib/actions/exchange-rate.ts` tinha um `export { DEFAULT_CARD_SPREAD }` (constante numérica) num arquivo com diretiva `"use server"`. Next.js 16 rejeita qualquer export não-async-function em arquivo Server Action, lançando "This page couldn't load — A server error occurred". Detectado via logs do container.
+- Regra para o futuro: arquivos `src/lib/actions/**/*.ts` só podem exportar funções async + tipos/interfaces (apagados no build).
+
+## Em produção anteriormente (v0.12.1)
 
 ### Hotfix v0.12.1 (2026-04-30)
 

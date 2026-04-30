@@ -1,5 +1,42 @@
 # Changelog
 
+## [v0.12.2] 2026-04-30 — Hotfix crítico: "use server" file só pode exportar funções async
+
+> Causa raiz finalmente identificada do crash "This page couldn't load — A server error occurred" reportado pelo super_admin ao trocar modelo, renomear chave, criar nova chave, ou qualquer mutação de credencial. O sintoma era global e persistia mesmo após o hotfix v0.12.1 (que tratou GPT-5.x params, mas não mexia neste vetor).
+
+### Causa raiz (Next.js 16)
+
+O Next.js 16 valida em runtime que **todo arquivo com diretiva `"use server"` exporte APENAS funções async**. Qualquer outro export (constante, número, objeto, re-export de variável) faz o Next.js abortar a renderização com:
+
+```
+⨯ Error: A "use server" file can only export async functions, found number.
+  digest: '4181178278@E352'
+```
+
+Logo, **qualquer Server Action invocada** (não importa qual arquivo `"use server"`, pois o erro é no carregamento do módulo da action) explode com a tela full-screen "This page couldn't load" + logout.
+
+O culpado: `src/lib/actions/exchange-rate.ts:93` tinha `export { DEFAULT_CARD_SPREAD };` (constante numérica `1.1`), introduzido no T8 da v0.12.0 como conveniência para o consumer. Embora o build TypeScript passasse normalmente (e os testes Jest também), o runtime do Next.js rejeitava o módulo no momento da invocação.
+
+### Fix
+
+- Removido o `export { DEFAULT_CARD_SPREAD }` do arquivo `"use server"`.
+- Os consumers (apenas `src/app/(protected)/configuracoes/page.tsx`) já importam `DEFAULT_CARD_SPREAD` direto de `@/lib/llm/exchange-rate` (módulo regular, não `"use server"`) — nenhuma mudança necessária no consumer.
+- Comentário inline no arquivo da action documenta a regra para evitar reincidência.
+
+### Detecção
+
+Logs do container em produção (via `gh workflow run portainer-debug.yml -f action=logs-app`) mostravam o stack trace literal — investigação feita após dois relatos consecutivos do mesmo sintoma.
+
+### Aviso ao próximo agente
+
+**REGRA**: arquivos `"use server"` (`src/lib/actions/**/*.ts`) devem exportar **somente** funções `async` (Server Actions) e/ou tipos/interfaces TypeScript (que são apagados no build). **Nunca** re-exporte constantes, objetos, classes ou funções síncronas a partir desses arquivos — Next.js 16 rejeita em runtime mesmo passando no build/typecheck/jest.
+
+### Outras coisas desta release
+
+- Inalterado todo o resto da v0.12.1 (abas Agente Nex, GPT-5.x params, MODEL_PRICING, visibility, overscroll). Tests 74 suites / 650 PASS.
+
+---
+
 ## [v0.12.1] 2026-04-30 — Hotfix Agente Nex + UX cleanup + visibility/overscroll bugs
 
 > Hotfix imediato sobre v0.12.0. Corrige crash crítico ao trocar para modelos GPT-5.x, atualiza tabela de preços abril/2026 (custos paravam zerados), unifica os cards "Agente Nex" e "Chaves de API" em abas internas, libera o spread cartão (sem limite superior), corrige bug de visibilidade Matrix IA "Ninguém" sendo ignorada para super_admin, remove toggles duplicados do card Visibilidade e elimina a "tarja preta" de overscroll que aparecia em toda a plataforma.

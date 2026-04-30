@@ -3,7 +3,6 @@
 import { auth } from "@/auth";
 import { logAudit } from "@/lib/audit";
 import {
-  DEFAULT_CARD_SPREAD,
   getUsdBrlRate,
   setCardSpread,
 } from "@/lib/llm/exchange-rate";
@@ -89,5 +88,6 @@ export async function setCardSpreadAction(
     return { ok: false, error: "Erro ao salvar spread" };
   }
 }
-
-export { DEFAULT_CARD_SPREAD };
+// Constantes (DEFAULT_CARD_SPREAD etc.) são re-importadas direto de
+// `@/lib/llm/exchange-rate` pelos consumers — Next.js 16 só permite exportar
+// funções async em arquivos "use server".
