@@ -317,7 +317,7 @@ export function LlmConfigCard({
             <Sparkles className="h-[18px] w-[18px] text-violet-500" />
           </div>
           <div className="flex flex-col gap-0.5">
-            <CardTitle className="text-foreground">Agente IA (Nex)</CardTitle>
+            <CardTitle className="text-foreground">Agente Nex</CardTitle>
             <p className="text-xs text-muted-foreground">
               Configure o provedor de IA usado pelo agente de consultas. A
               chave é cifrada com AES-256 antes de ser persistida.

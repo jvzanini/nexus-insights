@@ -61,7 +61,7 @@ export async function runNexAgent(args: RunNexInput): Promise<RunNexResult> {
     return {
       ok: false,
       error:
-        "Nenhum provedor de IA configurado. Vá em Configurações → Agente IA (Nex).",
+        "Nenhum provedor de IA configurado. Vá em Configurações → Agente Nex.",
     };
   }
 

@@ -862,7 +862,7 @@ function EmptyConsumoState() {
         </div>
         <div className="max-w-md space-y-2">
           <h2 className="text-lg font-semibold">
-            Nenhuma chamada ao Agente IA registrada ainda
+            Nenhuma chamada ao Agente Nex registrada ainda
           </h2>
           <p className="text-sm text-muted-foreground">
             Configure o provedor em Configurações e use o agente flutuante para

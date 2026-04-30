@@ -7,7 +7,7 @@ import { ConsumoContent } from "@/components/llm/consumo-content";
 import { getCurrentUser } from "@/lib/auth";
 import { getSystemCreatedAt } from "@/lib/llm/queries/usage-stats";
 
-export const metadata = { title: "Consumo do Agente IA | Nexus Insights" };
+export const metadata = { title: "Consumo do Agente Nex | Nexus Insights" };
 export const dynamic = "force-dynamic";
 
 export default async function ConsumoPage() {
@@ -21,7 +21,7 @@ export default async function ConsumoPage() {
     <PageShell variant="wide">
       <PageHeader
         icon={Sparkles}
-        title="Consumo do Agente IA"
+        title="Consumo do Agente Nex"
         subtitle="Tokens, custo e estatísticas de uso da IA por período"
       />
       <ConsumoContent minDate={minDate.toISOString()} />
