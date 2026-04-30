@@ -92,7 +92,7 @@ export default async function ProtectedLayout({
           activeAccountId={activeAccountId}
           enabledReportKeys={enabledReportKeys}
         />
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto overscroll-contain">
           <div className="pt-16 pb-8 sm:pt-8">{children}</div>
         </main>
         {nexBubbleEnabled ? <NexBubble /> : null}

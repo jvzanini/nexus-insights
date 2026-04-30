@@ -31,7 +31,7 @@ export default async function RootLayout({
   return (
     <html
       lang="pt-BR"
-      className={`${inter.variable} ${geistMono.variable} ${resolvedTheme} h-full antialiased`}
+      className={`${inter.variable} ${geistMono.variable} ${resolvedTheme} h-full bg-background antialiased`}
       style={{ colorScheme: resolvedTheme }}
       suppressHydrationWarning
     >

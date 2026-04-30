@@ -240,10 +240,17 @@ html { font-size: var(--base-font-size); }
   * {
     @apply border-border outline-ring/50;
   }
+  html,
   body {
     @apply bg-background text-foreground;
   }
   html {
     @apply font-sans;
+    /* Garante que overscroll/elastic-bounce não exponha o background preto
+     * padrão do user-agent quando o usuário rola além do conteúdo (P8). */
+    background-color: var(--background);
+  }
+  body {
+    overscroll-behavior-y: none;
   }
 }
