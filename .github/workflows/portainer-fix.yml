@@ -94,7 +94,7 @@ jobs:
           # ContainerSpec.Command = [] (deixa entrypoint cuidar)
           jq '
             .Spec
-            | .TaskTemplate.ContainerSpec.Args = ["npx", "tsx", "/app/worker/index.ts"]
+            | .TaskTemplate.ContainerSpec.Args = ["npx", "tsx", "/app/src/worker/index.ts"]
             | .TaskTemplate.ContainerSpec.Command = []
             | .TaskTemplate.ForceUpdate = ((.TaskTemplate.ForceUpdate // 0) + 1)
           ' /tmp/worker-svc.json > /tmp/worker-spec.json

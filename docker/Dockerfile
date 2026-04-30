@@ -41,7 +41,13 @@ COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.js ./prisma.config.js
 COPY --from=builder --chown=nextjs:nodejs /app/src/generated ./src/generated
-COPY --from=builder --chown=nextjs:nodejs /app/src/worker ./worker
+# Worker roda direto via tsx em /app/src/worker/index.ts. Precisa de:
+#   - src/worker (próprio worker)
+#   - src/lib (redis/queue/pg-pool/chatwoot/audit etc — importados pelo worker)
+# Tudo é copiado pra /app/src/* preservando a estrutura do source pra que tanto
+# imports relativos (../lib/redis) quanto alias TS (@/lib/...) resolvam.
+COPY --from=builder --chown=nextjs:nodejs /app/src/worker ./src/worker
+COPY --from=builder --chown=nextjs:nodejs /app/src/lib ./src/lib
 COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./tsconfig.json
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 COPY docker/entrypoint.sh /entrypoint.sh

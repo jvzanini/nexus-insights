@@ -27,7 +27,7 @@ Se a stack de produção (no Portainer) tem o service `worker` com command apont
 1. Portainer → Stacks → `nexus-insights` → "Editor".
 2. No service `worker`, mudar `command:` para:
    ```yaml
-   command: ["npx", "tsx", "/app/worker/index.ts"]
+   command: ["npx", "tsx", "/app/src/worker/index.ts"]
    ```
 3. "Update the stack" → "Re-pull image and redeploy".
 

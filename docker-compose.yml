@@ -33,7 +33,7 @@ services:
     # Worker roda o source TS via tsx (já instalado em devDependencies pelo
     # Dockerfile). O entrypoint.sh detecta "tsx"/"worker" no cmd e pula
     # migrations/seed para evitar race com o container `app`.
-    command: ["npx", "tsx", "/app/worker/index.ts"]
+    command: ["npx", "tsx", "/app/src/worker/index.ts"]
     environment:
       - DATABASE_URL=postgresql://nexus:${DB_PASSWORD:-nexus}@db:5432/nexus_insights?schema=public
       - REDIS_URL=redis://redis:6379

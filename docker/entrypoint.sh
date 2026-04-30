@@ -5,13 +5,22 @@ cd /app
 
 # Detecta se este container é o worker — neste caso pula migrations/seed
 # (essas tarefas são responsabilidade do container `app`, evitando race
-# condition quando ambos sobem juntos).
-case "$1" in
-  *worker*|*tsx*)
-    echo "[entrypoint] Modo WORKER detectado (cmd='$@'). Pulando migrations/seed."
-    exec "$@"
-    ;;
-esac
+# condition quando ambos sobem juntos). Verifica TODOS os args, não só $1
+# — porque "npx tsx /app/src/worker/index.ts" tem npx em $1.
+WORKER_MODE=0
+for arg in "$@"; do
+  case "$arg" in
+    *worker*|*tsx*)
+      WORKER_MODE=1
+      break
+      ;;
+  esac
+done
+
+if [ "$WORKER_MODE" = "1" ]; then
+  echo "[entrypoint] Modo WORKER detectado (cmd='$@'). Pulando migrations/seed."
+  exec "$@"
+fi
 
 echo "[entrypoint] Aplicando migrations…"
 npx prisma migrate deploy --config=./prisma.config.js || {
