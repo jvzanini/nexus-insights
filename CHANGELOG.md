@@ -1,5 +1,61 @@
 # Changelog
 
+## [v0.10.0] 2026-04-30 — Dashboard Pulse
+
+> Redesign completo da home `/dashboard`. KPIs, gráficos e drill-downs agora **falam da mesma coorte** (criadas no período), o **timezone** respeita a plataforma, o **seletor de conta deixou de ser duplicado** (vive só no sidebar) e cards de listas viraram **gráficos clicáveis** com drill-down em **modal central**. Spec/plan em `docs/superpowers/{specs,plans}/2026-04-30-dashboard-v0.10*.md`.
+
+### Adicionado
+
+- **Card "Conversas sem resposta agora"** (hero) — definição estrita: status=0 + última mensagem do contato (`message_type=0`). Mostra contador, "mais antiga há X" e preview de 5 com CTA "Ver todas" que abre drill-down central com agrupamento por inbox/atendente.
+- **Distribuição por Departamento** clicável — bar/donut com toggle (`<ChartTypeToggle>`). Coorte: criadas no período + status ∈ {open, pending, snoozed}. Bucket "Sem departamento" sempre visível quando há conversas com `team_id IS NULL`. Click na barra/fatia abre drill-down com lista filtrada.
+- **Distribuição por Inbox** clicável — bar/donut com toggle. Coorte: criadas no período + status=0.
+- **Distribuição por Status** — donut com 4 fatias (Aberto/Pendente/Adiado/Resolvido), centro mostra total recebido. Click vai para drill-down do status (Open com lista completa, demais com texto explicativo enquanto o drill específico não chega em v0.11).
+- **Toggle line/bar** no chart de "Conversas por hora/dia" via `<ChartLineBarToggle>`, persistido em `localStorage`.
+- **`<DrillDownDialog>`** — modal centralizado de até 1280px (`max-w-6xl`) e 90dvh (mobile vira full-screen). Substitui o side-sheet (`<DrillDownSheet>`) no dashboard; outros relatórios continuam com side-sheet.
+- **`<ChartTypeToggle>`** e `useChartTypeStorage` — segmented control bar/donut com persistência localStorage e bloqueio automático de donut acima de 6 categorias.
+- **`<NoResponseCard>`** + drill-down `<NoResponseDrillDownContent>` (lista completa até 100, agrupável).
+- **`<TeamDrillDownContent>`** — drill-down de departamento com donut por status + lista.
+- **Backend**: `getNoResponseDrillDown` e `getByTeamDrillDown` em `dashboard-drill-down.ts` (com bucket "Sem departamento").
+- **`formatBucketLabel(iso, granularity, tz)`** — formatter TZ-aware via `Intl.DateTimeFormat` em `src/lib/utils/format-bucket.ts` + tests (4 cenários incluindo Asia/Tokyo).
+- **`onBarClick`/`onSliceClick`** opcionais em `InteractiveBarChart`, `InteractivePieChart`, `DonutWithCenter`.
+
+### Mudou
+
+- **KPIs amarrados ao filtro de período** (mesma coorte):
+  - "Recebidas" — created_at ∈ período (já era).
+  - "Resolvidas" — created_at ∈ período + status=1 (era last_activity_at; mudança para coorte única).
+  - "Abertas" — created_at ∈ período + status=0 (era snapshot global; mostrava 1.475 com "Hoje" — agora respeita o filtro).
+  - "Taxa de resolução" — `min(100, resolvidas/recebidas * 100)` (era >100% por coortes diferentes).
+- **`getResolvedDrillDown`** e **`getOpenDrillDown`** atualizados para mesma coorte de criação no período. `getOpenDrillDownAction` agora aceita `period`.
+- **Top inboxes em aberto** — passou de snapshot global para coorte do período (limite ampliado de 5 para 10).
+- **Chart "Conversas por hora"** usa `Intl.DateTimeFormat` com `timeZone` da plataforma — mostra horários BRT corretos independente da TZ do navegador.
+- **Cache key** das queries do dashboard bumpada para `dashboard-data-v2:*` e `dashboard-drill-open-v2:*` (invalida v1 ao subir).
+- **Tour do dashboard** atualizado para o novo layout: filtros (sem seletor de conta), KPIs, sem-resposta, chart, distribuições (inbox+departamento), status, recentes.
+
+### Removido
+
+- **Seletor de conta do dashboard** — vivia em `<DashboardFilters>`, agora é exclusividade do sidebar (`<AccountSwitcher>`). Toda a plataforma respeita o cookie `active_account` global.
+- **`topTeams`** do contrato `DashboardData` — substituído por `byTeam` (com bucket "Sem departamento") + `byStatus` (4 fatias) + `noResponse`. Tipo `DashboardTopTeam` mantido por compat temporária.
+- **Lista "Departamentos com mais resolvidas"** — virou bar chart clicável com semântica nova (open+pending+snoozed). Avatares com initials de teams (que mostravam "?" para nomes vazios) deixaram de existir naturalmente.
+- Uso de `<DrillDownSheet>` no dashboard — migrado para `<DrillDownDialog>`. Componente `<DrillDownSheet>` segue existindo para outras telas.
+
+### Corrigido
+
+- **Timezone errada no chart** — formatter usava TZ do navegador. Trocado por `Intl.DateTimeFormat({ timeZone })` lendo `app_settings.platform.timezone` (default America/Sao_Paulo).
+- **Taxa > 100%** (ex.: 131,6%) — coortes diferentes para numerador (resolvidas com `last_activity_at`) e denominador (recebidas com `created_at`). Agora ambas usam a mesma coorte; clamp defensivo a 100%.
+- **"Abertas" (agora) = 1.475 com filtro Hoje** — era snapshot global. Agora respeita o filtro.
+- **Ícones "?" em listas top-5** — surgiam no avatar de team quando `getInitials` recebia nome vazio. Substituído por gráfico (sem avatar).
+- **Seletor de conta duplicado** — sidebar + dashboard. Mantido só no sidebar.
+
+### Verificação
+
+- `npm run typecheck` — verde nos arquivos do dashboard.
+- `npm run lint` — verde nos arquivos novos/modificados do dashboard (warnings pre-existentes em outros módulos).
+- `npm test` — 510 testes passam (1 test suite com SIGSEGV ambiental, não relacionada).
+- `npm run build` — produção compila com sucesso, todas as 25 rotas listadas.
+
+---
+
 ## [v0.9.0] 2026-04-30 — Conversas Poderoso
 
 > Redesign completo da tela `/relatorios/conversas`: query builder com **E/OU** em grupos, painel de **Ordenação** em cadeia, **drill-down inline expansível**, **sticky toolbar + header**, status no feminino com cores ajustadas, filtro por **Etiquetas**, fix de bugs críticos de UX e ordenação. Spec/plan em `docs/superpowers/{specs,plans}/2026-04-30-conversas-poderoso-*.md`.
