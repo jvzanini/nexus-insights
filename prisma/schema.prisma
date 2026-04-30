@@ -187,3 +187,127 @@ model LlmUsage {
   @@index([provider, model, createdAt])
   @@map("llm_usage")
 }
+
+model ChatwootFactsDailyByAccount {
+  accountId       Int      @map("account_id")
+  bucketDate      DateTime @map("bucket_date") @db.Date
+  received        Int      @default(0)
+  resolved        Int      @default(0)
+  openAtEod       Int      @default(0) @map("open_at_eod")
+  pendingAtEod    Int      @default(0) @map("pending_at_eod")
+  messagesIn      Int      @default(0) @map("messages_in")
+  messagesOut     Int      @default(0) @map("messages_out")
+  uniqueContacts  Int      @default(0) @map("unique_contacts")
+  frtP50Seconds   Int?     @map("frt_p50_seconds")
+  frtP90Seconds   Int?     @map("frt_p90_seconds")
+  rtP50Seconds    Int?     @map("rt_p50_seconds")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@id([accountId, bucketDate])
+  @@index([accountId, bucketDate(sort: Desc)])
+  @@map("chatwoot_facts_daily_by_account")
+}
+
+model ChatwootFactsDailyByInbox {
+  accountId       Int      @map("account_id")
+  bucketDate      DateTime @map("bucket_date") @db.Date
+  inboxId         Int      @map("inbox_id")
+  received        Int      @default(0)
+  resolved        Int      @default(0)
+  openAtEod       Int      @default(0) @map("open_at_eod")
+  pendingAtEod    Int      @default(0) @map("pending_at_eod")
+  messagesIn      Int      @default(0) @map("messages_in")
+  messagesOut     Int      @default(0) @map("messages_out")
+  uniqueContacts  Int      @default(0) @map("unique_contacts")
+  frtP50Seconds   Int?     @map("frt_p50_seconds")
+  frtP90Seconds   Int?     @map("frt_p90_seconds")
+  rtP50Seconds    Int?     @map("rt_p50_seconds")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@id([accountId, bucketDate, inboxId])
+  @@index([accountId, bucketDate(sort: Desc)])
+  @@index([accountId, inboxId, bucketDate(sort: Desc)])
+  @@map("chatwoot_facts_daily_by_inbox")
+}
+
+model ChatwootFactsDailyByAgent {
+  accountId       Int      @map("account_id")
+  bucketDate      DateTime @map("bucket_date") @db.Date
+  agentId         Int      @map("agent_id")
+  received        Int      @default(0)
+  resolved        Int      @default(0)
+  openAtEod       Int      @default(0) @map("open_at_eod")
+  pendingAtEod    Int      @default(0) @map("pending_at_eod")
+  messagesIn      Int      @default(0) @map("messages_in")
+  messagesOut     Int      @default(0) @map("messages_out")
+  uniqueContacts  Int      @default(0) @map("unique_contacts")
+  frtP50Seconds   Int?     @map("frt_p50_seconds")
+  frtP90Seconds   Int?     @map("frt_p90_seconds")
+  rtP50Seconds    Int?     @map("rt_p50_seconds")
+  isActiveAtEod   Boolean  @default(true) @map("is_active_at_eod")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@id([accountId, bucketDate, agentId])
+  @@index([accountId, bucketDate(sort: Desc)])
+  @@index([accountId, agentId, bucketDate(sort: Desc)])
+  @@map("chatwoot_facts_daily_by_agent")
+}
+
+model ChatwootFactsDailyByTeam {
+  accountId       Int      @map("account_id")
+  bucketDate      DateTime @map("bucket_date") @db.Date
+  // teamId=0 sentinel for 'no team'
+  teamId          Int      @default(0) @map("team_id")
+  received        Int      @default(0)
+  resolved        Int      @default(0)
+  openAtEod       Int      @default(0) @map("open_at_eod")
+  pendingAtEod    Int      @default(0) @map("pending_at_eod")
+  messagesIn      Int      @default(0) @map("messages_in")
+  messagesOut     Int      @default(0) @map("messages_out")
+  uniqueContacts  Int      @default(0) @map("unique_contacts")
+  frtP50Seconds   Int?     @map("frt_p50_seconds")
+  frtP90Seconds   Int?     @map("frt_p90_seconds")
+  rtP50Seconds    Int?     @map("rt_p50_seconds")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@id([accountId, bucketDate, teamId])
+  @@index([accountId, bucketDate(sort: Desc)])
+  @@index([accountId, teamId, bucketDate(sort: Desc)])
+  @@map("chatwoot_facts_daily_by_team")
+}
+
+model ChatwootFactsHourlyByAccount {
+  accountId       Int      @map("account_id")
+  bucketDate      DateTime @map("bucket_date") @db.Date
+  bucketHour      Int      @map("bucket_hour")
+  received        Int      @default(0)
+  resolved        Int      @default(0)
+  messagesIn      Int      @default(0) @map("messages_in")
+  messagesOut     Int      @default(0) @map("messages_out")
+  uniqueContacts  Int      @default(0) @map("unique_contacts")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@id([accountId, bucketDate, bucketHour])
+  @@index([accountId, bucketDate(sort: Desc), bucketHour])
+  @@map("chatwoot_facts_hourly_by_account")
+}
+
+model ChatwootFactsMeta {
+  dimension         String
+  accountId         Int       @map("account_id")
+  lastRefreshAt     DateTime? @map("last_refresh_at")
+  lastAttemptAt     DateTime? @map("last_attempt_at")
+  lastError         String?   @map("last_error") @db.Text
+  oldestBucketDate  DateTime? @map("oldest_bucket_date") @db.Date
+  newestBucketDate  DateTime? @map("newest_bucket_date") @db.Date
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@id([dimension, accountId])
+  @@map("chatwoot_facts_meta")
+}
