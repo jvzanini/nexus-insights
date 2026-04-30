@@ -5,6 +5,7 @@ import {
   deepTestGemini,
   deepTestOpenRouter,
   describeErrorKind,
+  isOpenAIReasoningModel,
 } from "../test-connection";
 
 type FetchMock = jest.Mock<Promise<Response>, [RequestInfo | URL, RequestInit?]>;
@@ -89,6 +90,91 @@ describe("test-connection", () => {
       const r = await deepTestOpenAI("k", "gpt-4o");
       expect(r.reachable).toBe(false);
       expect(r.errorKind).toBe("network");
+    });
+
+    it("modelo gpt-4 envia max_tokens + temperature (legado)", async () => {
+      fetchMock.mockResolvedValueOnce(
+        mockJson({ data: [{ id: "gpt-4o" }] }, 200),
+      );
+      fetchMock.mockResolvedValueOnce(
+        mockJson(
+          {
+            choices: [{ message: { content: "ok" } }],
+            usage: { prompt_tokens: 1, completion_tokens: 1 },
+          },
+          200,
+        ),
+      );
+      await deepTestOpenAI("k", "gpt-4o");
+      const chatCall = fetchMock.mock.calls[1];
+      const body = JSON.parse(String(chatCall[1]?.body));
+      expect(body.max_tokens).toBe(1);
+      expect(body.temperature).toBe(0);
+      expect(body.max_completion_tokens).toBeUndefined();
+    });
+
+    it("modelo gpt-5.1-mini envia max_completion_tokens e omite temperature", async () => {
+      fetchMock.mockResolvedValueOnce(
+        mockJson({ data: [{ id: "gpt-5.1-mini" }] }, 200),
+      );
+      fetchMock.mockResolvedValueOnce(
+        mockJson(
+          {
+            choices: [{ message: { content: "ok" } }],
+            usage: { prompt_tokens: 1, completion_tokens: 1 },
+          },
+          200,
+        ),
+      );
+      await deepTestOpenAI("k", "gpt-5.1-mini");
+      const chatCall = fetchMock.mock.calls[1];
+      const body = JSON.parse(String(chatCall[1]?.body));
+      expect(body.max_completion_tokens).toBe(1);
+      expect(body.max_tokens).toBeUndefined();
+      expect(body.temperature).toBeUndefined();
+    });
+
+    it("modelo o3-mini também é tratado como reasoning", async () => {
+      fetchMock.mockResolvedValueOnce(
+        mockJson({ data: [{ id: "o3-mini" }] }, 200),
+      );
+      fetchMock.mockResolvedValueOnce(
+        mockJson(
+          {
+            choices: [{ message: { content: "ok" } }],
+            usage: { prompt_tokens: 1, completion_tokens: 1 },
+          },
+          200,
+        ),
+      );
+      await deepTestOpenAI("k", "o3-mini");
+      const chatCall = fetchMock.mock.calls[1];
+      const body = JSON.parse(String(chatCall[1]?.body));
+      expect(body.max_completion_tokens).toBe(1);
+      expect(body.temperature).toBeUndefined();
+    });
+  });
+
+  describe("isOpenAIReasoningModel", () => {
+    it.each([
+      ["gpt-5", true],
+      ["gpt-5-mini", true],
+      ["gpt-5.1", true],
+      ["gpt-5.1-mini", true],
+      ["GPT-5.1-MINI", true],
+      ["o1", true],
+      ["o1-mini", true],
+      ["o3", true],
+      ["o3-mini", true],
+      ["o4-mini", true],
+      ["gpt-4o", false],
+      ["gpt-4o-mini", false],
+      ["gpt-4.1-mini", false],
+      ["gpt-4-turbo", false],
+      ["claude-sonnet-4.7", false],
+      ["gemini-2.5-flash", false],
+    ] as const)("%s → %s", (model, expected) => {
+      expect(isOpenAIReasoningModel(model)).toBe(expected);
     });
   });
 

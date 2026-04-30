@@ -42,6 +42,31 @@ export interface DeepTestResult {
 
 const TIMEOUT_MS = 8_000;
 
+/**
+ * Detecta modelos OpenAI da família "reasoning" (GPT-5.x, o1, o3, o4).
+ *
+ * Esses modelos exigem `max_completion_tokens` em vez de `max_tokens` e
+ * **rejeitam** `temperature` diferente do default. Mandar o payload antigo
+ * resulta em HTTP 400 com mensagens como:
+ *
+ *  - "Unsupported parameter: 'max_tokens' is not supported with this model.
+ *     Use 'max_completion_tokens' instead."
+ *  - "Unsupported value: 'temperature' does not support 0 with this model."
+ *
+ * O bug do v0.12.0 (tela "This page couldn't load" ao trocar para
+ * gpt-5.1-mini + Testar/Salvar) é exatamente isso: a Server Action lançava
+ * exceção propagada ao client e derrubava a sessão.
+ */
+export function isOpenAIReasoningModel(model: string): boolean {
+  const m = model.trim().toLowerCase();
+  return (
+    m.startsWith("gpt-5") ||
+    m.startsWith("o1") ||
+    m.startsWith("o3") ||
+    m.startsWith("o4")
+  );
+}
+
 /** Faz `fetch` com AbortController e timeout configurado. */
 async function fetchWithTimeout(
   input: RequestInfo | URL,
@@ -117,6 +142,21 @@ export async function deepTestOpenAI(
   }
 
   // 2. POST /v1/chat/completions minimal — confirma que key+modelo funcionam.
+  // Modelos GPT-5.x e família o-series (o1/o3/o4) só aceitam
+  // `max_completion_tokens` e rejeitam `temperature` != default → ajustamos
+  // o body conforme o modelo para evitar HTTP 400 (bug v0.12.0).
+  const reasoningModel = isOpenAIReasoningModel(model);
+  const chatBody: Record<string, unknown> = {
+    model,
+    messages: [{ role: "user", content: "ok" }],
+  };
+  if (reasoningModel) {
+    chatBody.max_completion_tokens = 1;
+  } else {
+    chatBody.max_tokens = 1;
+    chatBody.temperature = 0;
+  }
+
   let chatRes: Response;
   try {
     chatRes = await fetchWithTimeout(
@@ -127,12 +167,7 @@ export async function deepTestOpenAI(
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          model,
-          messages: [{ role: "user", content: "ok" }],
-          max_tokens: 1,
-          temperature: 0,
-        }),
+        body: JSON.stringify(chatBody),
       },
     );
   } catch (err) {

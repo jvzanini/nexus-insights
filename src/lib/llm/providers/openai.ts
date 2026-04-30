@@ -1,4 +1,5 @@
 import { calculateCost } from "../pricing";
+import { isOpenAIReasoningModel } from "./test-connection";
 import type {
   ChatMessage,
   ChatRequest,
@@ -106,11 +107,21 @@ export class OpenAIClient implements ProviderClient {
     };
     const tools = mapTools(request.tools);
     if (tools) body.tools = tools;
-    if (typeof request.temperature === "number") {
+
+    // Modelos reasoning (GPT-5.x, o1/o3/o4) usam `max_completion_tokens` e
+    // não aceitam `temperature` customizada — mandar o payload antigo gera
+    // HTTP 400 e crasha a Server Action (bug v0.12.0). Para os demais
+    // modelos mantemos o comportamento original (max_tokens + temperature).
+    const reasoning = isOpenAIReasoningModel(this.model);
+    if (typeof request.temperature === "number" && !reasoning) {
       body.temperature = request.temperature;
     }
     if (typeof request.maxTokens === "number") {
-      body.max_tokens = request.maxTokens;
+      if (reasoning) {
+        body.max_completion_tokens = request.maxTokens;
+      } else {
+        body.max_tokens = request.maxTokens;
+      }
     }
 
     const res = await fetch(OPENAI_API_URL, {

@@ -35,6 +35,33 @@ describe("calculateCost", () => {
     const cost = calculateCost("claude-3-5-sonnet-20241022", 1, 1);
     expect(cost).toEqual(Number(cost.toFixed(6)));
   });
+
+  it("calcula custo correto para gpt-5.1-mini (0.25 in / 2.00 out)", () => {
+    // 1M in * 0.25 / 1M = 0.25
+    // 1M out * 2.00 / 1M = 2.00
+    // total = 2.25
+    expect(calculateCost("gpt-5.1-mini", 1_000_000, 1_000_000)).toBeCloseTo(
+      2.25,
+      6,
+    );
+  });
+
+  it("calcula custo correto para gpt-5 (1.25 in / 10.00 out)", () => {
+    expect(calculateCost("gpt-5", 1_000_000, 1_000_000)).toBeCloseTo(11.25, 6);
+  });
+
+  it("calcula custo correto para claude-sonnet-4.7 (3.00 in / 15.00 out)", () => {
+    expect(
+      calculateCost("claude-sonnet-4-7-20250624", 1_000_000, 1_000_000),
+    ).toBeCloseTo(18.0, 6);
+  });
+
+  it("calcula custo correto para gemini-2.5-flash (0.30 in / 2.50 out)", () => {
+    expect(calculateCost("gemini-2.5-flash", 1_000_000, 1_000_000)).toBeCloseTo(
+      2.8,
+      6,
+    );
+  });
 });
 
 describe("PROVIDER_MODELS", () => {

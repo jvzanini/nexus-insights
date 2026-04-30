@@ -102,14 +102,34 @@ async function createTables(): Promise<void> {
   // --- Novo em v0.12.0: novos valores no enum AuditAction ---
   // ADD VALUE IF NOT EXISTS é idempotente; o cast COMMIT do enum acontece
   // automaticamente no transaction-less ALTER TYPE.
-  for (const value of [
-    "credential_created",
-    "credential_updated",
-    "credential_deleted",
-    "credential_tested",
-  ]) {
-    await pgPool.query(
-      `ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS '${value}';`,
+  //
+  // Defensivo (v0.12.1): em alguns ambientes (transaction blocks implícitos,
+  // locks pontuais de migrations concorrentes, enum recém-criado em outra
+  // sessão) o ALTER TYPE pode lançar mesmo com IF NOT EXISTS. Isolamos cada
+  // chamada e o loop inteiro num try/catch — falha aqui não pode bloquear
+  // ensureLlmTables (que segura toda a UI de configurações).
+  try {
+    for (const value of [
+      "credential_created",
+      "credential_updated",
+      "credential_deleted",
+      "credential_tested",
+    ]) {
+      try {
+        await pgPool.query(
+          `ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS '${value}';`,
+        );
+      } catch (innerErr) {
+        console.warn(
+          `[ensureLlmTables] ALTER TYPE AuditAction ADD VALUE '${value}' falhou (ignorado):`,
+          innerErr,
+        );
+      }
+    }
+  } catch (loopErr) {
+    console.warn(
+      "[ensureLlmTables] Loop de ALTER TYPE AuditAction falhou (ignorado):",
+      loopErr,
     );
   }
 }

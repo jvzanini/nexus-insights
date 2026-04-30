@@ -52,6 +52,28 @@ export interface ActionResult<T = undefined> {
   data?: T;
 }
 
+/**
+ * Envelope de proteção (v0.12.1): toda exceção inesperada vira
+ * `{ ok:false, error }` em vez de propagar pro client. Server Actions que
+ * lançam derrubam a sessão Next ("This page couldn't load"); manter o
+ * envelope estável é regra suprema.
+ */
+async function safeAction<T>(
+  fn: () => Promise<ActionResult<T>>,
+  context: string,
+): Promise<ActionResult<T>> {
+  try {
+    return await fn();
+  } catch (err) {
+    console.error(`[llm-config:${context}] erro inesperado:`, err);
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      ok: false,
+      error: `Erro inesperado: ${msg.slice(0, 200)}`,
+    };
+  }
+}
+
 const VALID_PROVIDERS: LlmProvider[] = [
   "openai",
   "anthropic",
@@ -107,51 +129,53 @@ function validateApiKey(apiKey: string | undefined): string | null {
 export async function saveLlmConfig(
   input: SaveLlmConfigInput,
 ): Promise<ActionResult> {
-  const guard = await requireSuperAdmin();
-  if (!guard.ok) return { ok: false, error: guard.error };
+  return safeAction(async () => {
+    const guard = await requireSuperAdmin();
+    if (!guard.ok) return { ok: false, error: guard.error };
 
-  const validationError = validateModelAndProvider(input);
-  if (validationError) return { ok: false, error: validationError };
-  if (!input.credentialId) {
-    return { ok: false, error: "Selecione uma credencial" };
-  }
+    const validationError = validateModelAndProvider(input);
+    if (validationError) return { ok: false, error: validationError };
+    if (!input.credentialId) {
+      return { ok: false, error: "Selecione uma credencial" };
+    }
 
-  await ensureLlmTables();
+    await ensureLlmTables();
 
-  const trimmedModel = input.model.trim();
+    const trimmedModel = input.model.trim();
 
-  const client = await pgPool.connect();
-  try {
-    await client.query("BEGIN");
-    await client.query(
-      `UPDATE llm_configs SET is_active = false WHERE is_active = true`,
-    );
-    await client.query(
-      `INSERT INTO llm_configs (id, provider, model, encrypted_api_key, credential_id, is_active, created_at, updated_at, created_by_id)
-       VALUES (gen_random_uuid(), $1, $2, '', $3, true, NOW(), NOW(), $4)`,
-      [input.provider, trimmedModel, input.credentialId, guard.userId],
-    );
-    await client.query("COMMIT");
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    console.error("[llm-config] Falha ao salvar configuração:", err);
-    return { ok: false, error: "Erro ao salvar configuração no banco" };
-  } finally {
-    client.release();
-  }
+    const client = await pgPool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `UPDATE llm_configs SET is_active = false WHERE is_active = true`,
+      );
+      await client.query(
+        `INSERT INTO llm_configs (id, provider, model, encrypted_api_key, credential_id, is_active, created_at, updated_at, created_by_id)
+         VALUES (gen_random_uuid(), $1, $2, '', $3, true, NOW(), NOW(), $4)`,
+        [input.provider, trimmedModel, input.credentialId, guard.userId],
+      );
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      console.error("[llm-config] Falha ao salvar configuração:", err);
+      return { ok: false, error: "Erro ao salvar configuração no banco" };
+    } finally {
+      client.release();
+    }
 
-  await logAudit({
-    userId: guard.userId,
-    action: "setting_updated",
-    targetType: "llm_config",
-    details: {
-      provider: input.provider,
-      model: trimmedModel,
-      credentialId: input.credentialId,
-    },
-  });
+    await logAudit({
+      userId: guard.userId,
+      action: "setting_updated",
+      targetType: "llm_config",
+      details: {
+        provider: input.provider,
+        model: trimmedModel,
+        credentialId: input.credentialId,
+      },
+    });
 
-  return { ok: true };
+    return { ok: true };
+  }, "saveLlmConfig");
 }
 
 export interface TestLlmConnectionResult {
@@ -174,37 +198,39 @@ export interface TestLlmConnectionResult {
 export async function testLlmConnection(
   input: TestLlmConnectionInput,
 ): Promise<ActionResult<TestLlmConnectionResult>> {
-  const guard = await requireSuperAdmin();
-  if (!guard.ok) return { ok: false, error: guard.error };
+  return safeAction(async () => {
+    const guard = await requireSuperAdmin();
+    if (!guard.ok) return { ok: false, error: guard.error };
 
-  const validationError = validateModelAndProvider(input);
-  if (validationError) return { ok: false, error: validationError };
-  const apiKeyError = validateApiKey(input.apiKey);
-  if (apiKeyError) return { ok: false, error: apiKeyError };
+    const validationError = validateModelAndProvider(input);
+    if (validationError) return { ok: false, error: validationError };
+    const apiKeyError = validateApiKey(input.apiKey);
+    if (apiKeyError) return { ok: false, error: apiKeyError };
 
-  const trimmedModel = input.model.trim();
-  const trimmedKey = input.apiKey.trim();
+    const trimmedModel = input.model.trim();
+    const trimmedKey = input.apiKey.trim();
 
-  const result = await deepTest(input.provider, trimmedKey, trimmedModel);
+    const result = await deepTest(input.provider, trimmedKey, trimmedModel);
 
-  // Mensagem amigável a partir do errorKind (ou mantém a original do provider).
-  const friendly =
-    result.errorKind && result.errorKind !== "other"
-      ? describeErrorKind(result.errorKind, result.message, trimmedModel)
-      : result.message;
+    // Mensagem amigável a partir do errorKind (ou mantém a original do provider).
+    const friendly =
+      result.errorKind && result.errorKind !== "other"
+        ? describeErrorKind(result.errorKind, result.message, trimmedModel)
+        : result.message;
 
-  return {
-    ok: true,
-    data: {
-      reachable: result.reachable,
-      message: friendly?.slice(0, 240),
-      errorKind: result.errorKind,
-      creditOk: result.creditOk,
-      creditRemainingUsd: result.creditRemainingUsd,
-      tokensInput: result.tokensInput,
-      tokensOutput: result.tokensOutput,
-    },
-  };
+    return {
+      ok: true,
+      data: {
+        reachable: result.reachable,
+        message: friendly?.slice(0, 240),
+        errorKind: result.errorKind,
+        creditOk: result.creditOk,
+        creditRemainingUsd: result.creditRemainingUsd,
+        tokensInput: result.tokensInput,
+        tokensOutput: result.tokensOutput,
+      },
+    };
+  }, "testLlmConnection");
 }
 
 export async function getActiveLlmConfigSummary(): Promise<
@@ -214,11 +240,13 @@ export async function getActiveLlmConfigSummary(): Promise<
     apiKeyMasked: string;
   } | null>
 > {
-  const guard = await requireSuperAdmin();
-  if (!guard.ok) return { ok: false, error: guard.error };
+  return safeAction(async () => {
+    const guard = await requireSuperAdmin();
+    if (!guard.ok) return { ok: false, error: guard.error };
 
-  const summary = await getPublicActiveLlmConfig();
-  return { ok: true, data: summary };
+    const summary = await getPublicActiveLlmConfig();
+    return { ok: true, data: summary };
+  }, "getActiveLlmConfigSummary");
 }
 
 /**
@@ -228,32 +256,34 @@ export async function getActiveLlmConfigSummary(): Promise<
 export async function setNexBubbleEnabled(
   enabled: boolean,
 ): Promise<ActionResult> {
-  const guard = await requireSuperAdmin();
-  if (!guard.ok) return { ok: false, error: guard.error };
+  return safeAction(async () => {
+    const guard = await requireSuperAdmin();
+    if (!guard.ok) return { ok: false, error: guard.error };
 
-  try {
-    await pgPool.query(
-      `INSERT INTO app_settings (key, value, category, updated_at)
-       VALUES ('nex.bubble_enabled', $1::jsonb, 'platform', NOW())
-       ON CONFLICT (key) DO UPDATE
-         SET value = $1::jsonb, updated_at = NOW()`,
-      [JSON.stringify(enabled)],
-    );
-  } catch (err) {
-    console.error("[setNexBubbleEnabled] Falha ao persistir setting:", err);
-    return { ok: false, error: "Erro ao salvar configuração" };
-  }
+    try {
+      await pgPool.query(
+        `INSERT INTO app_settings (key, value, category, updated_at)
+         VALUES ('nex.bubble_enabled', $1::jsonb, 'platform', NOW())
+         ON CONFLICT (key) DO UPDATE
+           SET value = $1::jsonb, updated_at = NOW()`,
+        [JSON.stringify(enabled)],
+      );
+    } catch (err) {
+      console.error("[setNexBubbleEnabled] Falha ao persistir setting:", err);
+      return { ok: false, error: "Erro ao salvar configuração" };
+    }
 
-  invalidateNexBubbleEnabled();
-  revalidatePath("/", "layout");
+    invalidateNexBubbleEnabled();
+    revalidatePath("/", "layout");
 
-  await logAudit({
-    userId: guard.userId,
-    action: "setting_updated",
-    targetType: "platform_settings",
-    targetId: "nex_bubble_enabled",
-    details: { enabled },
-  });
+    await logAudit({
+      userId: guard.userId,
+      action: "setting_updated",
+      targetType: "platform_settings",
+      targetId: "nex_bubble_enabled",
+      details: { enabled },
+    });
 
-  return { ok: true };
+    return { ok: true };
+  }, "setNexBubbleEnabled");
 }
