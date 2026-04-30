@@ -16,6 +16,23 @@
 
 Status por dimensão é gravado em `chatwoot_facts_meta` (campos `last_refresh_at`, `last_attempt_at`, `last_error`, `oldest_bucket_date`, `newest_bucket_date`). Após sucesso, o worker publica `{ type: "facts:refreshed", dimension, accountId }` em Redis Pub/Sub no canal `nexus-insights:realtime` — o front-end escuta via `/api/events` e atualiza a UI.
 
+## Pré-requisito de produção (uma vez): comando do worker
+
+> **IMPORTANTE — leia antes do primeiro deploy da v0.8.0.**
+
+A imagem agora copia o source do worker para `/app/worker/index.ts` e usa `tsx` (presente nas devDependencies que o Dockerfile instala) para executar TypeScript em runtime. O `docker/entrypoint.sh` detecta automaticamente quando o cmd contém `tsx` ou `worker` e **pula migrations/seed** (essas são responsabilidade exclusiva do container `app`, evitando race condition).
+
+Se a stack de produção (no Portainer) tem o service `worker` com command apontando para um caminho compilado antigo (ex.: `["node", "/app/.next/server/chunks/worker.js"]` ou `["node", "/app/dist/worker/index.js"]`), **atualize uma vez** no Portainer:
+
+1. Portainer → Stacks → `nexus-insights` → "Editor".
+2. No service `worker`, mudar `command:` para:
+   ```yaml
+   command: ["npx", "tsx", "/app/worker/index.ts"]
+   ```
+3. "Update the stack" → "Re-pull image and redeploy".
+
+Sem essa mudança, o worker não inicia e os jobs cron nunca rodam. `/configuracoes/jobs` mostra "Sem dados de pré-agregação" indefinidamente.
+
 ## Primeiro deploy
 
 Após a stack subir com a v0.8.0:

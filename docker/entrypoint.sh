@@ -1,8 +1,19 @@
 #!/bin/sh
 set -e
 
-echo "[entrypoint] Aplicando migrations…"
 cd /app
+
+# Detecta se este container é o worker — neste caso pula migrations/seed
+# (essas tarefas são responsabilidade do container `app`, evitando race
+# condition quando ambos sobem juntos).
+case "$1" in
+  *worker*|*tsx*)
+    echo "[entrypoint] Modo WORKER detectado (cmd='$@'). Pulando migrations/seed."
+    exec "$@"
+    ;;
+esac
+
+echo "[entrypoint] Aplicando migrations…"
 npx prisma migrate deploy --config=./prisma.config.js || {
   echo "[entrypoint] FALHA ao rodar migrations"
   exit 1
