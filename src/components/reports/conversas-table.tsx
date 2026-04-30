@@ -218,7 +218,7 @@ const COLUMNS: ColumnDef[] = [
     className: "w-16",
     compareFn: (a, b) => a.display_id - b.display_id,
     render: (row) => (
-      <span className="font-mono text-xs text-muted-foreground tabular-nums">
+      <span className="font-mono text-[13px] text-muted-foreground tabular-nums">
         #{row.display_id}
       </span>
     ),
@@ -254,7 +254,7 @@ const COLUMNS: ColumnDef[] = [
     compareFn: (a, b) =>
       nullableStringCompare(a.contact.phone_number, b.contact.phone_number),
     render: (row) => (
-      <span className="whitespace-nowrap text-xs text-muted-foreground tabular-nums">
+      <span className="whitespace-nowrap text-[13px] text-muted-foreground tabular-nums">
         {getPhoneDisplay(row.contact.phone_number)}
       </span>
     ),
@@ -272,7 +272,7 @@ const COLUMNS: ColumnDef[] = [
         getDocumentDisplay(b.contact),
       ),
     render: (row) => (
-      <span className="whitespace-nowrap font-mono text-xs text-muted-foreground tabular-nums">
+      <span className="whitespace-nowrap font-mono text-[13px] text-muted-foreground tabular-nums">
         {getDocumentDisplay(row.contact)}
       </span>
     ),
@@ -379,7 +379,7 @@ const COLUMNS: ColumnDef[] = [
     className: "min-w-[160px]",
     compareFn: (a, b) => nullableDateCompare(a.created_at, b.created_at),
     render: (row) => (
-      <span className="whitespace-nowrap text-xs text-muted-foreground tabular-nums">
+      <span className="whitespace-nowrap text-[13px] text-muted-foreground tabular-nums">
         {formatDateTime(row.created_at)}
       </span>
     ),
@@ -394,7 +394,7 @@ const COLUMNS: ColumnDef[] = [
     compareFn: (a, b) =>
       nullableDateCompare(a.last_activity_at, b.last_activity_at),
     render: (row) => (
-      <span className="whitespace-nowrap text-xs text-muted-foreground tabular-nums">
+      <span className="whitespace-nowrap text-[13px] text-muted-foreground tabular-nums">
         {formatDateTime(row.last_activity_at)}
       </span>
     ),
@@ -416,7 +416,7 @@ const COLUMNS: ColumnDef[] = [
       return (
         <span
           className={cn(
-            "whitespace-nowrap text-xs font-semibold tabular-nums",
+            "whitespace-nowrap text-[13px] font-semibold tabular-nums",
             durationTone(row.waiting_seconds),
           )}
         >
@@ -441,7 +441,7 @@ const COLUMNS: ColumnDef[] = [
       return (
         <span
           className={cn(
-            "whitespace-nowrap text-xs font-semibold tabular-nums",
+            "whitespace-nowrap text-[13px] font-semibold tabular-nums",
             durationTone(row.open_seconds),
           )}
         >
@@ -725,7 +725,7 @@ export function ConversasTable({
             </Button>
           ) : (
             <span
-              className="hidden items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground/70 sm:inline-flex"
+              className="hidden items-center gap-1 text-[11px] uppercase tracking-wide text-muted-foreground/70 sm:inline-flex"
               title="Click no cabeçalho ordena · Shift+click adiciona critério"
             >
               Ordenar: click no cabeçalho
@@ -817,7 +817,7 @@ export function ConversasTable({
                     key={col.key}
                     aria-sort={ariaSort}
                     className={cn(
-                      "h-11 text-xs uppercase tracking-wide text-muted-foreground",
+                      "h-11 text-[13px] uppercase tracking-wide text-muted-foreground",
                       col.className,
                       col.align === "right" && "text-right",
                       col.align === "center" && "text-center",
@@ -829,7 +829,7 @@ export function ConversasTable({
                         onClick={onHeaderClick(col.key, col.sortable)}
                         onKeyDown={onHeaderKey(col.key, col.sortable)}
                         className={cn(
-                          "group/sort inline-flex w-full items-center gap-1.5 rounded-md px-1 -mx-1 py-1 text-xs font-semibold uppercase tracking-wide transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50 hover:text-primary",
+                          "group/sort inline-flex w-full items-center gap-1.5 rounded-md px-1 -mx-1 py-1 text-[13px] font-semibold uppercase tracking-wide transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50 hover:text-primary",
                           col.align === "right" && "justify-end text-right",
                           col.align === "center" && "justify-center",
                         )}
@@ -923,7 +923,7 @@ export function ConversasTable({
                 <Field label="Departamento" value={teamName} />
                 <Field label="Atendente" value={assigneeName} />
                 <div className="flex flex-col gap-0.5">
-                  <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
                     Prioridade
                   </dt>
                   <dd>
@@ -932,12 +932,12 @@ export function ConversasTable({
                 </div>
                 {row.waiting_seconds != null ? (
                   <div className="flex flex-col gap-0.5">
-                    <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
                       Sem resposta há
                     </dt>
                     <dd
                       className={cn(
-                        "text-xs font-semibold tabular-nums",
+                        "text-[13px] font-semibold tabular-nums",
                         durationTone(row.waiting_seconds),
                       )}
                     >
@@ -947,12 +947,12 @@ export function ConversasTable({
                 ) : null}
                 {row.open_seconds != null ? (
                   <div className="flex flex-col gap-0.5">
-                    <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
                       Aberta há
                     </dt>
                     <dd
                       className={cn(
-                        "text-xs font-semibold tabular-nums",
+                        "text-[13px] font-semibold tabular-nums",
                         durationTone(row.open_seconds),
                       )}
                     >
@@ -1013,7 +1013,7 @@ interface FieldProps {
 function Field({ label, value, mono }: FieldProps) {
   return (
     <div className="flex flex-col gap-0.5 min-w-0">
-      <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+      <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
         {label}
       </dt>
       <dd

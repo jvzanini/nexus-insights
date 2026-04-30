@@ -218,6 +218,24 @@
   height: 10px !important;
 }
 
+/* ===== TIPOGRAFIA BASE + Z-INDEX TOKENS =====
+ * Bump discreto de 16px → 16.25px (≈+1.5%) para melhorar legibilidade da
+ * tabela de conversas sem alterar layouts existentes. Em telas ≥ 1280px sobe
+ * para 16.5px. Tokens de z-index padronizam camadas (toolbar < table thead <
+ * modal < toast).
+ */
+:root {
+  --base-font-size: 16.25px;
+  --z-toolbar: 30;
+  --z-table-thead: 20;
+  --z-modal: 100;
+  --z-toast: 1000;
+}
+@media (min-width: 1280px) {
+  :root { --base-font-size: 16.5px; }
+}
+html { font-size: var(--base-font-size); }
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
