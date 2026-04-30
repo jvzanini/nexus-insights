@@ -42,4 +42,13 @@ describe("FiltersDialog (modo simples)", () => {
     expect(defaultProps.onOpenChange).toHaveBeenCalledWith(false);
     expect(defaultProps.onApply).not.toHaveBeenCalled();
   });
+
+  test("alternar para tab Avançado mostra o query builder", () => {
+    render(<FiltersDialog {...defaultProps} />);
+    fireEvent.click(screen.getByRole("tab", { name: /avançado/i }));
+    // O ConditionalFilters renderiza o botão "Adicionar condição".
+    expect(
+      screen.getByRole("button", { name: /Adicionar condição/i }),
+    ).toBeInTheDocument();
+  });
 });

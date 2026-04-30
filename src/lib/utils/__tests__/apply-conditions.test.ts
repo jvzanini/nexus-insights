@@ -183,6 +183,25 @@ describe("applyConditions", () => {
     expect(applyConditions(ROWS, group)).toEqual([]);
   });
 
+  it("operador contains_all com array de objetos no fieldValue", () => {
+    interface RowWithLabels {
+      id: number;
+      labels: { id: number; name: string }[];
+    }
+    const rows: RowWithLabels[] = [
+      { id: 1, labels: [{ id: 5, name: "VIP" }, { id: 7, name: "Urgente" }] },
+      { id: 2, labels: [{ id: 5, name: "VIP" }] },
+      { id: 3, labels: [] },
+    ];
+    const group: ConditionGroup = {
+      combinator: "AND",
+      conditions: [
+        { field: "labels", operator: "contains_all", value: [5, 7] },
+      ],
+    };
+    expect(applyConditions(rows, group).map((r) => r.id)).toEqual([1]);
+  });
+
   it("grupo aninhado vazio é considerado true (passa)", () => {
     const group: ConditionGroup = {
       combinator: "AND",

@@ -19,7 +19,8 @@ export type ConditionOperator =
   | "contains"
   | "starts_with"
   | "in"
-  | "not_in";
+  | "not_in"
+  | "contains_all";
 
 export interface Condition {
   field: string;
@@ -119,6 +120,23 @@ function evaluateCondition<T>(row: T, cond: Condition): boolean {
     case "not_in": {
       if (!Array.isArray(target)) return true;
       return !target.some((t) => t === fieldValue || String(t) === String(fieldValue));
+    }
+    case "contains_all": {
+      // Para campos que carregam arrays (ex.: labels[]). Cada item do target deve
+      // estar presente no fieldValue. Itens objeto são reduzidos a id|name|self.
+      if (!Array.isArray(target) || !Array.isArray(fieldValue)) return false;
+      const values = (fieldValue as Array<{ id?: number | string; name?: string } | unknown>).map(
+        (v) => {
+          if (v && typeof v === "object") {
+            const obj = v as { id?: number | string; name?: string };
+            return obj.id ?? obj.name ?? v;
+          }
+          return v;
+        },
+      );
+      return target.every((t) =>
+        values.some((v) => v === t || String(v) === String(t)),
+      );
     }
     default:
       return false;

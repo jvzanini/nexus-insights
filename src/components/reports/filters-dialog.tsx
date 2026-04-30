@@ -26,6 +26,16 @@ import { Button } from "@/components/ui/button";
 import { CollapsibleSection } from "@/components/ui/collapsible-section";
 import { MultiSelectCheckbox } from "@/components/ui/multi-select-checkbox";
 import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
+  ConditionalFilters,
+  type ConditionFieldDef,
+} from "@/components/ui/conditional-filters";
+import {
   EMPTY_FILTER_STATE,
   diffFilterStates,
   isFilterStateEqual,
@@ -47,6 +57,90 @@ const PRIORITY_OPTIONS: MetaItem[] = [
   { id: 2, name: "Média" },
   { id: 3, name: "Baixa" },
 ];
+
+// Monta a lista de campos do query builder com base nos metadados disponíveis.
+// Cada campo declara seu tipo (string|number|select|multi_select|date) que dita
+// quais operadores ficam disponíveis no <ConditionalFilters>.
+function buildFields({
+  inboxes,
+  teams,
+  assignees,
+  labels,
+}: {
+  inboxes: MetaItem[];
+  teams: MetaItem[];
+  assignees: MetaItem[];
+  labels: MetaItem[];
+}): ConditionFieldDef[] {
+  return [
+    {
+      key: "inbox.id",
+      label: "Caixa de entrada",
+      type: "multi_select",
+      options: inboxes.map((i) => ({ value: i.id, label: i.name })),
+    },
+    {
+      key: "team.id",
+      label: "Departamento",
+      type: "multi_select",
+      options: teams.map((t) => ({ value: t.id, label: t.name })),
+    },
+    {
+      key: "assignee.id",
+      label: "Atendente",
+      type: "multi_select",
+      options: assignees.map((a) => ({ value: a.id, label: a.name })),
+    },
+    {
+      key: "status",
+      label: "Status",
+      type: "select",
+      options: [
+        { value: 0, label: "Aberta" },
+        { value: 1, label: "Resolvida" },
+        { value: 2, label: "Pendente" },
+        { value: 3, label: "Adiada" },
+      ],
+    },
+    {
+      key: "priority",
+      label: "Prioridade",
+      type: "select",
+      options: [
+        { value: 0, label: "Urgente" },
+        { value: 1, label: "Alta" },
+        { value: 2, label: "Média" },
+        { value: 3, label: "Baixa" },
+      ],
+    },
+    {
+      key: "labels",
+      label: "Etiquetas",
+      type: "multi_select",
+      options: labels.map((l) => ({ value: l.id, label: l.name })),
+    },
+    {
+      key: "waiting_seconds",
+      label: "Tempo sem resposta (s)",
+      type: "number",
+    },
+    {
+      key: "open_seconds",
+      label: "Tempo aberta (s)",
+      type: "number",
+    },
+    {
+      key: "contact.name",
+      label: "Nome do contato",
+      type: "string",
+    },
+    {
+      key: "contact.phone_number",
+      label: "WhatsApp",
+      type: "string",
+    },
+  ];
+}
 
 interface Props {
   open: boolean;
@@ -94,7 +188,17 @@ export function FiltersDialog({
           Refine a lista de conversas combinando filtros nativos.
         </DialogDescription>
 
-        <div className="space-y-3 py-4">
+        <Tabs
+          value={draft.mode}
+          onValueChange={(v) => update("mode", v as FilterState["mode"])}
+          className="py-4"
+        >
+          <TabsList>
+            <TabsTrigger value="simple">Simples</TabsTrigger>
+            <TabsTrigger value="advanced">Avançado</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="simple" className="mt-3 space-y-3">
           <CollapsibleSection
             title="Caixa de entrada"
             count={draft.inboxIds.length}
@@ -197,7 +301,16 @@ export function FiltersDialog({
               inline
             />
           </CollapsibleSection>
-        </div>
+          </TabsContent>
+
+          <TabsContent value="advanced" className="mt-3">
+            <ConditionalFilters
+              fields={buildFields({ inboxes, teams, assignees, labels })}
+              initial={draft.conditionGroup}
+              onChange={(g) => update("conditionGroup", g)}
+            />
+          </TabsContent>
+        </Tabs>
 
         <div className="flex items-center justify-between border-t border-border pt-4">
           <Button
