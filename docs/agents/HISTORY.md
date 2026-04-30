@@ -62,6 +62,8 @@ YYYY-MM-DD HH:MM | agent=<agent-id> | commit=<sha7> | scope=<feat|fix|docs|infra
 2026-04-30 20:15 | agent=claude-pageheader-hotfix | observation=session-end | summary=Sessão encerrada. Active file deletado. v0.11.1 LIVE em produção.
 2026-04-30 21:30 | agent=claude-credenciais-llm | commit=8d89bdb | scope=feat | summary=T7 server actions de credenciais (list/create/update/delete/test) + saveLlmConfig usa credentialId. Enum AuditAction ganha credential_*. Tests novos: 14 PASS. llm-config-card.tsx tem type-error pendente até T10.
 2026-04-30 22:10 | agent=claude-credenciais-llm | commit=7fb6736 | scope=release | summary=Release v0.12.0 — Agente Nex: credenciais gerenciáveis (T1-T11) + custo BRL/precisão no consumo (T12) + rename "Agente IA" → "Agente Nex" (T9). 14 commits, 73 suites / 612 tests PASS, typecheck 0 erros, build verde. CHANGELOG/STATUS/runbook atualizados, package.json bumpado.
+2026-04-30 22:18 | agent=claude-credenciais-llm | run=25190834757,25191049105 | scope=infra | summary=Build v0.12.0 success (5m15s) + portainer-fix atualizou APP_VERSION. /api/health version=v0.12.0 status=ok db<1s redis<10ms.
+2026-04-30 22:20 | agent=claude-credenciais-llm | observation=session-end | summary=Sessão encerrada. v0.12.0 LIVE em produção. Active file deletado.
 ```
 
 > Entradas anteriores aos workflows do dia 2026-04-30 estão capturadas no CHANGELOG.md (não vamos retroagir HISTORY pra trás disso para evitar trabalho inútil).
