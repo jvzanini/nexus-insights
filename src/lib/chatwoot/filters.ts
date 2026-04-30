@@ -3,13 +3,15 @@
  *
  * Toda query parte deste builder para garantir:
  *  - Scope obrigatório por `account_id` (multi-tenant guard).
- *  - Exclusão default da inbox `Matrix IA` (id=31), salvo override.
+ *  - Exclusão default da inbox `Matrix IA` (id=MATRIX_IA_INBOX_ID), salvo override.
  *  - Filtros opcionais cruzados (estado/inbox, departamento/team, atendente, status, prioridade, label, período).
  *  - Uso 100% parametrizado para evitar SQL injection.
  *
  * Os JOINs mais pesados (taggings) usam EXISTS para evitar full-scan em
  * `cached_label_list` em conversations.
  */
+
+import { MATRIX_IA_INBOX_ID } from "@/lib/constants/matrix-ia";
 
 export interface ReportFilters {
   inboxIds?: number[];
@@ -46,7 +48,7 @@ export function buildBaseFilter(
   params.push(accountId);
 
   if (filters.excludeMatrixIA !== false) {
-    parts.push(`c.inbox_id <> 31`);
+    parts.push(`c.inbox_id <> ${MATRIX_IA_INBOX_ID}`);
   }
 
   if (filters.inboxIds?.length) {
