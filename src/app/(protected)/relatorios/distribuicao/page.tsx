@@ -15,6 +15,8 @@ import {
   ChartSkeleton,
   TableSkeleton,
 } from "@/components/ui/skeleton";
+import { TourButton } from "@/components/tour/tour-button";
+import { distribuicaoTour } from "@/lib/tours/distribuicao-tour";
 import { getCurrentUser } from "@/lib/auth";
 import { getActiveAccountId } from "@/lib/reports/active-account";
 import { parseReportSearchParams } from "@/lib/reports/parse-search-params";
@@ -60,38 +62,48 @@ export default async function Page({ searchParams }: PageProps) {
         icon={Map}
         title="Distribuição"
         subtitle="Estados, inboxes e horários de pico"
+        actions={<TourButton tour={distribuicaoTour} />}
       />
 
       <FilterTransitionProvider>
-        <div className="mb-6 flex items-center gap-2">
+        <div
+          data-tour="dist-period"
+          className="mb-6 flex items-center gap-2"
+        >
           <PeriodSelectorUrl value={period} accountId={accountId} />
           <RefreshButton />
         </div>
 
         <ContentLoadingWrapper>
-          <TabsShell
-            activeValue={tab ?? "estado"}
-            tabs={[
-              {
-                value: "estado",
-                label: "Por estado",
-                content: (
-                  <Suspense fallback={<EstadoFallback />}>
-                    <PorEstadoContent {...contentProps} />
-                  </Suspense>
-                ),
-              },
-              {
-                value: "horario",
-                label: "Heatmap horário",
-                content: (
-                  <Suspense fallback={<HorarioFallback />}>
-                    <VolumetriaContent {...contentProps} />
-                  </Suspense>
-                ),
-              },
-            ]}
-          />
+          <div data-tour="dist-tabs">
+            <TabsShell
+              activeValue={tab ?? "estado"}
+              tabs={[
+                {
+                  value: "estado",
+                  label: "Por estado",
+                  content: (
+                    <div data-tour="dist-tab-estado">
+                      <Suspense fallback={<EstadoFallback />}>
+                        <PorEstadoContent {...contentProps} />
+                      </Suspense>
+                    </div>
+                  ),
+                },
+                {
+                  value: "horario",
+                  label: "Heatmap horário",
+                  content: (
+                    <div data-tour="dist-tab-horario">
+                      <Suspense fallback={<HorarioFallback />}>
+                        <VolumetriaContent {...contentProps} />
+                      </Suspense>
+                    </div>
+                  ),
+                },
+              ]}
+            />
+          </div>
         </ContentLoadingWrapper>
       </FilterTransitionProvider>
     </PageShell>

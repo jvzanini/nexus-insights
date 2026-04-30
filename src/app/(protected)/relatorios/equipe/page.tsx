@@ -16,6 +16,8 @@ import {
   CardSkeleton,
   TableSkeleton,
 } from "@/components/ui/skeleton";
+import { TourButton } from "@/components/tour/tour-button";
+import { equipeTour } from "@/lib/tours/equipe-tour";
 import { getCurrentUser } from "@/lib/auth";
 import { getActiveAccountId } from "@/lib/reports/active-account";
 import { parseReportSearchParams } from "@/lib/reports/parse-search-params";
@@ -62,38 +64,48 @@ export default async function Page({ searchParams }: PageProps) {
         icon={UsersRound}
         title="Equipe"
         subtitle="Ranking de atendentes e departamentos"
+        actions={<TourButton tour={equipeTour} />}
       />
 
       <FilterTransitionProvider>
-        <div className="mb-6 flex items-center gap-2">
+        <div
+          data-tour="equipe-period"
+          className="mb-6 flex items-center gap-2"
+        >
           <PeriodSelectorUrl value={period} accountId={accountId} />
           <RefreshButton />
         </div>
 
         <ContentLoadingWrapper>
-          <TabsShell
-            activeValue={tab ?? "ranking"}
-            tabs={[
-              {
-                value: "ranking",
-                label: "Ranking de atendentes",
-                content: (
-                  <Suspense fallback={<RankingFallback />}>
-                    <RankingAtendentesContent {...contentProps} />
-                  </Suspense>
-                ),
-              },
-              {
-                value: "departamento",
-                label: "Por departamento",
-                content: (
-                  <Suspense fallback={<DepartamentoFallback />}>
-                    <PorDepartamentoContent {...contentProps} />
-                  </Suspense>
-                ),
-              },
-            ]}
-          />
+          <div data-tour="equipe-tabs">
+            <TabsShell
+              activeValue={tab ?? "ranking"}
+              tabs={[
+                {
+                  value: "ranking",
+                  label: "Ranking de atendentes",
+                  content: (
+                    <div data-tour="equipe-tab-ranking">
+                      <Suspense fallback={<RankingFallback />}>
+                        <RankingAtendentesContent {...contentProps} />
+                      </Suspense>
+                    </div>
+                  ),
+                },
+                {
+                  value: "departamento",
+                  label: "Por departamento",
+                  content: (
+                    <div data-tour="equipe-tab-departamento">
+                      <Suspense fallback={<DepartamentoFallback />}>
+                        <PorDepartamentoContent {...contentProps} />
+                      </Suspense>
+                    </div>
+                  ),
+                },
+              ]}
+            />
+          </div>
         </ContentLoadingWrapper>
       </FilterTransitionProvider>
     </PageShell>

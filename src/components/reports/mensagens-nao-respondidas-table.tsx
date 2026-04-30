@@ -96,10 +96,11 @@ export function MensagensNaoRespondidasTable({ rows, accountId }: Props) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((row) => {
+            {rows.map((row, idx) => {
               const phone = getPhone(row.contact_phone);
               const snippet = getSnippet(row.snippet);
               const tone = waitingTone(row.waiting_seconds);
+              const isFirst = idx === 0;
               return (
                 <TableRow key={row.id} className="hover:bg-muted/30">
                   <TableCell className="font-mono text-xs text-muted-foreground">
@@ -140,7 +141,7 @@ export function MensagensNaoRespondidasTable({ rows, accountId }: Props) {
                       {row.assignee_name ?? "—"}
                     </span>
                   </TableCell>
-                  <TableCell>
+                  <TableCell {...(isFirst ? { "data-tour": "mnr-time" } : {})}>
                     <span
                       className={cn(
                         "whitespace-nowrap text-xs font-semibold tabular-nums",
@@ -158,7 +159,10 @@ export function MensagensNaoRespondidasTable({ rows, accountId }: Props) {
                       {snippet}
                     </span>
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell
+                    className="text-right"
+                    {...(isFirst ? { "data-tour": "mnr-open" } : {})}
+                  >
                     <OpenInChatwoot
                       accountId={accountId}
                       displayId={row.display_id}
@@ -173,10 +177,11 @@ export function MensagensNaoRespondidasTable({ rows, accountId }: Props) {
 
       {/* Mobile / tablet: cards */}
       <ul className="lg:hidden divide-y divide-border">
-        {rows.map((row) => {
+        {rows.map((row, idx) => {
           const phone = getPhone(row.contact_phone);
           const snippet = getSnippet(row.snippet);
           const tone = waitingTone(row.waiting_seconds);
+          const isFirst = idx === 0;
           return (
             <li key={row.id} className="p-4 hover:bg-muted/30 transition-colors">
               <div className="flex items-start justify-between gap-3">
@@ -189,6 +194,7 @@ export function MensagensNaoRespondidasTable({ rows, accountId }: Props) {
                   </h3>
                 </div>
                 <span
+                  {...(isFirst ? { "data-tour": "mnr-time" } : {})}
                   className={cn(
                     "shrink-0 rounded-full bg-muted/40 px-2 py-0.5 text-[11px] font-semibold tabular-nums",
                     tone,
@@ -212,7 +218,10 @@ export function MensagensNaoRespondidasTable({ rows, accountId }: Props) {
                 {snippet}
               </p>
 
-              <div className="mt-3 flex justify-end">
+              <div
+                className="mt-3 flex justify-end"
+                {...(isFirst ? { "data-tour": "mnr-open" } : {})}
+              >
                 <OpenInChatwoot
                   accountId={accountId}
                   displayId={row.display_id}

@@ -15,6 +15,8 @@ import {
   ChartSkeleton,
   CardSkeleton,
 } from "@/components/ui/skeleton";
+import { TourButton } from "@/components/tour/tour-button";
+import { origemIaTour } from "@/lib/tours/origem-ia-tour";
 import { getCurrentUser } from "@/lib/auth";
 import { getActiveAccountId } from "@/lib/reports/active-account";
 import { parseReportSearchParams } from "@/lib/reports/parse-search-params";
@@ -80,9 +82,11 @@ export default async function Page({ searchParams }: PageProps) {
       value: "leads",
       label: "Leads recebidos",
       content: (
-        <Suspense fallback={<LeadsFallback />}>
-          <LeadsRecebidosContent {...contentProps} granularity={granularity} />
-        </Suspense>
+        <div data-tour="origem-tab-leads">
+          <Suspense fallback={<LeadsFallback />}>
+            <LeadsRecebidosContent {...contentProps} granularity={granularity} />
+          </Suspense>
+        </div>
       ),
     },
   ];
@@ -92,12 +96,14 @@ export default async function Page({ searchParams }: PageProps) {
       value: "matrix",
       label: "Matrix IA",
       content: (
-        <Suspense fallback={<MatrixFallback />}>
-          <MatrixIaContent
-            {...contentProps}
-            showSuperAdminNote={user.platformRole === "super_admin"}
-          />
-        </Suspense>
+        <div data-tour="origem-tab-matrix">
+          <Suspense fallback={<MatrixFallback />}>
+            <MatrixIaContent
+              {...contentProps}
+              showSuperAdminNote={user.platformRole === "super_admin"}
+            />
+          </Suspense>
+        </div>
       ),
     });
   }
@@ -108,16 +114,22 @@ export default async function Page({ searchParams }: PageProps) {
         icon={Sparkles}
         title="Origem & IA"
         subtitle="Leads recebidos e canal automatizado Matrix IA"
+        actions={<TourButton tour={origemIaTour} />}
       />
 
       <FilterTransitionProvider>
-        <div className="mb-6 flex items-center gap-2">
+        <div
+          data-tour="origem-period"
+          className="mb-6 flex items-center gap-2"
+        >
           <PeriodSelectorUrl value={period} accountId={accountId} />
           <RefreshButton />
         </div>
 
         <ContentLoadingWrapper>
-          <TabsShell activeValue={tab ?? "leads"} tabs={tabs} />
+          <div data-tour="origem-tabs">
+            <TabsShell activeValue={tab ?? "leads"} tabs={tabs} />
+          </div>
         </ContentLoadingWrapper>
       </FilterTransitionProvider>
     </PageShell>
