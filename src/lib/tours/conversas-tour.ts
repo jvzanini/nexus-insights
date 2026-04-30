@@ -37,6 +37,14 @@ export const conversasTour: TourConfig = {
       placement: "bottom",
     },
     {
+      id: "presets",
+      targetSelector: "[data-tour='presets']",
+      title: "Filtros salvos",
+      description:
+        "Salve combinações de filtros + ordenação como presets favoritos. Use o botão Atalhos (raio) para filtros rápidos do dia a dia.",
+      placement: "bottom",
+    },
+    {
       id: "columns",
       targetSelector: "[data-tour='columns']",
       title: "Colunas visíveis",

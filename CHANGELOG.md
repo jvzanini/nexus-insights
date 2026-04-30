@@ -1,5 +1,24 @@
 # Changelog
 
+## [v0.10.1] 2026-04-30 — Conversas: presets + atalhos rápidos + polimento
+
+> Complementos da v0.9.0/v0.9.1 — pendências do feedback do João: filtros salvos, atalhos rápidos, migração de localStorage cols (corrige WhatsApp aparecendo na grade pra usuários antigos), polimento touch-target em mobile. (Originalmente planejado como v0.9.2 — promovido a 0.10.1 porque o release v0.10.0 do dashboard caiu antes.)
+
+### Adicionado
+- **Filtros salvos (presets)** — `<PresetsPopover>` no toolbar com CRUD: salvar atual, listar, aplicar (1 click), renomear, excluir. Cap 50 presets. Persistência em `localStorage["conversas-filter-presets"]`. Cada preset guarda `FilterState` completo + `sortStack`.
+- **Atalhos rápidos** — `<QuickFiltersPopover>` (botão "Atalhos") no toolbar com 3 toggles: "Sem resposta" (filtra `waiting_seconds > 0`), "Não atribuídas" (`assignee.id IS NULL`) e "Minhas" (oculto enquanto `User.chatwoot_user_id` não estiver mapeado). Multi-toggle (combinador AND). Compõe via `mergeConditionGroups` com o conditionGroup do modo Avançado.
+- **`useMigratedLocalStorageSet`** — hook genérico de migração de keys de localStorage com transformação. Usado para `conversas-table-cols-v2`.
+- **`useFilterPresets`** — hook CRUD de presets com validação (nome obrigatório, único, ≤60 chars; cap 50).
+- **Step novo no tour de Conversas** apontando para o botão Presets.
+
+### Mudou
+- **`STORAGE_COLS`** — `conversas-table-cols` → `conversas-table-cols-v2`. Migration one-shot remove keys que migraram para drill-down em v0.9.0 (`phone, document, labels, custom_attributes, created_at, last_activity_at`). Usuários antigos ficam com layout correto sem perder customizações legítimas.
+- **Touch-target em mobile** — "Ver mais" no drill-down `h-7 → h-8`; chips com `min-h-9` e X em `h-6 w-6`.
+
+### Verificação
+- `npx tsc --noEmit` → exit 0
+- `npx jest` → 531/531 passing (testes novos: `use-migrated-local-storage` 5, `quick-filters` 8, `use-filter-presets` 6, `presets-dialog` 4)
+
 ## [v0.10.0] 2026-04-30 — Dashboard Pulse
 
 > Redesign completo da home `/dashboard`. KPIs, gráficos e drill-downs agora **falam da mesma coorte** (criadas no período), o **timezone** respeita a plataforma, o **seletor de conta deixou de ser duplicado** (vive só no sidebar) e cards de listas viraram **gráficos clicáveis** com drill-down em **modal central**. Spec/plan em `docs/superpowers/{specs,plans}/2026-04-30-dashboard-v0.10*.md`.
