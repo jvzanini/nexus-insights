@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   useCallback,
   useMemo,
   useState,
@@ -12,6 +13,7 @@ import {
 import { useSearchParams } from "next/navigation";
 import {
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   ChevronsUpDown,
   Inbox,
@@ -38,6 +40,7 @@ import { StatusBadge } from "@/components/reports/status-badge";
 import { PriorityBadge } from "@/components/reports/priority-badge";
 import { LabelsChips } from "@/components/reports/labels-chips";
 import { OpenInChatwoot } from "@/components/reports/open-in-chatwoot";
+import { ConversaDrillDown } from "@/components/reports/conversa-drill-down";
 import { formatPhone } from "@/lib/utils/format-phone";
 import { detectDocument } from "@/lib/utils/format-document";
 import { formatDuration } from "@/lib/utils/format-time";
@@ -51,23 +54,33 @@ import {
   useLocalStorageState,
 } from "@/lib/hooks/use-local-storage-state";
 import {
+  applyConditions,
+  type ConditionGroup,
+} from "@/lib/utils/apply-conditions";
+import {
   fetchConversas,
   type FetchConversasInput,
 } from "@/lib/actions/reports/conversas";
 import type { ConversaRow } from "@/lib/chatwoot/queries/conversas-list";
+import type { SortRule } from "@/components/reports/sorting-dialog";
 
 interface ConversasTableProps {
   initialRows: ConversaRow[];
   initialCursor: string | null;
   accountId: number;
   filters: FetchConversasInput["filters"];
+  /** Stack de critérios de ordenação controlada pelo parent (toolbar). */
+  sortStack: SortRule[];
+  onSortStackChange: (next: SortRule[]) => void;
+  /**
+   * Grupo de condições do modo Avançado dos filtros. Aplicado client-side
+   * sobre as rows já paginadas (não vai ao banco). Tipo separado de
+   * `ReportFilters` para não vazar contrato server-side.
+   */
+  conditionGroup?: ConditionGroup;
 }
 
 type SortDirection = "asc" | "desc";
-interface SortRule {
-  key: string;
-  direction: SortDirection;
-}
 
 type PageSizeOption = "50" | "100" | "all";
 
@@ -79,7 +92,9 @@ const PAGE_SIZE_LIMITS: Record<PageSizeOption, number> = {
 
 const STORAGE_COLS = "conversas-table-cols";
 const STORAGE_PAGE_SIZE = "conversas-table-page-size";
-const STORAGE_SORT = "conversas-table-sort";
+// STORAGE_SORT: persistência da ordenação foi promovida ao parent
+// (ConversasPageClient) para permitir cabeamento bidirecional com o
+// <SortingDialog> exibido no toolbar.
 
 // ----------------------------------------------------------------------------
 // Helpers de display
@@ -210,6 +225,17 @@ interface ColumnDef {
 
 const COLUMNS: ColumnDef[] = [
   {
+    // Coluna trigger do drill-down. O ícone real é renderizado inline no body
+    // (depende de expandedIds), aqui só reservamos o slot na ordem das colunas.
+    key: "expand",
+    label: "",
+    defaultVisible: true,
+    defaultOrder: -1,
+    sortable: false,
+    className: "w-10",
+    render: () => null,
+  },
+  {
     key: "display_id",
     label: "#",
     defaultVisible: true,
@@ -247,7 +273,8 @@ const COLUMNS: ColumnDef[] = [
   {
     key: "phone",
     label: "WhatsApp",
-    defaultVisible: true,
+    // Movido para drill-down — continua disponível via ColumnsToggle.
+    defaultVisible: false,
     defaultOrder: 2,
     sortable: true,
     className: "min-w-[160px]",
@@ -262,7 +289,7 @@ const COLUMNS: ColumnDef[] = [
   {
     key: "document",
     label: "Documento",
-    defaultVisible: true,
+    defaultVisible: false,
     defaultOrder: 3,
     sortable: true,
     className: "min-w-[160px]",
@@ -364,7 +391,7 @@ const COLUMNS: ColumnDef[] = [
   {
     key: "labels",
     label: "Labels",
-    defaultVisible: true,
+    defaultVisible: false,
     defaultOrder: 9,
     sortable: false,
     className: "min-w-[160px]",
@@ -387,7 +414,7 @@ const COLUMNS: ColumnDef[] = [
   {
     key: "last_activity_at",
     label: "Última atualização",
-    defaultVisible: true,
+    defaultVisible: false,
     defaultOrder: 11,
     sortable: true,
     className: "min-w-[170px]",
@@ -453,7 +480,7 @@ const COLUMNS: ColumnDef[] = [
   {
     key: "custom_attributes",
     label: "Atributos",
-    defaultVisible: true,
+    defaultVisible: false,
     defaultOrder: 14,
     sortable: false,
     className: "min-w-[200px]",
@@ -542,12 +569,26 @@ export function ConversasTable({
   initialCursor,
   accountId,
   filters,
+  sortStack,
+  onSortStackChange,
+  conditionGroup,
 }: ConversasTableProps) {
   const [rows, setRows] = useState<ConversaRow[]>(initialRows);
   const [cursor, setCursor] = useState<string | null>(initialCursor);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const currentSearchParams = useSearchParams();
+
+  // Linhas expandidas (drill-down inline). Controle por id da conversa.
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const toggleExpand = useCallback((id: number) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   // ---- Persistências (localStorage) -----
   const [visibleCols, setVisibleCols] = useLocalStorageSet(
@@ -558,42 +599,46 @@ export function ConversasTable({
     STORAGE_PAGE_SIZE,
     "50",
   );
-  const [sortStack, setSortStack] = useLocalStorageState<SortRule[]>(
-    STORAGE_SORT,
-    [],
-  );
 
   // ---- Cabeçalho: ordenação por click / shift+click -----
+  // sortStack agora é controlado pelo parent (ConversasPageClient) — o hook de
+  // localStorage vive lá, garantindo cabeamento bidirecional com o
+  // <SortingDialog> exibido no toolbar.
   const handleHeaderActivate = useCallback(
     (key: string, addToStack: boolean) => {
-      setSortStack((prev) => {
-        const idx = prev.findIndex((s) => s.key === key);
-        if (addToStack) {
-          // shift+click: adiciona / alterna direção dentro da pilha existente.
-          if (idx === -1) {
-            return [...prev, { key, direction: "asc" }];
-          }
+      const prev = sortStack;
+      const idx = prev.findIndex((s) => s.key === key);
+      let next: SortRule[];
+      if (addToStack) {
+        // shift+click: adiciona / alterna direção dentro da pilha existente.
+        if (idx === -1) {
+          next = [...prev, { key, direction: "asc" }];
+        } else {
           const current = prev[idx]!;
           if (current.direction === "asc") {
-            const next = [...prev];
+            next = [...prev];
             next[idx] = { key, direction: "desc" };
-            return next;
+          } else {
+            // estava desc → remove da pilha (mantém os outros critérios).
+            next = prev.filter((s) => s.key !== key);
           }
-          // estava desc → remove da pilha (mantém os outros critérios).
-          return prev.filter((s) => s.key !== key);
         }
+      } else {
         // click normal: substitui a pilha.
         if (idx === -1 || prev.length > 1) {
-          return [{ key, direction: "asc" }];
+          next = [{ key, direction: "asc" }];
+        } else {
+          const current = prev[idx]!;
+          if (current.direction === "asc") {
+            next = [{ key, direction: "desc" }];
+          } else {
+            next = [];
+          }
         }
-        const current = prev[idx]!;
-        if (current.direction === "asc") {
-          return [{ key, direction: "desc" }];
-        }
-        return [];
-      });
+      }
+      onSortStackChange(next);
     },
-    [setSortStack],
+    [sortStack, onSortStackChange],
   );
 
   const onHeaderClick =
@@ -616,11 +661,23 @@ export function ConversasTable({
   // ---- Colunas computadas (factory por accountId) -----
   const allColumns = useMemo(() => buildColumns(accountId), [accountId]);
 
+  // ---- Filtragem client-side por conditionGroup (modo Avançado) -----
+  const filteredRows = useMemo(() => {
+    if (
+      !conditionGroup ||
+      !conditionGroup.conditions ||
+      conditionGroup.conditions.length === 0
+    ) {
+      return rows;
+    }
+    return applyConditions(rows, conditionGroup);
+  }, [rows, conditionGroup]);
+
   // ---- Ordenação aplicada no client (estável). -----
   const sortedRows = useMemo(() => {
-    if (sortStack.length === 0) return rows;
+    if (sortStack.length === 0) return filteredRows;
     const cols = new Map(allColumns.map((c) => [c.key, c]));
-    const decorated = rows.map((row, idx) => ({ row, idx }));
+    const decorated = filteredRows.map((row, idx) => ({ row, idx }));
     decorated.sort((A, B) => {
       for (const rule of sortStack) {
         const col = cols.get(rule.key);
@@ -632,7 +689,7 @@ export function ConversasTable({
       return A.idx - B.idx; // estabilidade.
     });
     return decorated.map((d) => d.row);
-  }, [rows, sortStack, allColumns]);
+  }, [filteredRows, sortStack, allColumns]);
 
   // ---- Carregar mais -----
   const loadMore = () => {
@@ -679,14 +736,14 @@ export function ConversasTable({
     });
   };
 
-  const clearSort = () => setSortStack([]);
+  const clearSort = () => onSortStackChange([]);
 
   // ---- Lista de colunas visíveis (em ordem) -----
   const orderedColumns = useMemo(
     () =>
       [...allColumns]
         .sort((a, b) => a.defaultOrder - b.defaultOrder)
-        .filter((c) => visibleCols.has(c.key)),
+        .filter((c) => c.key === "expand" || visibleCols.has(c.key)),
     [visibleCols, allColumns],
   );
 
@@ -694,7 +751,7 @@ export function ConversasTable({
     () =>
       [...allColumns]
         .sort((a, b) => a.defaultOrder - b.defaultOrder)
-        .filter((c) => c.key !== "actions")
+        .filter((c) => c.key !== "actions" && c.key !== "expand")
         .map((c) => ({ key: c.key, label: c.label })),
     [allColumns],
   );
@@ -707,31 +764,22 @@ export function ConversasTable({
           <span className="font-semibold text-foreground">{rows.length}</span>{" "}
           conversa{rows.length === 1 ? "" : "s"}
         </span>
-        <div data-tour="sorting-chip" className="inline-flex items-center">
-          {sortStack.length > 0 ? (
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={clearSort}
-              className="h-7 gap-1 text-[11px]"
-              aria-label="Limpar ordenação"
-              title="Click no cabeçalho ordena · Shift+click adiciona critério"
-            >
-              <X className="h-3 w-3" />
-              Ordenação
-              <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-bold text-primary tabular-nums">
-                {sortStack.length}
-              </span>
-            </Button>
-          ) : (
-            <span
-              className="hidden items-center gap-1 text-[11px] uppercase tracking-wide text-muted-foreground/70 sm:inline-flex"
-              title="Click no cabeçalho ordena · Shift+click adiciona critério"
-            >
-              Ordenar: click no cabeçalho
+        {sortStack.length > 0 ? (
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={clearSort}
+            className="h-7 gap-1 text-[11px]"
+            aria-label="Limpar ordenação"
+            title="Click no cabeçalho ordena · Shift+click adiciona critério"
+          >
+            <X className="h-3 w-3" />
+            Ordenação
+            <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-bold text-primary tabular-nums">
+              {sortStack.length}
             </span>
-          )}
-        </div>
+          </Button>
+        ) : null}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <div data-tour="page-size">
@@ -798,7 +846,9 @@ export function ConversasTable({
         aria-busy={pending}
       >
         <Table>
-          <TableHeader>
+          <TableHeader
+            className="sticky top-[var(--toolbar-h,132px)] z-[var(--z-table-thead,20)] bg-card"
+          >
             <TableRow className="hover:bg-transparent">
               {orderedColumns.map((col) => {
                 const ruleIdx = sortStack.findIndex((s) => s.key === col.key);
@@ -843,7 +893,9 @@ export function ConversasTable({
                         />
                       </button>
                     ) : (
-                      <span>{col.shortLabel ?? col.label}</span>
+                      <span className="sr-only">
+                        {col.shortLabel ?? (col.label || col.key)}
+                      </span>
                     )}
                   </TableHead>
                 );
@@ -851,32 +903,72 @@ export function ConversasTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sortedRows.map((row, idx) => (
-              <TableRow
-                key={row.id}
-                className="hover:bg-muted/30 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-150"
-                style={{
-                  animationDelay: `${Math.min(idx, 16) * 15}ms`,
-                }}
-              >
-                {orderedColumns.map((col) => (
-                  <TableCell
-                    key={col.key}
+            {sortedRows.map((row, idx) => {
+              const expanded = expandedIds.has(row.id);
+              return (
+                <Fragment key={row.id}>
+                  <TableRow
                     className={cn(
-                      col.align === "right" && "text-right",
-                      col.align === "center" && "text-center",
+                      "cursor-pointer hover:bg-muted/30 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-150",
+                      expanded && "bg-muted/40",
                     )}
-                    data-tour={
-                      col.key === "actions" && idx === 0
-                        ? "open-action"
-                        : undefined
-                    }
+                    style={{
+                      animationDelay: `${Math.min(idx, 16) * 15}ms`,
+                    }}
+                    onClick={() => toggleExpand(row.id)}
+                    aria-expanded={expanded}
                   >
-                    {col.render(row)}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))}
+                    {orderedColumns.map((col) => {
+                      if (col.key === "expand") {
+                        return (
+                          <TableCell key="expand" className="w-10">
+                            <ChevronRight
+                              aria-hidden
+                              className={cn(
+                                "size-4 text-muted-foreground transition-transform",
+                                expanded && "rotate-90 text-primary",
+                              )}
+                            />
+                          </TableCell>
+                        );
+                      }
+                      // A célula de Ações tem botão real — interrompe a
+                      // propagação para que o click não toggle o drill-down.
+                      const stopProp = col.key === "actions";
+                      return (
+                        <TableCell
+                          key={col.key}
+                          onClick={
+                            stopProp ? (e) => e.stopPropagation() : undefined
+                          }
+                          className={cn(
+                            col.align === "right" && "text-right",
+                            col.align === "center" && "text-center",
+                          )}
+                          data-tour={
+                            col.key === "actions" && idx === 0
+                              ? "open-action"
+                              : undefined
+                          }
+                        >
+                          {col.render(row)}
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                  {expanded ? (
+                    <TableRow className="bg-muted/30 hover:bg-muted/30">
+                      <TableCell
+                        colSpan={orderedColumns.length}
+                        className="p-0"
+                      >
+                        <ConversaDrillDown row={row} accountId={accountId} />
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                </Fragment>
+              );
+            })}
           </TableBody>
         </Table>
       </div>
