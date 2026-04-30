@@ -18,7 +18,8 @@ import {
 import { getCurrentUser } from "@/lib/auth";
 import { getActiveAccountId } from "@/lib/reports/active-account";
 import { parseReportSearchParams } from "@/lib/reports/parse-search-params";
-import { getAllSettings } from "@/lib/settings/get";
+import { getMatrixIAIncluded } from "@/lib/reports/matrix-ia-setting";
+import { canSeeMatrixIA } from "@/lib/permissions";
 import type { Granularity } from "@/lib/chatwoot/queries/leads-recebidos";
 
 export const metadata = { title: "Origem & IA | Nexus Insights" };
@@ -28,12 +29,6 @@ const VALID_GRANS: Granularity[] = ["day", "week", "month"];
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
-}
-
-function readBoolean(value: unknown, fallback: boolean): boolean {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "string") return value === "true";
-  return fallback;
 }
 
 function LeadsFallback() {
@@ -68,14 +63,15 @@ export default async function Page({ searchParams }: PageProps) {
       ? (granRaw as Granularity)
       : "day";
 
-  // Gate Matrix IA: feature flag + super_admin only.
-  const settings = await getAllSettings();
-  const restrictMatrixToSuperAdmin = readBoolean(
-    settings["feature_flags.matrix_ia_visible_to_super_admin_only"],
-    true,
+  // Gate Matrix IA: usa a mesma flag canônica `reports.include_matrix_ia`
+  // que governa todas as visualizações da plataforma. Flag OFF = somente
+  // super_admin vê. Mantém consistência com `getInboxesForUser` e
+  // `shouldExcludeMatrixIA`.
+  const matrixIaIncluded = await getMatrixIAIncluded();
+  const matrixVisible = canSeeMatrixIA(
+    { platformRole: user.platformRole } as Parameters<typeof canSeeMatrixIA>[0],
+    { matrixIaSuperAdminOnly: !matrixIaIncluded },
   );
-  const matrixVisible =
-    !restrictMatrixToSuperAdmin || user.platformRole === "super_admin";
 
   const contentProps = { accountId, period, customStart, customEnd };
 
