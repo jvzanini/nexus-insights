@@ -1,5 +1,44 @@
 # Changelog
 
+## [v0.12.0] 2026-04-30 — Agente Nex: credenciais gerenciáveis + custo BRL com cotação cartão
+
+> Reformulação completa da configuração e do consumo do Agente Nex. Adiciona credenciais (API keys) como recurso de primeira classe com CRUD por provedor, captura cotação USD→BRL cartão de crédito em cada chamada, e padroniza a nomenclatura para "Agente Nex" em todos os call-sites. Trocar modelo ou provedor não exige mais re-digitar a chave.
+
+### Adicionado
+
+- **Card "Chaves de API"** em `/configuracoes` (super_admin). 4 seções (uma por provedor: OpenAI, Anthropic, Gemini, OpenRouter). Cada chave aparece com label, "••••XXXX" e ações inline: Renomear, Trocar (rotação preserva ID e label), Deletar. Ponto verde marca a chave em uso pelo Agente Nex. Botão "+ Nova" abre dialog reutilizável com label opcional (autogera "Chave 1", "Chave 2", …) e PasswordInput. Tem opção de testar conexão antes de salvar.
+- **Custo BRL no Consumo do Agente Nex.** Card "Custo total" mostra agora R$ como valor primário com USD em fonte menor (≈ $X.XXXX USD). Charts (Custo por dia, Custo por modelo, Distribuição por provider) e tabela de chamadas detalhadas usam BRL primário. Tabela ganhou coluna "Custo BRL" ao lado de "Custo USD".
+- **Cotação USD→BRL cartão de crédito** capturada no momento de cada chamada do Agente Nex (`llm_usage.usd_to_brl_rate`). Fonte: AwesomeAPI (`https://economia.awesomeapi.com.br/last/USD-BRL`) com cache de 4h em `app_settings.llm.usd_brl.rate_cache`. Spread cartão configurável (`app_settings.llm.usd_brl.card_spread`, default `1.10`, range `[1.00, 1.30]`). Fallback 5.50 quando AwesomeAPI indisponível e sem cache.
+- **Campo "Spread cartão"** no card "Agente Nex" (input numérico, debounce 500ms, valida range). Tooltip explica "Multiplicador aplicado sobre a cotação comercial USD/BRL (default 1.10 ≈ IOF + spread Visa/Master)".
+- **Runbook** `docs/runbooks/credenciais-llm.md` — passo-a-passo para criar/rotacionar/deletar credenciais e ajustar spread cartão.
+- **Auditoria** ganha actions `credential_created`, `credential_updated`, `credential_deleted`, `credential_tested`.
+
+### Mudado
+
+- **"Agente IA" → "Agente Nex"** em todos os call-sites (card título, página `/configuracoes/consumo`, mensagens de erro do agente, empty-states). `grep -rn "Agente IA" src/` agora retorna vazio.
+- **Card "Agente Nex"** (`/configuracoes`) não exige mais re-digitar API key para trocar modelo ou provedor. Campo "API key" foi substituído por um `select` de credenciais salvas para aquele provedor (mais opção "+ Nova chave"). Trocar provedor pré-seleciona automaticamente a credencial mais recente do novo provedor; se não houver, força criação. Botões "Testar conexão" e "Salvar configuração" usam `credentialId` em vez de chave inline.
+- **Custos exibidos com mínimo 4 casas decimais** em todas as visualizações (KPI, charts, tabela). Dropei o formatador `usdFmtCompact` (2-4 casas) que escondia valores sub-centavo, agora padronizado em `usdFmt`/`brlFmt` com 4-6 casas.
+- **`KpiCard.value`** aceita `ReactNode` (era `string | number`) — habilita layouts com 2 linhas (BRL primário + USD secundário no card "Custo total").
+
+### Schema (runtime via `ensureLlmTables`, idempotente)
+
+- **NOVA tabela** `llm_credentials (id UUID PK, provider TEXT, label TEXT, encrypted_api_key TEXT, last4 TEXT, created_at, updated_at, created_by_id UUID NULL)`. Índices: `UNIQUE(provider, label)` e `(provider, updated_at DESC)`. Chave cifrada com AES-256 (`@/lib/encryption`).
+- **`llm_configs.credential_id UUID NULL`** — FK lógica para `llm_credentials.id`.
+- **`llm_configs.encrypted_api_key`** virou `NULLABLE` (era NOT NULL). Mantida em rows existentes para permitir rollback para v0.11.x; em v0.13.0 será dropada.
+- **`llm_usage.cost_brl DECIMAL(12,6) NULL`** e **`llm_usage.usd_to_brl_rate DECIMAL(10,4) NULL`**.
+- **Enum `AuditAction`** ganha `credential_created`, `credential_updated`, `credential_deleted`, `credential_tested` (via `ALTER TYPE … ADD VALUE IF NOT EXISTS`).
+
+### Migração de dados
+
+- Idempotente, dentro de `ensureLlmTables()` na primeira request após o deploy. Para cada `llm_configs` com `credential_id IS NULL AND encrypted_api_key IS NOT NULL`: cria entrada em `llm_credentials` com label "Chave principal" (ou "Chave principal 2" se já existir) e popula `credential_id`. Em caso de `decrypt` falhar numa row corrompida, loga warning e segue (super_admin re-cadastra manualmente).
+
+### Compatibilidade & rollback
+
+- Deploy zero-downtime: pod novo aplica migração na primeira request; pod antigo continua lendo `encrypted_api_key` direto até o cutover. `getActiveLlmConfig` faz fallback para `encrypted_api_key` quando `credential_id` é NULL.
+- Rollback para v0.11.x: backend antigo ignora colunas/tabela novas. Chaves antigas continuam em `llm_configs.encrypted_api_key`.
+
+---
+
 ## [v0.11.1] 2026-04-30 — Hotfix: página de configurações e relatórios não carregavam
 
 > "This page couldn't load — A server error occurred" em todas as páginas internas (`/configuracoes`, todos os `/relatorios/*`, perfil, etc).

@@ -1,12 +1,22 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-04-30
-**Versão atual em produção:** v0.11.1
+**Versão atual em produção:** v0.12.0
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.11.1)
+## Em produção (v0.12.0)
+
+### Novidades da release v0.12.0 (2026-04-30)
+
+- **Credenciais (API keys) gerenciáveis por provedor.** Card "Chaves de API" em `/configuracoes` com CRUD por provedor — listar, criar, renomear, rotacionar e deletar chaves. Ponto verde marca a chave em uso pelo Agente Nex. Trocar modelo ou provedor não exige mais re-digitar a chave.
+- **Custo BRL como primário no Consumo do Agente Nex.** Card "Custo total", charts (área/donut/barras) e tabela de chamadas detalhadas mostram R$ em primário, com USD secundário em fonte menor. Mínimo 4 casas decimais em todas as visualizações.
+- **Cotação USD→BRL cartão de crédito** capturada por chamada (`llm_usage.usd_to_brl_rate`). Fonte AwesomeAPI com cache 4h e spread configurável (`app_settings.llm.usd_brl.card_spread`, default 1.10, range [1.00, 1.30]).
+- **"Agente IA" → "Agente Nex"** em todos os call-sites (card, consumo, mensagens de erro, empty-states).
+- **Schema (runtime via `ensureLlmTables`):** nova tabela `llm_credentials`, `llm_configs.credential_id` (NULL), `llm_configs.encrypted_api_key` agora NULLABLE (legacy mantido por rollback), `llm_usage.cost_brl`/`usd_to_brl_rate`. Migração one-shot e idempotente.
+
+## Em produção anteriormente (v0.11.1)
 
 ### Hotfix v0.11.1 (2026-04-30)
 
