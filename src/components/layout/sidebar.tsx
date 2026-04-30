@@ -25,6 +25,7 @@ import {
 } from "@/lib/constants/nav";
 import type { PlatformRole } from "@/generated/prisma/client";
 import { AccountSwitcher } from "@/components/layout/account-switcher";
+import { GlobalSearchTrigger } from "@/components/layout/global-search-trigger";
 
 interface SidebarUser {
   id: string;
@@ -190,14 +191,9 @@ export function Sidebar({
         </div>
       </div>
 
-      {user.platformRole === "super_admin" &&
-      accounts.length > 1 &&
-      typeof activeAccountId === "number" ? (
-        <AccountSwitcher
-          accounts={accounts}
-          currentAccountId={activeAccountId}
-        />
-      ) : null}
+      <div className="px-3 pb-2">
+        <GlobalSearchTrigger />
+      </div>
 
       <nav className="flex-1 px-3 py-4 space-y-1">
         {(() => {
@@ -224,6 +220,17 @@ export function Sidebar({
           });
         })()}
       </nav>
+
+      {user.platformRole === "super_admin" &&
+      accounts.length > 1 &&
+      typeof activeAccountId === "number" ? (
+        <div className="border-t border-border pt-3 pb-1">
+          <AccountSwitcher
+            accounts={accounts}
+            currentAccountId={activeAccountId}
+          />
+        </div>
+      ) : null}
 
       <div className="border-t border-border px-4 py-4 space-y-3">
         <Link
