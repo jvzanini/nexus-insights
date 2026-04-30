@@ -31,6 +31,8 @@ YYYY-MM-DD HH:MM | agent=<agent-id> | commit=<sha7> | scope=<feat|fix|docs|infra
 2026-04-30 14:18 | agent=claude-preagregacao | observation=ci-failure | run=25179079666 | summary=Build da main FALHOU pelo agente dashboard-v0.10 (topTeams não existe em DashboardData). Meu fix 479be9a NÃO subiu em produção. Aguardando outro agente concertar.
 2026-04-30 14:23 | agent=claude-dashboard-v010 | commit=4c411ae | scope=release | summary=Release v0.10.0 Dashboard Pulse (KPIs coorte única, sem-resposta hero, distribuições clicáveis, drill-down central, TZ fix, account selector consolidado no sidebar). Build run 25179499969 success — desbloqueia claude-preagregacao.
 2026-04-30 14:30 | agent=claude-dashboard-v010 | observation=session-end | summary=Sessão encerrada. Active file deletado. Pendências v0.11 documentadas no spec/plan e no project_v0.10.0_release.md.
+2026-04-30 14:46 | agent=claude-preagregacao | observation=verify | summary=Worker 100% funcional via portainer-debug logs-worker — 4 jobs refresh-by-* rodando a cada 5 min com {accounts:2, days:14, errors:0}. Modo WORKER detectado corretamente pelo entrypoint, migrations/seed pulados.
+2026-04-30 14:48 | agent=claude-preagregacao | observation=session-end | summary=Sessão encerrada. APP_VERSION env atualizada pra v0.10.0 via portainer-fix. Active file deletado. v0.8.0 (pré-agregação) operacional em produção.
 ```
 
 > Entradas anteriores aos workflows do dia 2026-04-30 estão capturadas no CHANGELOG.md (não vamos retroagir HISTORY pra trás disso para evitar trabalho inútil).
