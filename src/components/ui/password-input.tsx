@@ -19,6 +19,14 @@ interface PasswordInputProps {
   disabled?: boolean;
 }
 
+/**
+ * Input de senha/API key com toggle Eye/EyeOff alinhado verticalmente.
+ *
+ * O botão usa `inset-y-0` + `flex items-center justify-center` + largura fixa
+ * (`w-10`), tomando a altura completa do input em vez de depender de
+ * `top-1/2 + translate-y(-50%)`. Isso garante que o ícone fique perfeitamente
+ * centralizado independentemente da altura do input (h-9, h-10, h-11, h-44px etc.).
+ */
 export function PasswordInput({
   id,
   value,
@@ -54,7 +62,8 @@ export function PasswordInput({
         aria-label={show ? "Ocultar senha" : "Mostrar senha"}
         aria-pressed={show}
         disabled={disabled}
-        className="absolute right-2.5 top-1/2 -translate-y-1/2 inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+        tabIndex={disabled ? -1 : 0}
+        className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
       >
         {show ? (
           <EyeOff className="h-4 w-4" aria-hidden="true" />
