@@ -7,9 +7,9 @@ export const dashboardTour: TourConfig = {
     {
       id: "filters",
       targetSelector: "[data-tour='dashboard-filters']",
-      title: "Filtros de empresa e período",
+      title: "Filtro de período",
       description:
-        "Escolha a empresa (conta Chatwoot) e o período (Hoje, 7 ou 30 dias). Os dados se atualizam automaticamente.",
+        "Escolha o período (Hoje, 7 ou 30 dias). A conta atual é definida no menu lateral e vale para toda a plataforma.",
       placement: "bottom",
     },
     {
@@ -25,23 +25,39 @@ export const dashboardTour: TourConfig = {
       targetSelector: "[data-tour='dashboard-kpis']",
       title: "Indicadores principais",
       description:
-        "Cards clicáveis mostram volume recebido, resolvidas, em aberto agora e taxa de resolução. Clique para ver o detalhe.",
+        "Recebidas, resolvidas, abertas e taxa de resolução — todas no mesmo recorte de criação no período. Clique em cada card para o detalhe.",
       placement: "bottom",
+    },
+    {
+      id: "no-response",
+      targetSelector: "[data-tour='dashboard-no-response'], [data-tour='dashboard-kpis']",
+      title: "Sem resposta agora",
+      description:
+        "Conversas que estão aguardando resposta — apenas com status 'Aberto' e a última mensagem do contato. Clique em 'Ver todas' para o detalhe.",
+      placement: "top",
     },
     {
       id: "chart",
       targetSelector: "[data-tour='dashboard-chart']",
       title: "Linha do tempo",
       description:
-        "Gráfico com o volume de conversas recebidas e resolvidas ao longo do período selecionado.",
+        "Volume de conversas recebidas e resolvidas ao longo do período. Alterne entre linha e barras pelo botão no canto.",
       placement: "top",
     },
     {
-      id: "tops",
-      targetSelector: "[data-tour='dashboard-tops']",
-      title: "Rankings",
+      id: "distributions",
+      targetSelector: "[data-tour='dashboard-distributions']",
+      title: "Inboxes e departamentos",
       description:
-        "Listas com atendentes mais rápidos, inboxes em aberto e departamentos com mais resolvidas no período.",
+        "Distribuição das conversas em aberto por inbox e por departamento (incluindo bucket 'Sem departamento'). Clique em qualquer barra ou fatia para ver as conversas.",
+      placement: "top",
+    },
+    {
+      id: "status",
+      targetSelector: "[data-tour='dashboard-status']",
+      title: "Distribuição por status",
+      description:
+        "Donut com aberto, pendente, adiado e resolvido — recortado pelas conversas criadas no período.",
       placement: "top",
     },
     {
@@ -49,7 +65,7 @@ export const dashboardTour: TourConfig = {
       targetSelector: "[data-tour='dashboard-recent']",
       title: "Conversas recentes",
       description:
-        "Últimas conversas com link direto para abrir no Chatwoot.",
+        "Últimas 10 conversas com link direto para abrir no Chatwoot.",
       placement: "top",
     },
   ],
