@@ -95,14 +95,6 @@ export default async function Page() {
   };
 
   const visibility = {
-    matrixIaVisibleToSuperAdminOnly: readBoolean(
-      data["feature_flags.matrix_ia_visible_to_super_admin_only"],
-      true,
-    ),
-    excludeMatrixIaGlobally: readBoolean(
-      data["feature_flags.exclude_matrix_ia_globally"],
-      true,
-    ),
     csatEnabled: readBoolean(data["feature_flags.csat_enabled"], true),
     slaEnabled: readBoolean(data["feature_flags.sla_enabled"], true),
   };

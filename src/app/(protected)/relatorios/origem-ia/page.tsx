@@ -21,9 +21,10 @@ import { origemIaTour } from "@/lib/tours/origem-ia-tour";
 import { getCurrentUser } from "@/lib/auth";
 import { getActiveAccountId } from "@/lib/reports/active-account";
 import { parseReportSearchParams } from "@/lib/reports/parse-search-params";
-import { getMatrixIAIncluded } from "@/lib/reports/matrix-ia-setting";
-import { canSeeMatrixIA } from "@/lib/permissions";
-import { isReportVisibleForUser } from "@/lib/reports/visibility";
+import {
+  isMatrixIAVisibleForUser,
+  isReportVisibleForUser,
+} from "@/lib/reports/visibility";
 import type { Granularity } from "@/lib/chatwoot/queries/leads-recebidos";
 
 export const metadata = { title: "Origem & IA | Nexus Insights" };
@@ -70,15 +71,10 @@ export default async function Page({ searchParams }: PageProps) {
       ? (granRaw as Granularity)
       : "day";
 
-  // Gate Matrix IA: usa a mesma flag canônica `reports.include_matrix_ia`
-  // que governa todas as visualizações da plataforma. Flag OFF = somente
-  // super_admin vê. Mantém consistência com `getInboxesForUser` e
-  // `shouldExcludeMatrixIA`.
-  const matrixIaIncluded = await getMatrixIAIncluded();
-  const matrixVisible = canSeeMatrixIA(
-    { platformRole: user.platformRole } as Parameters<typeof canSeeMatrixIA>[0],
-    { matrixIaSuperAdminOnly: !matrixIaIncluded },
-  );
+  // Gate Matrix IA: usa a visibility 3-níveis (all | super_admin_only | none)
+  // que governa todas as visualizações da plataforma. Mantém consistência
+  // com `getInboxesForUser` e `shouldExcludeMatrixIA`.
+  const matrixVisible = await isMatrixIAVisibleForUser(user.platformRole);
 
   const contentProps = { accountId, period, customStart, customEnd };
 

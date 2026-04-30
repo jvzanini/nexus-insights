@@ -9,19 +9,12 @@ import { updateSetting } from "@/lib/actions/settings";
 
 interface VisibilitySettingsFormProps {
   initial: {
-    matrixIaVisibleToSuperAdminOnly: boolean;
-    excludeMatrixIaGlobally: boolean;
     csatEnabled: boolean;
     slaEnabled: boolean;
   };
 }
 
 export function VisibilitySettingsForm({ initial }: VisibilitySettingsFormProps) {
-  const [matrixIaVisibleToSuperAdminOnly, setMatrixIaVisibleToSuperAdminOnly] =
-    useState<boolean>(initial.matrixIaVisibleToSuperAdminOnly);
-  const [excludeMatrixIaGlobally, setExcludeMatrixIaGlobally] = useState<boolean>(
-    initial.excludeMatrixIaGlobally,
-  );
   const [csatEnabled, setCsatEnabled] = useState<boolean>(initial.csatEnabled);
   const [slaEnabled, setSlaEnabled] = useState<boolean>(initial.slaEnabled);
   const [isPending, start] = useTransition();
@@ -29,16 +22,6 @@ export function VisibilitySettingsForm({ initial }: VisibilitySettingsFormProps)
   function handleSave() {
     start(async () => {
       const updates = [
-        updateSetting({
-          key: "feature_flags.matrix_ia_visible_to_super_admin_only",
-          value: matrixIaVisibleToSuperAdminOnly,
-          category: "visibility",
-        }),
-        updateSetting({
-          key: "feature_flags.exclude_matrix_ia_globally",
-          value: excludeMatrixIaGlobally,
-          category: "visibility",
-        }),
         updateSetting({
           key: "feature_flags.csat_enabled",
           value: csatEnabled,
@@ -69,22 +52,6 @@ export function VisibilitySettingsForm({ initial }: VisibilitySettingsFormProps)
     checked: boolean;
     onCheckedChange: (v: boolean) => void;
   }> = [
-    {
-      key: "matrix-ia-restrict",
-      title: "Matrix IA visível somente para super admin",
-      description:
-        "Esconde o relatório do inbox Matrix IA para usuários que não são super admin.",
-      checked: matrixIaVisibleToSuperAdminOnly,
-      onCheckedChange: setMatrixIaVisibleToSuperAdminOnly,
-    },
-    {
-      key: "matrix-ia-exclude",
-      title: "Excluir Matrix IA das métricas globais",
-      description:
-        "Remove conversas do inbox Matrix IA dos cálculos agregados nos demais relatórios.",
-      checked: excludeMatrixIaGlobally,
-      onCheckedChange: setExcludeMatrixIaGlobally,
-    },
     {
       key: "csat",
       title: "Relatório de CSAT",
