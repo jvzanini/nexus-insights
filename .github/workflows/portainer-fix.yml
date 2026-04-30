@@ -1,0 +1,119 @@
+name: Portainer fix (worker cmd + APP_VERSION)
+
+# Workflow manual que via Portainer API:
+#   1. Atualiza APP_VERSION env do service nexus-insights_app.
+#   2. Atualiza Args do service nexus-insights_worker para
+#      ["npx", "tsx", "/app/worker/index.ts"] (correção da v0.8.0).
+#
+# Como rodar:
+#   gh workflow run portainer-fix.yml -f app_version=v0.9.0
+#
+# A operação é idempotente — pode ser executada múltiplas vezes sem efeito
+# colateral se o estado já está correto.
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_version:
+        description: "Novo APP_VERSION (ex: v0.9.0). Deixe vazio para não mudar."
+        required: false
+        default: ""
+      fix_worker_cmd:
+        description: "Atualizar Args do worker para tsx?"
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+      PORTAINER_TOKEN: ${{ secrets.PORTAINER_TOKEN }}
+      PORTAINER_ENDPOINT_ID: ${{ secrets.PORTAINER_ENDPOINT_ID }}
+      PORTAINER_STACK_ID: ${{ secrets.PORTAINER_STACK_ID }}
+      APP_VERSION: ${{ inputs.app_version }}
+      FIX_WORKER: ${{ inputs.fix_worker_cmd }}
+    steps:
+      - name: Resolve stack name + service IDs
+        id: resolve
+        run: |
+          set -e
+          STACK_NAME=$(curl --silent --insecure -H "X-API-Key: $PORTAINER_TOKEN" "$PORTAINER_URL/api/stacks/$PORTAINER_STACK_ID" | jq -r '.Name')
+          echo "stack_name=$STACK_NAME" >> "$GITHUB_OUTPUT"
+          curl --silent --insecure -H "X-API-Key: $PORTAINER_TOKEN" "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/services" > /tmp/svc.json
+          jq -r --arg n "${STACK_NAME}_app" '[.[] | select(.Spec.Name==$n)][0].ID' /tmp/svc.json > /tmp/app-id.txt
+          jq -r --arg n "${STACK_NAME}_worker" '[.[] | select(.Spec.Name==$n)][0].ID' /tmp/svc.json > /tmp/worker-id.txt
+          echo "App service:    $(cat /tmp/app-id.txt)"
+          echo "Worker service: $(cat /tmp/worker-id.txt)"
+
+      - name: Update APP_VERSION (service nexus-insights_app)
+        if: inputs.app_version != ''
+        run: |
+          set -e
+          SVC_ID=$(cat /tmp/app-id.txt)
+          SVC_NAME="${{ steps.resolve.outputs.stack_name }}_app"
+          NEW_VER="$APP_VERSION"
+          # Pega versão atual do service
+          curl --silent --insecure -H "X-API-Key: $PORTAINER_TOKEN" "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/services/$SVC_ID" > /tmp/app-svc.json
+          SVC_VER=$(jq -r '.Version.Index' /tmp/app-svc.json)
+          # Constrói novo Spec: substitui APP_VERSION=... ou adiciona se não existir; força update via ForceUpdate++
+          jq --arg ver "APP_VERSION=$NEW_VER" '
+            .Spec
+            | .TaskTemplate.ContainerSpec.Env = (
+                (.TaskTemplate.ContainerSpec.Env // [])
+                | map(if startswith("APP_VERSION=") then $ver else . end)
+                | if any(. == $ver) then . else . + [$ver] end
+              )
+            | .TaskTemplate.ForceUpdate = ((.TaskTemplate.ForceUpdate // 0) + 1)
+          ' /tmp/app-svc.json > /tmp/app-spec.json
+          echo "App service $SVC_NAME version=$SVC_VER → APP_VERSION=$NEW_VER"
+          HTTP=$(curl --silent --insecure -o /tmp/app-resp.log -w "%{http_code}" -X POST \
+            -H "X-API-Key: $PORTAINER_TOKEN" -H "Content-Type: application/json" \
+            "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/services/$SVC_ID/update?version=$SVC_VER" \
+            --data-binary @/tmp/app-spec.json)
+          echo "App update: HTTP $HTTP"
+          if [ "$HTTP" != "200" ]; then
+            echo "--- response ---"
+            cat /tmp/app-resp.log
+            exit 1
+          fi
+
+      - name: Fix worker Args (npx tsx /app/worker/index.ts)
+        if: inputs.fix_worker_cmd == true
+        run: |
+          set -e
+          SVC_ID=$(cat /tmp/worker-id.txt)
+          SVC_NAME="${{ steps.resolve.outputs.stack_name }}_worker"
+          curl --silent --insecure -H "X-API-Key: $PORTAINER_TOKEN" "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/services/$SVC_ID" > /tmp/worker-svc.json
+          SVC_VER=$(jq -r '.Version.Index' /tmp/worker-svc.json)
+          # ContainerSpec.Args é o array que vai depois do ENTRYPOINT.
+          # Queremos: ["npx", "tsx", "/app/worker/index.ts"]
+          # ContainerSpec.Command = [] (deixa entrypoint cuidar)
+          jq '
+            .Spec
+            | .TaskTemplate.ContainerSpec.Args = ["npx", "tsx", "/app/worker/index.ts"]
+            | .TaskTemplate.ContainerSpec.Command = []
+            | .TaskTemplate.ForceUpdate = ((.TaskTemplate.ForceUpdate // 0) + 1)
+          ' /tmp/worker-svc.json > /tmp/worker-spec.json
+          # Mostra o que vai mudar
+          echo "Worker service $SVC_NAME version=$SVC_VER"
+          echo "Antes:"
+          jq '.Spec.TaskTemplate.ContainerSpec | {Command, Args}' /tmp/worker-svc.json
+          echo "Depois:"
+          jq '. | {Command: .TaskTemplate.ContainerSpec.Command, Args: .TaskTemplate.ContainerSpec.Args}' /tmp/worker-spec.json
+          HTTP=$(curl --silent --insecure -o /tmp/worker-resp.log -w "%{http_code}" -X POST \
+            -H "X-API-Key: $PORTAINER_TOKEN" -H "Content-Type: application/json" \
+            "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/services/$SVC_ID/update?version=$SVC_VER" \
+            --data-binary @/tmp/worker-spec.json)
+          echo "Worker update: HTTP $HTTP"
+          if [ "$HTTP" != "200" ]; then
+            echo "--- response ---"
+            cat /tmp/worker-resp.log
+            exit 1
+          fi
+
+      - name: Done
+        run: echo "Stack atualizada. Aguarde 30-60s para containers reiniciarem."
