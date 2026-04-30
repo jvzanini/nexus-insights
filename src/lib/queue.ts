@@ -34,3 +34,30 @@ export const refreshByAccountQueue = new Queue("refresh-by-account", {
     backoff: { type: "exponential", delay: 5_000 },
   },
 });
+
+export const refreshByInboxQueue = new Queue("refresh-by-inbox", {
+  connection: redis,
+  defaultJobOptions: {
+    ...defaultJobOptions,
+    attempts: 3,
+    backoff: { type: "exponential", delay: 5_000 },
+  },
+});
+
+export const refreshByAgentQueue = new Queue("refresh-by-agent", {
+  connection: redis,
+  defaultJobOptions: {
+    ...defaultJobOptions,
+    attempts: 3,
+    backoff: { type: "exponential", delay: 5_000 },
+  },
+});
+
+export const refreshByTeamQueue = new Queue("refresh-by-team", {
+  connection: redis,
+  defaultJobOptions: {
+    ...defaultJobOptions,
+    attempts: 3,
+    backoff: { type: "exponential", delay: 5_000 },
+  },
+});
