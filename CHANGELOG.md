@@ -1,5 +1,41 @@
 # Changelog
 
+## [v0.15.0] 2026-05-01 — Suite Agente Nex (sidebar dedicado + áudio + prompt config)
+
+### Adicionado
+
+- **Menu lateral "Agente Nex"** com 4 sub-páginas (`/agente-nex/configuracao`, `/agente-nex/chaves`, `/agente-nex/prompt`, `/agente-nex/consumo`). Item antigo "Consumo IA" standalone removido.
+- **Gravação de áudio na bolha** (record/pause/cancel/send) com cap de 5 min — Whisper API transcreve, IA responde texto. AbortController cancela uploads em flight.
+- **Player de áudio** customizado no balão do user com 5 níveis de velocidade (1×/1.25×/1.5×/1.75×/2×) + seek.
+- **Copy button universal** em mensagens do user E assistant (antes só nas da IA).
+- **System prompt configurável** — personalidade + tom + guardrails (até 20 × 300 chars) + override avançado (até 50k chars), persistidos em `nex_settings` (singleton).
+- **Base de conhecimento (KB)** — upload de PDFs/TXT (≤ 5 MB), extração via `pdf-parse`, sanitize NUL bytes, cap 30k chars no prompt total, lista visual com warnings de cap.
+- **Playground inline** — testa prompt sem persistir; resposta no mesmo card; link "ver prompt usado".
+- **Toggles** (audio + KB) no card "Recursos" com gating dinâmico de provider (mic só com OpenAI ativo).
+
+### Mudado
+
+- Tela "Consumo IA" migrou para `/agente-nex/consumo`. URL antiga `/configuracoes/consumo` mantém-se com **redirect 308**.
+- `/configuracoes` perde os cards Nex (movidos para `/agente-nex`).
+- `runNexAgent` lê system prompt **dinâmico** de `nex_settings` (não mais constante hardcoded). Suporta `promptOverride` + `isPlayground` (skip de logUsage).
+
+### Schema (runtime via `ensureNexTables`)
+
+- Nova tabela `nex_settings` (singleton id="global") com personalidade, tom, guardrails JSONB, advanced_override, audio_input_enabled, kb_enabled.
+- Nova tabela `nex_kb_documents` (id, name, mime_type, file_size, char_count, extracted_text, ...) + index `created_at DESC`.
+- `MODEL_PRICING` ganha `whisper-1` (per-minute, $0.006/min). Função `calculateCost` ganha 4º arg opcional `extras: { durationMs }`.
+- Enum `AuditAction` ganha mais um targetType: `nex_prompt`, `nex_kb_document` (textuais — não afetam enum DB).
+
+### Notas
+
+- Whisper requer chave OpenAI ativa. Toggle audio com provider != openai persiste mas é desativado em runtime via `effectiveAudioEnabled = audio_input_enabled && provider==="openai"`.
+- Áudio: `URL.createObjectURL` no client; após reload `audioBlobUrl` se perde — UI mostra fallback "(áudio expirado)" + transcrição preservada no localStorage.
+- KB: cap por doc 100k chars; cap total 30k chars no prompt (último doc truncado com `[...truncado...]`).
+- Workflow: spec v1→v2→v3 (22+26 achados de pente fino), plan v1→v2→v3 (25+29 achados). Subagent-driven-development com 28 tasks granulares. UI/UX Pro Max em todas as tasks UI.
+- 89 suites / 760 tests PASS · typecheck 0 erros.
+
+---
+
 ## [v0.14.3] 2026-05-01 — Hotfix dashboard: noResponse filtra activity msgs + ordem chart-noresponse + nav compacto + cache bump
 
 ### Fix

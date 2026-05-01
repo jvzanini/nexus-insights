@@ -1,12 +1,29 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-05-01
-**Versão atual em produção:** v0.13.4
+**Versão atual em produção:** v0.15.0
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.13.4)
+## Em produção (v0.15.0)
+
+### Release v0.15.0 (2026-05-01) — Suite Agente Nex (sidebar dedicado + áudio + prompt config)
+
+- **Menu lateral "Agente Nex"** com 4 sub-páginas (`/agente-nex/configuracao`, `/agente-nex/chaves`, `/agente-nex/prompt`, `/agente-nex/consumo`). Item antigo "Consumo IA" standalone removido.
+- **Gravação de áudio na bolha** (record/pause/cancel/send) com cap de 5 min — Whisper API transcreve, IA responde texto.
+- **Player de áudio** customizado no balão do user com 5 níveis de velocidade (1×/1.25×/1.5×/1.75×/2×) + seek.
+- **Copy button universal** em mensagens do user E assistant.
+- **System prompt configurável** — personalidade + tom + guardrails (até 20 × 300 chars) + override avançado (até 50k chars), persistidos em `nex_settings` (singleton).
+- **Base de conhecimento (KB)** — upload de PDFs/TXT (≤ 5 MB), extração via `pdf-parse`, cap 30k chars no prompt total.
+- **Playground inline** — testa prompt sem persistir; link "ver prompt usado".
+- **Toggles** (audio + KB) no card "Recursos" com gating dinâmico de provider (mic só com OpenAI ativo).
+- **Redirect 308** de `/configuracoes/consumo` → `/agente-nex/consumo` (URL antiga preservada).
+- **Schema runtime**: `nex_settings` (singleton) + `nex_kb_documents`. `MODEL_PRICING` ganha `whisper-1`.
+
+760 testes / 89 suites PASS · typecheck 0 erros.
+
+## Em produção anteriormente (v0.13.4)
 
 ### Hotfix v0.13.4 (2026-05-01) — mensagem real do provider no 404
 
