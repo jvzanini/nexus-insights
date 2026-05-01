@@ -9,7 +9,6 @@ import { PlatformSettingsCard } from "@/components/settings/platform-settings-ca
 import { EnabledReportsCard } from "@/components/settings/enabled-reports-card";
 import { MatrixIAToggleCard } from "@/components/settings/matrix-ia-toggle-card";
 import { DashboardSettingsCard } from "@/components/settings/dashboard-settings-card";
-import { LlmConfigCard } from "@/components/settings/llm-config-card";
 import { getCurrentUser } from "@/lib/auth";
 import { getAllSettings } from "@/lib/actions/settings";
 import { getDashboardSettings } from "@/lib/dashboard-settings";
@@ -20,10 +19,6 @@ import {
   getReportVisibility,
   type Visibility,
 } from "@/lib/reports/visibility";
-import { getPublicActiveLlmConfig } from "@/lib/llm/get-active-config";
-import { isNexBubbleEnabled } from "@/lib/llm/get-nex-bubble-enabled";
-import { listCredentials } from "@/lib/llm/credentials";
-import { getUsdBrlRate, DEFAULT_CARD_SPREAD } from "@/lib/llm/exchange-rate";
 
 export const metadata = { title: "Configurações | Nexus Insights" };
 export const dynamic = "force-dynamic";
@@ -55,11 +50,7 @@ export default async function Page() {
     platformTimezone,
     platformLocale,
     reportVisibilityEntries,
-    llmConfig,
     matrixIaVisibility,
-    nexBubbleEnabled,
-    initialCredentials,
-    currentRate,
     dashboardSettings,
   ] = await Promise.all([
     getPlatformTz(),
@@ -69,21 +60,9 @@ export default async function Page() {
         async (k) => [k, await getReportVisibility(k)] as const,
       ),
     ),
-    getPublicActiveLlmConfig(),
     getMatrixIAVisibility(),
-    isNexBubbleEnabled(),
-    listCredentials().catch((err) => {
-      console.error("[configuracoes] listCredentials falhou:", err);
-      return [];
-    }),
-    getUsdBrlRate().catch((err) => {
-      console.error("[configuracoes] getUsdBrlRate falhou:", err);
-      return null;
-    }),
     getDashboardSettings(),
   ]);
-
-  const initialSpread = currentRate?.spread ?? DEFAULT_CARD_SPREAD;
 
   const reportVisibilityMap = Object.fromEntries(
     reportVisibilityEntries,
@@ -130,15 +109,6 @@ export default async function Page() {
 
         {isSuperAdmin && (
           <MatrixIAToggleCard initialVisibility={matrixIaVisibility} />
-        )}
-
-        {isSuperAdmin && (
-          <LlmConfigCard
-            initial={llmConfig}
-            initialNexEnabled={nexBubbleEnabled}
-            initialCredentials={initialCredentials}
-            initialSpread={initialSpread}
-          />
         )}
 
         <Card className="rounded-2xl border border-border bg-muted/30 p-2">
