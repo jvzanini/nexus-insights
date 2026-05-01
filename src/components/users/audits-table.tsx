@@ -40,6 +40,12 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   credential_updated: "Credencial de IA atualizada",
   credential_deleted: "Credencial de IA removida",
   credential_tested: "Credencial de IA testada",
+  integration_profile_created: "Integração: perfil criado",
+  integration_profile_updated: "Integração: perfil atualizado",
+  integration_profile_deleted: "Integração: perfil removido",
+  integration_password_revealed: "Integração: senha revelada",
+  integration_password_rotated: "Integração: senha rotacionada",
+  integration_provisioning_failed: "Integração: provisionamento falhou",
 };
 
 function getActionBadgeClasses(action: AuditAction): string {

@@ -45,6 +45,12 @@ enum AuditAction {
   credential_updated
   credential_deleted
   credential_tested
+  integration_profile_created
+  integration_profile_updated
+  integration_profile_deleted
+  integration_password_revealed
+  integration_password_rotated
+  integration_provisioning_failed
 }
 
 model User {
@@ -72,6 +78,8 @@ model User {
   audits              AuditLog[]
   passwordResetTokens PasswordResetToken[]
   emailChangeTokens   EmailChangeToken[]
+  integrationProfilesCreated IntegrationProfile[]    @relation("IntegrationProfileCreator")
+  integrationAuditEvents     IntegrationAuditLog[]   @relation("IntegrationAuditUser")
 
   @@index([platformRole, isActive])
   @@index([email])
@@ -380,4 +388,70 @@ model ChatwootFactsMeta {
 
   @@id([dimension, accountId])
   @@map("chatwoot_facts_meta")
+}
+
+enum IntegrationKind {
+  power_bi
+}
+
+enum IntegrationProfileStatus {
+  active
+  disabled
+  error
+}
+
+enum IntegrationAuditEvent {
+  profile_created
+  profile_updated
+  profile_disabled
+  profile_reactivated
+  profile_deleted
+  password_revealed
+  password_rotated
+  whitelist_changed
+  provisioning_failed
+}
+
+model IntegrationProfile {
+  id                  String                       @id @default(uuid()) @db.Uuid
+  kind                IntegrationKind
+  name                String
+  description         String?                      @db.Text
+  status              IntegrationProfileStatus     @default(active)
+  pgUsername          String                       @unique @map("pg_username")
+  encryptedPgPassword String                       @map("encrypted_pg_password")
+  passwordLast4       String                       @map("password_last4")
+  allowedTables       Json                         @map("allowed_tables")
+  allowedColumns      Json                         @map("allowed_columns")
+  accountIdFilter     Json?                        @map("account_id_filter")
+  teamIdFilter        Json?                        @map("team_id_filter")
+  lastProvisionedAt   DateTime?                    @map("last_provisioned_at")
+  lastProvisionError  String?                      @map("last_provision_error") @db.Text
+  createdAt           DateTime                     @default(now()) @map("created_at")
+  updatedAt           DateTime                     @updatedAt @map("updated_at")
+  createdById         String?                      @db.Uuid @map("created_by_id")
+  createdBy           User?                        @relation("IntegrationProfileCreator", fields: [createdById], references: [id])
+  disabledAt          DateTime?                    @map("disabled_at")
+  deletedAt           DateTime?                    @map("deleted_at")
+
+  auditEvents IntegrationAuditLog[]
+
+  @@index([kind, status])
+  @@index([deletedAt])
+  @@map("integration_profiles")
+}
+
+model IntegrationAuditLog {
+  id        String                  @id @default(uuid()) @db.Uuid
+  profileId String                  @db.Uuid @map("profile_id")
+  profile   IntegrationProfile      @relation(fields: [profileId], references: [id], onDelete: NoAction)
+  event     IntegrationAuditEvent
+  userId    String?                 @db.Uuid @map("user_id")
+  user      User?                   @relation("IntegrationAuditUser", fields: [userId], references: [id])
+  details   Json?
+  ipAddress String?                 @map("ip_address")
+  createdAt DateTime                @default(now()) @map("created_at")
+
+  @@index([profileId, createdAt(sort: Desc)])
+  @@map("integration_audit_logs")
 }
