@@ -208,6 +208,14 @@ export interface UsageDetailRow {
   durationMs: number | null;
   /** ISO string em UTC. */
   createdAt: string;
+  /** Caracteres do prompt (entrada). `null` quando não persistido. */
+  promptChars: number | null;
+  /** Caracteres da resposta. `null` quando não persistido. */
+  responseChars: number | null;
+  /** UUID do usuário que disparou a chamada. `null` em chamadas anônimas. */
+  userId: string | null;
+  /** Mensagem de erro quando a chamada falhou. `null` em chamadas com sucesso. */
+  errorMessage: string | null;
 }
 
 export interface UsageDetailsTotals {
@@ -275,9 +283,14 @@ export async function getUsageDetails(args: {
       usd_to_brl_rate: number | string | null;
       duration_ms: number | string | null;
       created_at: Date | string;
+      prompt_chars: number | string | null;
+      response_chars: number | string | null;
+      user_id: string | null;
+      error_message: string | null;
     }>(
       `SELECT id, provider, model, tokens_input, tokens_output, cost_usd,
-              cost_brl, usd_to_brl_rate, duration_ms, created_at
+              cost_brl, usd_to_brl_rate, duration_ms, created_at,
+              prompt_chars, response_chars, user_id, error_message
          FROM llm_usage
         WHERE ${whereClause}
         ORDER BY created_at DESC
@@ -330,6 +343,16 @@ export async function getUsageDetails(args: {
       r.created_at instanceof Date
         ? r.created_at.toISOString()
         : new Date(r.created_at).toISOString(),
+    promptChars:
+      r.prompt_chars == null
+        ? null
+        : toNumber(r.prompt_chars as string | number),
+    responseChars:
+      r.response_chars == null
+        ? null
+        : toNumber(r.response_chars as string | number),
+    userId: r.user_id ?? null,
+    errorMessage: r.error_message ?? null,
   }));
 
   const total = toNumber(countRes.rows[0]?.total ?? 0);
