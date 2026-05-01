@@ -456,7 +456,7 @@ export function LlmConfigForm({
     credentialId ?? (hasNoCredentials ? NEW_CREDENTIAL_VALUE : "");
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Toggle global da bolha do Agente Nex. */}
       <div
         className="flex items-center justify-between gap-4 rounded-xl border border-border bg-background/40 px-4 py-3"
@@ -516,6 +516,8 @@ export function LlmConfigForm({
         </div>
       </div>
 
+      {/* Section: Conexão LLM. Wrapper com divisor sutil pra separar do toggle. */}
+      <div className="space-y-6 border-t border-border/50 pt-6">
       <div
         className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs ${
           isConfigured
@@ -563,41 +565,28 @@ export function LlmConfigForm({
             value={modelSelect}
             onChange={handleModelSelectChange}
             options={modelOptions}
+            customMode={{
+              sentinel: CUSTOM_MODEL_VALUE,
+              customValue: customModel,
+              onCustomChange: (next) => {
+                setCustomModel(next);
+                setTest({ status: "idle" });
+              },
+              placeholder: "ex: gpt-5.5-2026-04-15",
+              inputAriaLabel: "ID do modelo customizado",
+            }}
             placeholder="Selecionar modelo"
             disabled={busy}
             searchPlaceholder="Buscar modelo..."
             triggerClassName="min-h-[44px]"
           />
           <p className="text-xs text-muted-foreground">
-            Tier $ / $$ / $$$ indica custo aproximado por milhão de tokens.
+            {usingCustom
+              ? "Modelo customizado — útil pra snapshots datados ou novos não listados."
+              : "Tier $ / $$ / $$$ / $$$$ indica custo aproximado por milhão de tokens."}
           </p>
         </div>
       </div>
-
-      {usingCustom ? (
-        <div className="space-y-1.5">
-          <Label htmlFor="llm-custom-model">Modelo customizado</Label>
-          <Input
-            id="llm-custom-model"
-            value={customModel}
-            onChange={(e) => {
-              setCustomModel(e.currentTarget.value);
-              setTest({ status: "idle" });
-            }}
-            placeholder="ex: gpt-4o-2024-08-06"
-            autoComplete="off"
-            disabled={busy}
-            className="min-h-[44px]"
-            aria-describedby="llm-custom-model-help"
-          />
-          <p
-            id="llm-custom-model-help"
-            className="text-xs text-muted-foreground"
-          >
-            Útil para snapshots datados ou modelos novos não listados ainda.
-          </p>
-        </div>
-      ) : null}
 
       <div className="space-y-1.5">
         <Label htmlFor="llm-credential" className="gap-2">
@@ -705,6 +694,10 @@ export function LlmConfigForm({
         </div>
       )}
 
+      </div>
+
+      {/* Section: Spread cartão + ações. */}
+      <div className="space-y-6 border-t border-border/50 pt-6">
       {/* Spread cartão. */}
       <div className="space-y-1.5">
         <Label htmlFor="llm-card-spread" className="gap-2">
@@ -781,6 +774,7 @@ export function LlmConfigForm({
           Chave selecionada: {selectedCredential.label}
         </p>
       ) : null}
+      </div>
     </div>
   );
 }
