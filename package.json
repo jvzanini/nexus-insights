@@ -1,6 +1,6 @@
 {
   "name": "nexus-insights",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "private": true,
   "description": "Plataforma de relatórios e insights da operação Chatwoot da Matrix Fitness Group",
   "scripts": {
@@ -26,6 +26,7 @@
     "@prisma/adapter-pg": "^7.6.0",
     "@prisma/client": "^7.6.0",
     "@react-email/components": "^1.0.11",
+    "@tanstack/react-virtual": "^3.13.24",
     "axios": "^1.14.0",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.73.0",
