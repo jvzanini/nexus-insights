@@ -1,12 +1,28 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-04-30
-**Versão atual em produção:** v0.12.3
+**Versão atual em produção:** v0.13.0
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.12.3)
+## Em produção (v0.13.0)
+
+### Release v0.13.0 (2026-04-30) — Dashboard polish & configurabilidade
+
+- **Configurações de Dashboard** em `/configuracoes` (super_admin): início da semana + modo semana/mês (atual ou rolling).
+- **Drill-down de status completo** para Resolvido/Pendente/Adiado (antes só Aberto).
+- **Paginação server-side 50/pg** em Recebidas/Resolvidas (era 20 fixo).
+- **`comparison.open` + variação relativa em Taxa de Resolução** (era `pp`, agora `%`).
+- **Eixo X cheio 0–24h** com scroll horizontal centralizado na hora atual.
+- **Pills**: `7 dias` → `Semana`, `30 dias` → `Mês` (defaults agora cobrem mês/semana atual).
+- **TZ explícita no SQL bucket**: `(date_trunc(...) AT TIME ZONE $tz)` elimina ambiguidade.
+- **KpiClickableCard sem overlap** "ver detalhes" × sparkline; fim do badge "Novo".
+- **Tempo relativo curto** (`há 2h`/`há 3d`/`há 2m`) — `formatDistanceToNow` removido das tabelas de drill-down.
+
+670 testes PASS · typecheck 0 erros · build verde.
+
+## Em produção anteriormente (v0.12.3)
 
 ### Hotfix v0.12.3 (2026-04-30) — integração com providers + relatório de uso
 

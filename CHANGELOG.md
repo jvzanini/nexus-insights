@@ -1,5 +1,63 @@
 # Changelog
 
+## [v0.13.0] 2026-04-30 — Dashboard polish: variação relativa, semana/mês inteligentes, drill-downs completos
+
+> Resolve 11 problemas reportados pelo super_admin via screenshots no dashboard `/dashboard` e nos drill-downs dos KPIs, mais 5 melhorias incidentais no `ConversationsLineChart`. A spec passou por dois pente-finos reais (12+5 achados corrigidos) antes da implementação. Implementação via subagent-driven-development com TDD nos helpers puros.
+
+### Novidades
+
+- **Configurações de Dashboard** em `/configuracoes` (super_admin):
+  - Início da semana — qualquer dia 0–6 (default: segunda-feira).
+  - Modo da semana: **Semana atual** (do dia configurado até hoje) ou **Últimos 7 dias** (rolling).
+  - Modo do mês: **Mês atual** (do dia 1 até hoje) ou **Últimos 30 dias** (rolling).
+  - Defaults respeitam mês/semana atual — alinhado com a expectativa de "ver o mês que estou vivendo, não 30 dias atrás".
+- **Drill-down de status completo** para Resolvido / Pendente / Adiado (antes só "Aberto" tinha drill detalhado; demais mostravam mensagem "será adicionado em uma versão futura").
+- **Paginação server-side** (50/pg, cap 200) na lista de conversas dos drill-downs **Recebidas** e **Resolvidas** (era limitada a 20).
+- **`comparison.open`** em `dashboardData` — KPI "Abertas" passa a mostrar `±%` vs período anterior, eliminando o badge "Novo".
+- **Eixo X cheio 0–24h** no gráfico "Conversas por hora" quando o filtro é "Hoje" — preenche horas vazias com 0/0; scroll horizontal centralizado na hora atual (12h visíveis em desktop, 6h em mobile).
+
+### Mudado
+
+- **Pills de período renomeadas**: `7 dias` → `Semana`, `30 dias` → `Mês`. Tipo `DashboardPeriod` agora é `"hoje" | "semana" | "mes"`.
+- **Card "Taxa de resolução"**: indicador troca `pp` por **variação relativa em `%`** (`±X.X%`).
+- **`KpiClickableCard`**: hint "Ver detalhes" sai de cima do sparkline (vai para abaixo do trend, alinhado à direita, fade-in em hover/focus). Sem fallback "Novo" — quando não há trend, canto fica vazio.
+- **Tabelas dos drill-downs**: tempo relativo curto (`há 2h`, `há 3d`, `há 2m`, `há 2a`) em vez de `há cerca de 2 horas` (corrige aparência de fora-de-ordem do `formatDistanceToNow`).
+- **`getOpenDrillDown`** virou **`getStatusDrillDown`** parametrizado por `status: 0|1|2|3`. Wrapper de compat mantém callers antigos com `status=0`.
+- **`diffPp` deprecated** em `getResolutionRateDrillDown` — adicionado `diffPct` (variação relativa em `%`). Subtitle do drill-down passa a mostrar valores absolutos atual/anterior + variação.
+- **Tooltip do gráfico por hora** (no drill-down "Recebidas" e "Resolvidas"): nome do bucket passa de `14h` para `14:00 – 14:59` (deixa explícita a janela coberta).
+- **`ConversationsLineChart`** removeu o toggle linha/barra (mantém só linhas) e passa a usar `tickMargin=12` no eixo X (era colado).
+
+### Corrigido
+
+- **Filtro "7 dias"** agora respeita `dashboard.week_mode` (default = semana atual a partir de segunda-feira; antes era rolling 7 dias fixo).
+- **Filtro "30 dias"** agora respeita `dashboard.month_mode` (default = mês atual desde dia 1; antes era rolling 30 dias fixo).
+- **TZ ambígua no SQL bucket**: `date_trunc(...)::timestamp` foi trocado por `(date_trunc(...) AT TIME ZONE $tz)` em queries de chart de dashboard/drill-down. Elimina dependência da TZ do processo Node — antes funcionava por sorte (container default UTC).
+- **`expandFullDay`** usa `fromZonedTime` (date-fns-tz) — antes seria hack com `getTimezoneOffset()` do navegador.
+
+### Arquivos novos
+
+- `src/lib/dashboard-period.ts` — helper puro `getDashboardPeriod({period, mode, weekStartsOn, tz})` → `{current, prev}`. 9 testes PASS.
+- `src/lib/dashboard-settings.ts` — server-only, lê 3 chaves de `app_settings` com cache 60s. 5 testes PASS.
+- `src/lib/format/relative-time.ts` — `formatRelativeShort()`. 6 testes PASS.
+- `src/components/dashboard/drill-down-pagination.tsx` — paginador reusável.
+- `src/components/settings/dashboard-settings-card.tsx` — card de config (super_admin only).
+- `src/lib/utils/__tests__/format-bucket.test.ts` — guard test para TZ correctness.
+
+### Compatibilidade
+
+- Cache keys bumped: `dashboard-data-v4`, `dashboard-drill-status-v3`, `dashboard-drill-received-v3`, `dashboard-drill-resolved-v3`, `dashboard-drill-resolution-v3`. Caches anteriores expiram naturalmente em 30s.
+- `diffPp` mantido no payload por uma versão (deprecated) — remover em v0.14.0.
+- `recent` no drill-down de Recebidas/Resolvidas mantido como alias de `items`.
+- `OpenDrillDownData` mantido como alias de `StatusDrillDownData` por uma versão.
+
+### Auditoria
+
+- 670 testes PASS (77 suites). Typecheck 0 erros. Build verde.
+- Audit log: `setting_updated` (enum AuditAction existente) com `details.section: "dashboard"`.
+- 11 problemas reportados (P1–P11) + 5 do Pacote H (P12–P16) endereçados.
+
+---
+
 ## [v0.12.3] 2026-04-30 — Hotfix integração: modelo "não encontrado" + custo zerado + chamadas faltando
 
 > Corrige três bugs reportados pelo super_admin após validar o v0.12.2 em produção: (1) modelos novos como `gpt-5.1-mini` apareciam como "não encontrado neste provedor" mesmo existindo, (2) chamadas antigas mostravam custo `$0.000` no relatório, (3) o painel de Consumo contava menos chamadas do que o dashboard oficial da OpenAI.
