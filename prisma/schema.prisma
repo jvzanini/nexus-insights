@@ -210,6 +210,35 @@ model LlmUsage {
   @@map("llm_usage")
 }
 
+model NexSettings {
+  id                  String   @id @default("global")
+  personality         String   @default("")
+  tone                String   @default("")
+  guardrails          Json     @default("[]")
+  advancedOverride    String?  @map("advanced_override")
+  audioInputEnabled   Boolean  @default(false) @map("audio_input_enabled")
+  kbEnabled           Boolean  @default(true) @map("kb_enabled")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  updatedById         String?  @db.Uuid @map("updated_by_id")
+
+  @@map("nex_settings")
+}
+
+model NexKbDocument {
+  id            String   @id @default(uuid()) @db.Uuid
+  name          String
+  mimeType      String   @map("mime_type")
+  fileSize      Int      @map("file_size")
+  charCount     Int      @map("char_count")
+  extractedText String   @map("extracted_text")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  uploadedById  String?  @db.Uuid @map("uploaded_by_id")
+
+  @@index([createdAt(sort: Desc)])
+  @@map("nex_kb_documents")
+}
+
 model ChatwootFactsDailyByAccount {
   accountId       Int      @map("account_id")
   bucketDate      DateTime @map("bucket_date") @db.Date
