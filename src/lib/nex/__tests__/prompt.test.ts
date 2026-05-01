@@ -19,8 +19,31 @@ import {
 const q = pgPool.query as jest.MockedFunction<typeof pgPool.query>;
 beforeEach(() => q.mockReset());
 
+describe("IDENTITY_BASE", () => {
+  it("menciona Nexus Insights como plataforma", () => {
+    expect(IDENTITY_BASE).toContain("Nexus Insights");
+  });
+
+  it("menciona Nexus Chat como origem dos dados", () => {
+    expect(IDENTITY_BASE).toContain("Nexus Chat");
+  });
+
+  it("NÃO usa ChatGPT/GPT/Claude/Gemini como identidade", () => {
+    // não pode aparecer como auto-identificação. Texto canônico cita esses
+    // nomes apenas dentro da regra "NUNCA mencione ..." — então procuramos
+    // pela frase de blindagem.
+    expect(IDENTITY_BASE).toContain('NUNCA mencione "ChatGPT"');
+  });
+
+  it("define formato de deep-link via mapeamento de URL pública", () => {
+    expect(IDENTITY_BASE).toContain(
+      "{publicUrl}/app/accounts/{accountId}/conversations/{conversationId}",
+    );
+  });
+});
+
 describe("composeSystemPrompt", () => {
-  it("usa apenas IDENTITY_BASE com tudo vazio + KB off", () => {
+  it("usa apenas IDENTITY_BASE com tudo vazio + KB off + sem accountUrls", () => {
     const cfg: NexPromptConfig = {
       personality: "",
       tone: "",
@@ -30,6 +53,7 @@ describe("composeSystemPrompt", () => {
       kbEnabled: false,
     };
     expect(composeSystemPrompt(cfg, [])).toBe(IDENTITY_BASE);
+    expect(composeSystemPrompt(cfg, [], [])).toBe(IDENTITY_BASE);
   });
 
   it("compõe personality + tone + guardrails", () => {
@@ -120,6 +144,76 @@ describe("composeSystemPrompt", () => {
     );
     expect(out).not.toContain("depois");
     expect(out).toContain("[...truncado...]");
+  });
+
+  it("injeta seção '## URLs públicas das contas' quando accountUrls > 0", () => {
+    const out = composeSystemPrompt(
+      {
+        personality: "",
+        tone: "",
+        guardrails: [],
+        advancedOverride: null,
+        audioInputEnabled: false,
+        kbEnabled: false,
+      },
+      [],
+      [{ accountId: 1, publicUrl: "https://chat.matrix.com.br" }],
+    );
+    expect(out).toContain("## URLs públicas das contas");
+    expect(out).toContain("- Conta 1 (sem rótulo): https://chat.matrix.com.br");
+  });
+
+  it("usa label quando fornecido no accountUrl", () => {
+    const out = composeSystemPrompt(
+      {
+        personality: "",
+        tone: "",
+        guardrails: [],
+        advancedOverride: null,
+        audioInputEnabled: false,
+        kbEnabled: false,
+      },
+      [],
+      [
+        { accountId: 1, publicUrl: "https://chat.a.com", label: "Matriz" },
+        { accountId: 2, publicUrl: "https://chat.b.com", label: null },
+      ],
+    );
+    expect(out).toContain("- Conta 1 (Matriz): https://chat.a.com");
+    expect(out).toContain("- Conta 2 (sem rótulo): https://chat.b.com");
+  });
+
+  it("override ativo NÃO injeta accountUrls", () => {
+    const out = composeSystemPrompt(
+      {
+        personality: "",
+        tone: "",
+        guardrails: [],
+        advancedOverride: "PROMPT CRU",
+        audioInputEnabled: false,
+        kbEnabled: false,
+      },
+      [],
+      [{ accountId: 1, publicUrl: "https://chat.matrix.com.br" }],
+    );
+    expect(out).toBe("PROMPT CRU");
+    expect(out).not.toContain("URLs públicas");
+  });
+
+  it("accountUrls vazio NÃO injeta seção", () => {
+    const out = composeSystemPrompt(
+      {
+        personality: "",
+        tone: "",
+        guardrails: [],
+        advancedOverride: null,
+        audioInputEnabled: false,
+        kbEnabled: false,
+      },
+      [],
+      [],
+    );
+    expect(out).not.toContain("URLs públicas");
   });
 });
 
