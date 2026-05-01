@@ -120,6 +120,13 @@ export interface DashboardDataInput {
   /** default true: exclui inbox Matrix IA (id=31). */
   excludeMatrixIA?: boolean;
   ttlSeconds?: number;
+  /**
+   * Força a granularity em vez de auto-detectar pelo tamanho da janela.
+   * v0.14.0: dashboard usa "hour" para "Dia" e "day" para "Semana"/"Mês",
+   * independente de window (mês cheio com referenceDate=hoje pode dar window
+   * de só 1 dia, mas o eixo precisa ser por dia).
+   */
+  forcedGranularity?: "hour" | "day";
 }
 
 interface RowCount {
@@ -202,13 +209,13 @@ export async function dashboardData(args: DashboardDataInput) {
     },
     excludeMatrixIA,
     tz,
+    forcedGranularity: args.forcedGranularity ?? null,
   };
 
-  // Cache key v4 — bump força invalidação ao trocar shape do bucket (timestamp
-  // sem TZ → timestamptz UTC explícito) e qualquer mudança nas coortes.
+  // Cache key v6 — bump por mudança em granularity forçada (v0.14.0).
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-data-v5",
+    name: "dashboard-data-v6",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -221,11 +228,12 @@ export async function dashboardData(args: DashboardDataInput) {
         async () => {
           const pool = getChatwootPool();
 
-          // Granularidade: hora se janela <= ~48h, caso contrário dia.
+          // Granularidade: forçada pelo caller, ou hora se janela <= ~48h.
           const periodMs =
             args.period.end.getTime() - args.period.start.getTime();
           const granularity: "hour" | "day" =
-            periodMs <= 1000 * 60 * 60 * 48 ? "hour" : "day";
+            args.forcedGranularity ??
+            (periodMs <= 1000 * 60 * 60 * 48 ? "hour" : "day");
 
           const matrixClause = excludeMatrixIA ? " AND c.inbox_id <> 31" : "";
 

@@ -7,16 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { OpenInChatwoot } from "@/components/reports/open-in-chatwoot";
 import { cn } from "@/lib/utils";
+import { formatDuration } from "@/lib/utils/format-time";
 import type { DashboardNoResponse } from "@/lib/chatwoot/queries/dashboard-data";
 
-function formatWaiting(seconds: number): string {
-  if (seconds <= 0) return "—";
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}min`;
-  const hrs = Math.floor(seconds / 3600);
-  const mins = Math.floor((seconds % 3600) / 60);
-  return mins > 0 ? `${hrs}h ${mins}min` : `${hrs}h`;
-}
+const formatWaiting = formatDuration;
 
 export interface NoResponseCardProps {
   data: DashboardNoResponse;

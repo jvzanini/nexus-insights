@@ -1,5 +1,41 @@
 # Changelog
 
+## [v0.14.0] 2026-05-01 — Dashboard chart polish: navegação por período + eixo cheio + sem dots/legenda
+
+### Mudou
+
+- **Pill "Hoje" → "Dia"** no `DashboardFilters` (tipo `DashboardPeriod = "dia" | "semana" | "mes"`).
+- **Backend `getDashboardPeriod` aceita `referenceDate?: Date`** — permite navegar entre períodos. `dashboardData` aceita `forcedGranularity` para garantir que "Mês" use granularity=day mesmo quando window é só 1 dia (mês atual com referenceDate=hoje).
+- **Range cobre período inteiro**: "Semana" vai segunda → domingo (ou dia configurado), "Mês" vai dia 1 → último dia do mês — mesmo dias futuros entram (vazios, como o user pediu). Era `endOfDay(now)`, agora `endOfWeek/endOfMonth(refInTz, ...)`.
+- **`actions/dashboard.ts`** retorna `nextAvailable` (false quando range.end >= now) para o frontend habilitar/desabilitar setinha forward.
+- **Cache key bump**: `dashboard-data-v5` → `v6` (por adição de `forcedGranularity`).
+
+### Adicionado
+
+- **`<PeriodNavigator>`** novo componente (`src/components/dashboard/period-navigator.tsx`):
+  - Setinha ← / texto / setinha → no canto superior direito do chart.
+  - Label adaptativo: "01/05" para Dia, "27/04 — 03/05" para Semana, "MAI/26" para Mês (3 letras + ano abreviado).
+  - Navegação livre para o passado (sem trava — vai até primeiro dia de dados de fato; backend retorna 0/0 se data sem dado). Setinha forward desabilitada quando range.end já cobre `agora`.
+- **State `referenceDate`** no `dashboard-content.tsx`. Reset para `null` quando period muda.
+
+### Polish
+
+- **Chart sem `<Legend>`** recharts (a legenda ficava redundante com os checkboxes).
+- **Chart sem `dot={true}`** nos pontos (`dot={false}` mantido).
+- **Chart full-width** quando `granularity="day"` (Semana/Mês) — `<ResponsiveContainer width="100%" height={350}>` direto sem wrapper de width fixo.
+- **Chart com scroll horizontal** apenas quando `granularity="hour"` (Dia) — 24 buckets centralizando na hora atual ou no meio do dia para datas passadas.
+- **Eixo X completo** via `fillBuckets(data, granularity, tz, range)` — preenche TODOS os dias/horas do range com 0/0 quando não há dado.
+
+### Fix
+
+- **`formatWaiting` em "Conversas sem resposta"** centralizado em `formatDuration` (`@/lib/utils/format-time`) — agora usa "1 dia"/"3 dias" depois de >= 24h em vez de "82h 40min". Aplicado no `NoResponseCard` e no `NoResponseDrillDownContent`.
+
+### Verificação
+
+- 674 testes / 77 suites PASS · typecheck 0 erros · build verde.
+
+---
+
 ## [v0.13.9] 2026-05-01 — Agente Nex respeita visibility do Matrix IA
 
 > O Agente Nex hardcodava `inbox_id <> 31` em **todas** as queries de tools — independentemente da configuração de visibility. Agora ele respeita a regra 3-níveis igual ao resto do app: `all` (vê), `super_admin_only` (super_admin vê, demais não) e `none` (ninguém vê).

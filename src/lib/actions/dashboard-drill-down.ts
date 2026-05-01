@@ -27,7 +27,7 @@ import {
 } from "@/lib/dashboard-settings";
 import { getPlatformTz, DEFAULT_TZ } from "@/lib/datetime";
 
-export type DashboardPeriod = "hoje" | "semana" | "mes";
+export type DashboardPeriod = "dia" | "semana" | "mes";
 
 export interface DrillDownActionResult<T> {
   success: boolean;

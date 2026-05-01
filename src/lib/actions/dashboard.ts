@@ -15,7 +15,7 @@ import {
 import { getPlatformTz, DEFAULT_TZ } from "@/lib/datetime";
 import type { AuthUser } from "@/lib/auth-helpers";
 
-export type DashboardPeriod = "hoje" | "semana" | "mes";
+export type DashboardPeriod = "dia" | "semana" | "mes";
 
 export interface DashboardActionResult {
   success: boolean;
@@ -31,6 +31,8 @@ export interface DashboardActionResult {
     tz: string;
     /** ISO string do início e fim do período aplicado. */
     range: { start: string; end: string };
+    /** Indica se o frontend pode oferecer setinha "→" para período seguinte. */
+    nextAvailable: boolean;
   };
   error?: string;
 }
@@ -38,6 +40,8 @@ export interface DashboardActionResult {
 export async function getDashboardData(args: {
   accountId: number;
   period: DashboardPeriod;
+  /** ISO date opcional. Default = now. Permite navegar entre períodos. */
+  referenceDate?: string;
 }): Promise<DashboardActionResult> {
   try {
     const user = await getCurrentUser();
@@ -89,19 +93,32 @@ export async function getDashboardData(args: {
           ? settings.monthMode
           : "current";
 
+    const referenceDate = args.referenceDate
+      ? new Date(args.referenceDate)
+      : undefined;
+
     const { current, prev } = getDashboardPeriod({
       period: args.period,
       mode,
       weekStartsOn: settings.weekStartsOn,
       tz,
+      referenceDate,
     });
+
+    // Forçar granularity: "dia" → hour, "semana"/"mes" → day
+    const forcedGranularity: "hour" | "day" =
+      args.period === "dia" ? "hour" : "day";
 
     const result = await dashboardData({
       accountId: args.accountId,
       period: current,
       prevPeriod: prev,
       excludeMatrixIA,
+      forcedGranularity,
     });
+
+    const nowMs = Date.now();
+    const nextAvailable = current.end.getTime() < nowMs;
 
     return {
       success: true,
@@ -119,6 +136,7 @@ export async function getDashboardData(args: {
           start: current.start.toISOString(),
           end: current.end.toISOString(),
         },
+        nextAvailable,
       },
     };
   } catch (err) {

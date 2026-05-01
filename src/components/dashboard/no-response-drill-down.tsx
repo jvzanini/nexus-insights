@@ -34,14 +34,9 @@ interface Props {
   enabled: boolean;
 }
 
-function formatWaiting(seconds: number): string {
-  if (seconds <= 0) return "—";
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}min`;
-  const hrs = Math.floor(seconds / 3600);
-  const mins = Math.floor((seconds % 3600) / 60);
-  return mins > 0 ? `${hrs}h ${mins}min` : `${hrs}h`;
-}
+import { formatDuration } from "@/lib/utils/format-time";
+
+const formatWaiting = formatDuration;
 
 function ErrorState({ message }: { message: string }) {
   return (

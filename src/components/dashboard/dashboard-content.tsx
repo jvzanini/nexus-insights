@@ -122,7 +122,9 @@ export function DashboardContent({
   initialAccounts,
 }: DashboardContentProps) {
   const [accountId] = useState(initialAccountId);
-  const [period, setPeriod] = useState<DashboardPeriod>("hoje");
+  const [period, setPeriod] = useState<DashboardPeriod>("dia");
+  /** ISO date — quando trocada via PeriodNavigator, refaz fetch. */
+  const [referenceDate, setReferenceDate] = useState<string | null>(null);
   const [data, setData] = useState<DashboardSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -158,7 +160,11 @@ export function DashboardContent({
         setIsLoading(true);
       }
       try {
-        const result = await getDashboardData({ accountId, period });
+        const result = await getDashboardData({
+          accountId,
+          period,
+          referenceDate: referenceDate ?? undefined,
+        });
         if (result.success && result.data) {
           setData(result.data);
           setError(null);
@@ -174,7 +180,7 @@ export function DashboardContent({
         setIsInitialLoad(false);
       }
     },
-    [accountId, period],
+    [accountId, period, referenceDate],
   );
 
   useEffect(() => {
@@ -189,7 +195,7 @@ export function DashboardContent({
       if (timerRef.current) clearInterval(timerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountId, period]);
+  }, [accountId, period, referenceDate]);
 
   function handleRefresh() {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -199,6 +205,12 @@ export function DashboardContent({
 
   function handlePeriodChange(p: DashboardPeriod) {
     setPeriod(p);
+    // Reseta navegação ao trocar de filtro
+    setReferenceDate(null);
+  }
+
+  function handleReferenceDateChange(iso: string | null) {
+    setReferenceDate(iso);
   }
 
   const now = new Date();
@@ -439,6 +451,11 @@ export function DashboardContent({
           granularity={granularity}
           tz={data.tz ?? tz}
           range={data.range}
+          period={period}
+          weekStartsOn={data.settings?.weekStartsOn ?? 1}
+          referenceDate={referenceDate}
+          nextAvailable={data.nextAvailable ?? false}
+          onReferenceDateChange={handleReferenceDateChange}
         />
       </motion.div>
 

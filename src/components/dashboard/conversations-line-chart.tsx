@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { LineChart as LineChartIcon } from "lucide-react";
 import {
   CartesianGrid,
-  Legend,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -23,26 +22,26 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatBucketLabel } from "@/lib/utils/format-bucket";
 import { cn } from "@/lib/utils";
 import type { DashboardChartPoint } from "@/lib/chatwoot/queries/dashboard-data";
+import { PeriodNavigator } from "./period-navigator";
 
 type SeriesKey = "received" | "open" | "resolved" | "pending";
+type DashboardPeriod = "dia" | "semana" | "mes";
 
 interface SeriesDef {
   key: SeriesKey;
   label: string;
   color: string;
-  /** Texto da legenda no recharts (em pt-BR). */
-  rechartsName: string;
 }
 
 /**
- * Cores definidas conforme feedback de João (2026-05-01):
+ * Cores conforme feedback de João (2026-05-01):
  * Recebidas → verde, Abertas → amarelo, Resolvidas → azul, Pendentes → roxo.
  */
 const SERIES: readonly SeriesDef[] = [
-  { key: "received", label: "Recebidas", color: "#22c55e", rechartsName: "Recebidas" },
-  { key: "open", label: "Abertas", color: "#f59e0b", rechartsName: "Abertas" },
-  { key: "resolved", label: "Resolvidas", color: "#3b82f6", rechartsName: "Resolvidas" },
-  { key: "pending", label: "Pendentes", color: "#8b5cf6", rechartsName: "Pendentes" },
+  { key: "received", label: "Recebidas", color: "#22c55e" },
+  { key: "open", label: "Abertas", color: "#f59e0b" },
+  { key: "resolved", label: "Resolvidas", color: "#3b82f6" },
+  { key: "pending", label: "Pendentes", color: "#8b5cf6" },
 ];
 
 const STORAGE_KEY = "dashboard.chart.visibleSeries";
@@ -51,10 +50,13 @@ const DEFAULT_VISIBLE: SeriesKey[] = ["received", "open", "resolved", "pending"]
 interface ConversationsLineChartProps {
   data: DashboardChartPoint[];
   granularity: "hour" | "day";
-  /** Timezone da plataforma. */
   tz: string;
-  /** Range aplicado pelo backend (ISO strings). Usado para preencher o eixo X. */
-  range?: { start: string; end: string };
+  range: { start: string; end: string };
+  period: DashboardPeriod;
+  weekStartsOn: number;
+  referenceDate: string | null;
+  nextAvailable: boolean;
+  onReferenceDateChange: (iso: string | null) => void;
 }
 
 interface ChartRow {
@@ -99,7 +101,7 @@ function CustomTooltip(props: TooltipContentProps<ValueType, NameType>) {
   );
 }
 
-/** Gera N entradas vazias entre `start` e `end` em buckets de 1 hora ou 1 dia. */
+/** Gera buckets vazios cobrindo todo o range em granularity definida. */
 function generateEmptyBuckets(
   rangeStart: Date,
   rangeEnd: Date,
@@ -109,8 +111,6 @@ function generateEmptyBuckets(
   const result: Array<{ bucket: string; hourOfDay?: number }> = [];
 
   if (granularity === "hour") {
-    // 24 horas do dia (00:00..23:00) na tz local
-    // dayKey = YYYY-MM-DD do rangeStart na tz
     const dayKey = new Intl.DateTimeFormat("en-CA", {
       timeZone: tz,
       year: "numeric",
@@ -119,53 +119,50 @@ function generateEmptyBuckets(
     }).format(rangeStart);
     for (let h = 0; h < 24; h++) {
       const hh = String(h).padStart(2, "0");
-      const localISO = `${dayKey}T${hh}:00:00`;
-      const utc = fromZonedTime(localISO, tz);
+      const utc = fromZonedTime(`${dayKey}T${hh}:00:00`, tz);
       result.push({ bucket: utc.toISOString(), hourOfDay: h });
     }
-  } else {
-    // Dias entre rangeStart e rangeEnd (inclusive das datas locais)
-    // Pega o YYYY-MM-DD de cada dia em tz, gera 00:00 local de cada
-    const startKey = new Intl.DateTimeFormat("en-CA", {
-      timeZone: tz,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(rangeStart);
-    const endKey = new Intl.DateTimeFormat("en-CA", {
-      timeZone: tz,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(rangeEnd);
-
-    // Loop dia-a-dia (UTC days do startKey até endKey)
-    const cur = new Date(`${startKey}T00:00:00Z`);
-    const stop = new Date(`${endKey}T00:00:00Z`);
-    while (cur.getTime() <= stop.getTime()) {
-      const ymd = cur.toISOString().slice(0, 10);
-      const utc = fromZonedTime(`${ymd}T00:00:00`, tz);
-      result.push({ bucket: utc.toISOString() });
-      cur.setUTCDate(cur.getUTCDate() + 1);
-    }
+    return result;
   }
 
+  // day: dia-a-dia entre rangeStart e rangeEnd
+  const startKey = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(rangeStart);
+  const endKey = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(rangeEnd);
+
+  const cur = new Date(`${startKey}T00:00:00Z`);
+  const stop = new Date(`${endKey}T00:00:00Z`);
+  while (cur.getTime() <= stop.getTime()) {
+    const ymd = cur.toISOString().slice(0, 10);
+    const utc = fromZonedTime(`${ymd}T00:00:00`, tz);
+    result.push({ bucket: utc.toISOString() });
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
   return result;
 }
 
-/** Combina data real + buckets vazios. Match por hora-do-dia (granularity=hour) ou dia-do-período (granularity=day). */
 function fillBuckets(
   data: DashboardChartPoint[],
   granularity: "hour" | "day",
   tz: string,
-  range?: { start: string; end: string },
+  range: { start: string; end: string },
 ): ChartRow[] {
-  const rangeStart = range ? new Date(range.start) : data[0] ? new Date(data[0].bucket) : new Date();
-  const rangeEnd = range ? new Date(range.end) : data[data.length - 1] ? new Date(data[data.length - 1]!.bucket) : new Date();
+  const empty = generateEmptyBuckets(
+    new Date(range.start),
+    new Date(range.end),
+    granularity,
+    tz,
+  );
 
-  const empty = generateEmptyBuckets(rangeStart, rangeEnd, granularity, tz);
-
-  // Index dos buckets reais por hora-do-dia ou YYYY-MM-DD
   const realByKey = new Map<string, DashboardChartPoint>();
   for (const d of data) {
     const dt = new Date(d.bucket);
@@ -175,13 +172,13 @@ function fillBuckets(
             timeZone: tz,
             hour: "2-digit",
             hour12: false,
-          }).format(dt) // "HH"
+          }).format(dt)
         : new Intl.DateTimeFormat("en-CA", {
             timeZone: tz,
             year: "numeric",
             month: "2-digit",
             day: "2-digit",
-          }).format(dt); // YYYY-MM-DD
+          }).format(dt);
     realByKey.set(key, d);
   }
 
@@ -222,11 +219,15 @@ export function ConversationsLineChart({
   granularity,
   tz,
   range,
+  period,
+  weekStartsOn,
+  referenceDate,
+  nextAvailable,
+  onReferenceDateChange,
 }: ConversationsLineChartProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [visibleSeries, setVisibleSeries] = useState<SeriesKey[]>(DEFAULT_VISIBLE);
 
-  // Hidrata visibilidade do localStorage
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -270,18 +271,23 @@ export function ConversationsLineChart({
     (p) => p.received === 0 && p.open === 0 && p.resolved === 0 && p.pending === 0,
   );
 
-  // Largura fixa por bucket: hour=80px, day=64px. Garante respiro nas labels.
-  const PX_PER_BUCKET = granularity === "hour" ? 80 : 64;
-  const totalWidth = Math.max(640, chartData.length * PX_PER_BUCKET);
+  // Para "Dia" (granularity=hour), chart precisa de scroll horizontal de 24h
+  // centralizando na hora atual quando referenceDate é hoje. Largura fixa.
+  // Para "Semana"/"Mês" (granularity=day), full-width responsivo.
+  const useScrollHorizontal = granularity === "hour";
+  const PX_PER_HOUR = 80;
+  const totalScrollWidth = useScrollHorizontal
+    ? Math.max(640, chartData.length * PX_PER_HOUR)
+    : 0;
 
-  // Centraliza scroll na hora atual (granularity=hour) ou último dia (granularity=day) ao montar
   useEffect(() => {
-    if (!scrollRef.current || chartData.length === 0) return;
+    if (!useScrollHorizontal || !scrollRef.current || chartData.length === 0) return;
     const container = scrollRef.current;
     const containerWidth = container.clientWidth;
 
     let targetIndex = chartData.length - 1;
-    if (granularity === "hour") {
+    // Se referenceDate é null OU é hoje, centra na hora atual
+    if (!referenceDate) {
       const nowHourStr = new Intl.DateTimeFormat("en-GB", {
         timeZone: tz,
         hour: "2-digit",
@@ -289,11 +295,14 @@ export function ConversationsLineChart({
       }).format(new Date());
       const nowHour = parseInt(nowHourStr, 10);
       if (Number.isFinite(nowHour)) targetIndex = nowHour;
+    } else {
+      // Em dias passados: centra no meio do dia (12h)
+      targetIndex = 12;
     }
 
-    const targetX = targetIndex * PX_PER_BUCKET + PX_PER_BUCKET / 2;
+    const targetX = targetIndex * PX_PER_HOUR + PX_PER_HOUR / 2;
     container.scrollLeft = Math.max(0, targetX - containerWidth / 2);
-  }, [granularity, tz, chartData.length, PX_PER_BUCKET]);
+  }, [useScrollHorizontal, tz, chartData.length, referenceDate]);
 
   return (
     <Card className="bg-card border border-border rounded-xl">
@@ -307,6 +316,15 @@ export function ConversationsLineChart({
             Selecione abaixo as séries que deseja ver no gráfico.
           </p>
         </div>
+        <PeriodNavigator
+          period={period}
+          range={range}
+          tz={tz}
+          weekStartsOn={weekStartsOn}
+          referenceDate={referenceDate}
+          nextAvailable={nextAvailable}
+          onChange={onReferenceDateChange}
+        />
       </CardHeader>
       <CardContent>
         {/* Checkboxes de séries */}
@@ -331,9 +349,7 @@ export function ConversationsLineChart({
                   aria-label={`Mostrar série ${s.label}`}
                 />
                 <span
-                  className={cn(
-                    "inline-flex h-4 w-4 items-center justify-center rounded border-2 transition-colors",
-                  )}
+                  className="inline-flex h-4 w-4 items-center justify-center rounded border-2 transition-colors"
                   style={{
                     borderColor: s.color,
                     backgroundColor: active ? s.color : "transparent",
@@ -362,21 +378,17 @@ export function ConversationsLineChart({
         </div>
 
         {isEmpty ? (
-          <div className="flex items-center justify-center h-[320px] text-sm text-muted-foreground">
+          <div className="flex items-center justify-center h-[350px] text-sm text-muted-foreground">
             Nenhuma conversa no período
           </div>
-        ) : (
+        ) : useScrollHorizontal ? (
           <div
             ref={scrollRef}
             className="overflow-x-auto overflow-y-hidden scrollbar-thin"
             tabIndex={0}
-            aria-label={
-              granularity === "hour"
-                ? "Gráfico por hora — intervalo de hora cheia (HH:00 a HH:59), com rolagem horizontal"
-                : "Gráfico por dia — rolagem horizontal disponível em períodos longos"
-            }
+            aria-label="Gráfico por hora — rolagem horizontal disponível"
           >
-            <div style={{ width: totalWidth, height: 350 }}>
+            <div style={{ width: totalScrollWidth, height: 350 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart
                   data={chartData}
@@ -403,18 +415,12 @@ export function ConversationsLineChart({
                     content={CustomTooltip}
                     cursor={{ stroke: "rgba(63, 63, 70, 0.6)" }}
                   />
-                  <Legend
-                    verticalAlign="top"
-                    height={28}
-                    wrapperStyle={{ fontSize: 13, paddingBottom: 8 }}
-                    iconType="circle"
-                  />
                   {SERIES.filter((s) => visibleSeries.includes(s.key)).map((s) => (
                     <Line
                       key={s.key}
                       type="monotone"
                       dataKey={s.key}
-                      name={s.rechartsName}
+                      name={s.label}
                       stroke={s.color}
                       strokeWidth={2.5}
                       dot={false}
@@ -424,6 +430,49 @@ export function ConversationsLineChart({
                 </LineChart>
               </ResponsiveContainer>
             </div>
+          </div>
+        ) : (
+          <div style={{ width: "100%", height: 350 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={chartData}
+                margin={{ top: 16, right: 24, left: 8, bottom: 16 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fill: "#a1a1aa", fontSize: 13 }}
+                  tickLine={false}
+                  tickMargin={14}
+                  axisLine={{ stroke: "#3f3f46" }}
+                  interval="preserveStartEnd"
+                  height={44}
+                />
+                <YAxis
+                  tick={{ fill: "#a1a1aa", fontSize: 13 }}
+                  tickLine={false}
+                  axisLine={false}
+                  allowDecimals={false}
+                  width={44}
+                />
+                <Tooltip
+                  content={CustomTooltip}
+                  cursor={{ stroke: "rgba(63, 63, 70, 0.6)" }}
+                />
+                {SERIES.filter((s) => visibleSeries.includes(s.key)).map((s) => (
+                  <Line
+                    key={s.key}
+                    type="monotone"
+                    dataKey={s.key}
+                    name={s.label}
+                    stroke={s.color}
+                    strokeWidth={2.5}
+                    dot={false}
+                    activeDot={{ r: 5, strokeWidth: 0 }}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
           </div>
         )}
       </CardContent>
