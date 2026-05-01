@@ -118,3 +118,120 @@ describe("SearchableSelect", () => {
     expect(screen.getByTestId("badge-medium")).toBeInTheDocument();
   });
 });
+
+describe("SearchableSelect — customMode", () => {
+  function CustomHarness({
+    initialValue = "custom",
+    initialCustom = "",
+    onChange,
+    onCustomChange,
+  }: {
+    initialValue?: string;
+    initialCustom?: string;
+    onChange?: (v: string) => void;
+    onCustomChange?: (v: string) => void;
+  }) {
+    const [value, setValue] = useState(initialValue);
+    const [customValue, setCustomValue] = useState(initialCustom);
+    return (
+      <SearchableSelect
+        value={value}
+        onChange={(v) => {
+          setValue(v);
+          onChange?.(v);
+        }}
+        options={OPTIONS}
+        customMode={{
+          sentinel: "custom",
+          customValue,
+          onCustomChange: (next) => {
+            setCustomValue(next);
+            onCustomChange?.(next);
+          },
+          placeholder: "Digite o nome do modelo",
+          inputAriaLabel: "Nome do modelo customizado",
+        }}
+      />
+    );
+  }
+
+  it("renderiza input editable quando value === sentinel", () => {
+    render(<CustomHarness />);
+    const input = screen.getByLabelText("Nome do modelo customizado");
+    expect(input).toBeInTheDocument();
+    expect(input.tagName.toLowerCase()).toBe("input");
+  });
+
+  it("digitar no input dispara onCustomChange", () => {
+    const onCustomChange = jest.fn();
+    render(<CustomHarness onCustomChange={onCustomChange} />);
+    const input = screen.getByLabelText("Nome do modelo customizado");
+    fireEvent.change(input, { target: { value: "meu-modelo-custom" } });
+    expect(onCustomChange).toHaveBeenCalledWith("meu-modelo-custom");
+  });
+
+  it("input mostra customValue como valor", () => {
+    render(<CustomHarness initialCustom="ja-tinha-algo" />);
+    const input = screen.getByLabelText(
+      "Nome do modelo customizado",
+    ) as HTMLInputElement;
+    expect(input.value).toBe("ja-tinha-algo");
+  });
+
+  it("botão X visível em customMode e click reseta value + customValue", () => {
+    const onChange = jest.fn();
+    const onCustomChange = jest.fn();
+    render(
+      <CustomHarness
+        initialCustom="modelo-x"
+        onChange={onChange}
+        onCustomChange={onCustomChange}
+      />,
+    );
+    const clearBtn = screen.getByRole("button", { name: /limpar/i });
+    expect(clearBtn).toBeInTheDocument();
+    fireEvent.click(clearBtn);
+    expect(onCustomChange).toHaveBeenCalledWith("");
+    expect(onChange).toHaveBeenCalledWith("");
+  });
+
+  it("botão X NÃO aparece quando value !== sentinel", () => {
+    const [Comp] = [
+      function NonSentinel() {
+        const [value, setValue] = useState("gpt-4o");
+        const [customValue, setCustomValue] = useState("");
+        return (
+          <SearchableSelect
+            value={value}
+            onChange={setValue}
+            options={OPTIONS}
+            customMode={{
+              sentinel: "custom",
+              customValue,
+              onCustomChange: setCustomValue,
+              inputAriaLabel: "Nome do modelo customizado",
+            }}
+          />
+        );
+      },
+    ];
+    render(<Comp />);
+    expect(
+      screen.queryByRole("button", { name: /limpar/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Nome do modelo customizado"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("selecionar item do dropdown sai do customMode (chama onChange com novo value)", () => {
+    const onChange = jest.fn();
+    render(<CustomHarness onChange={onChange} />);
+    // abre dropdown clicando no chevron-trigger (botão wrapper)
+    const triggers = screen.getAllByRole("button");
+    // primeiro botão é o trigger principal; o último botão dentro do trigger é o X
+    fireEvent.click(triggers[0]);
+    fireEvent.click(screen.getByText("GPT-4o"));
+    expect(onChange).toHaveBeenCalledWith("gpt-4o");
+  });
+});
