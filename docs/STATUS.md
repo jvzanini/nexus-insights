@@ -1,18 +1,42 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-05-01
-**Versão atual em produção:** v0.15.0
+**Versão atual em produção:** v0.15.4
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.15.0)
+## Em produção (v0.15.4)
+
+### Hotfix v0.15.4 (2026-05-01) — refinements UX bubble Agente Nex
+
+- **AudioPlayer speed**: botão cíclico (1×→1.25×→1.5×→1.75×→2×→1×) sem ícone Gauge — texto puro com border-violet-500/30 + hover scale-105 dentro do balão violet 600/15.
+- **Input bar layout estável**: container `flex items-end gap-2` idêntico em idle e gravando; inner area `flex-1 rounded-xl border border-input bg-background min-h-9` sempre igual; Mic externo só em idle; Send externo (gradient violet) sempre no mesmo lugar com handler dinâmico.
+- **Player aparece imediatamente** ao enviar áudio (audioMsg + loadingMsg simultâneos antes do Whisper); transcrição é injetada quando Whisper responde.
+- **Persistência IndexedDB** para áudios na bolha: `src/lib/nex/audio-storage.ts` (saveAudio/getAudio/deleteAudio/clearAllAudios + no-op SSR); `useEffect` re-hidrata `audioBlobUrl` no mount; `clearAllAudios` chamado pelo `handleClear`; `NexMessage` ganha `hasStoredAudio` + skeleton "carregando áudio…". `AudioRecorder` ganha `mode="standalone" | "embedded"` + `forwardRef` + `useImperativeHandle`.
+
+769/769 tests PASS · typecheck 0 erros.
+
+### Hotfix v0.15.3 (2026-05-01) — AudioRecorder unmount loop
+
+- Bug v0.15.2: dois `<AudioRecorder>` em branches condicionais (`isRecording=true`/`false`). Ao mudar de estado, React desmontava/remontava perdendo MediaRecorder interno → controles sumiam.
+- Fix: instância **única** sempre montada; só siblings (textarea + Send) renderizam condicional.
+
+### Hotfix v0.15.2 (2026-05-01) — UX bubble audio (3 bugs)
+
+- Input bar reorganizado (textarea + ➤ enviar texto somem quando gravando, AudioRecorder full-width).
+- Timer respeita pause via `recordedMsRef` + `segmentStartedAtRef`.
+- AudioPlayer speed dropdown vira botão cíclico Gauge.
+
+### Hotfix v0.15.1 (2026-05-01) — microphone permissions
+
+- `next.config.ts`: `Permissions-Policy: microphone=()` → `microphone=(self)`. Empty list bloqueava `getUserMedia` mesmo com permissão do navegador. Fix permite a origem.
 
 ### Release v0.15.0 (2026-05-01) — Suite Agente Nex (sidebar dedicado + áudio + prompt config)
 
 - **Menu lateral "Agente Nex"** com 4 sub-páginas (`/agente-nex/configuracao`, `/agente-nex/chaves`, `/agente-nex/prompt`, `/agente-nex/consumo`). Item antigo "Consumo IA" standalone removido.
 - **Gravação de áudio na bolha** (record/pause/cancel/send) com cap de 5 min — Whisper API transcreve, IA responde texto.
-- **Player de áudio** customizado no balão do user com 5 níveis de velocidade (1×/1.25×/1.5×/1.75×/2×) + seek.
+- **Player de áudio** customizado no balão do user com 5 níveis de velocidade + seek.
 - **Copy button universal** em mensagens do user E assistant.
 - **System prompt configurável** — personalidade + tom + guardrails (até 20 × 300 chars) + override avançado (até 50k chars), persistidos em `nex_settings` (singleton).
 - **Base de conhecimento (KB)** — upload de PDFs/TXT (≤ 5 MB), extração via `pdf-parse`, cap 30k chars no prompt total.
@@ -21,167 +45,117 @@
 - **Redirect 308** de `/configuracoes/consumo` → `/agente-nex/consumo` (URL antiga preservada).
 - **Schema runtime**: `nex_settings` (singleton) + `nex_kb_documents`. `MODEL_PRICING` ganha `whisper-1`.
 
-760 testes / 89 suites PASS · typecheck 0 erros.
-
-## Em produção anteriormente (v0.13.4)
-
-### Hotfix v0.13.4 (2026-05-01) — mensagem real do provider no 404
-
-- `deepTestOpenAI`: 404 e 400 capturam o body e exibem a mensagem oficial da OpenAI no toast (ex.: "you do not have access to this model"). `describeErrorKind` preserva fallback. Permite ao super_admin distinguir falta de acesso × nome errado × payload errado.
-
-## Em produção anteriormente (v0.13.3)
-
-### Hotfix v0.13.3 (2026-05-01) — rollback dashboard
-
-- `getDashboardPeriod` + `getDashboardSettings` removidos (causavam ReferenceError em runtime). Dashboard volta à lógica simples (rolling 24h/7d/30d).
-
-## Em produção anteriormente (v0.13.1)
-
-### Hotfix v0.13.1 (2026-04-30) — backfill BRL no relatório de Consumo
-
-- `backfillUsageCosts()` agora preenche `cost_brl` + `usd_to_brl_rate` em rows BRL=NULL, aplicando a cotação atual cartão (aproximação retroativa). Idempotente.
-- Resultado: KPIs, charts e tabela detalhada de `/configuracoes/consumo` mostram valores em R$ para TODAS as chamadas registradas (antes do v0.12.0 ainda mostravam "—").
-- Chamadas a partir de v0.12.0 continuam com cotação real do dia da chamada.
-
-## Em produção anteriormente (v0.13.0)
-
-### Release v0.13.0 (2026-04-30) — Dashboard polish & configurabilidade
-
-- **Configurações de Dashboard** em `/configuracoes` (super_admin): início da semana + modo semana/mês (atual ou rolling).
-- **Drill-down de status completo** para Resolvido/Pendente/Adiado (antes só Aberto).
-- **Paginação server-side 50/pg** em Recebidas/Resolvidas (era 20 fixo).
-- **`comparison.open` + variação relativa em Taxa de Resolução** (era `pp`, agora `%`).
-- **Eixo X cheio 0–24h** com scroll horizontal centralizado na hora atual.
-- **Pills**: `7 dias` → `Semana`, `30 dias` → `Mês` (defaults agora cobrem mês/semana atual).
-- **TZ explícita no SQL bucket**: `(date_trunc(...) AT TIME ZONE $tz)` elimina ambiguidade.
-- **KpiClickableCard sem overlap** "ver detalhes" × sparkline; fim do badge "Novo".
-- **Tempo relativo curto** (`há 2h`/`há 3d`/`há 2m`) — `formatDistanceToNow` removido das tabelas de drill-down.
-
-670 testes PASS · typecheck 0 erros · build verde.
-
-## Em produção anteriormente (v0.12.3)
-
-### Hotfix v0.12.3 (2026-04-30) — integração com providers + relatório de uso
-
-- **"Modelo não encontrado" para GPT-5.x:** `GET /v1/models` valida só a chave; `POST /v1/chat/completions` valida o modelo (a OpenAI lista snapshots datados, não aliases curtos).
-- **Custo zerado em chamadas antigas:** `backfillUsageCosts()` recalcula `cost_usd` em rows com `cost_usd=0` cujos modelos agora têm pricing.
-- **Discrepância na contagem de chamadas:** `runNexAgent` agora registra `logUsage` **por iteração** de tool-call, alinhando com o dashboard do provider.
-
-## Em produção anteriormente (v0.12.2)
-
-### Hotfix v0.12.2 (2026-04-30) — root cause "couldn't load"
-
-- **Causa raiz finalmente identificada e corrigida.** `src/lib/actions/exchange-rate.ts` tinha um `export { DEFAULT_CARD_SPREAD }` (constante numérica) num arquivo com diretiva `"use server"`. Next.js 16 rejeita qualquer export não-async-function em arquivo Server Action, lançando "This page couldn't load — A server error occurred". Detectado via logs do container.
-- Regra para o futuro: arquivos `src/lib/actions/**/*.ts` só podem exportar funções async + tipos/interfaces (apagados no build).
-
-## Em produção anteriormente (v0.12.1)
-
-### Hotfix v0.12.1 (2026-04-30)
-
-- **Crash ao trocar modelo (P1):** GPT-5.x / o-series usam `max_completion_tokens` sem `temperature`. Resolve "This page couldn't load" + logout.
-- **Custos zerados no Consumo (P2):** `MODEL_PRICING` atualizado abril/2026 (GPT-4.1.x, GPT-5.x, o3/o4-mini, Claude 4.5/4.7, Gemini 2.5).
-- **Card "Agente Nex" com abas internas (P3):** Configuração / Chaves de API.
-- **Spread cartão sem limite superior (P4)** + custos com 3 casas decimais (P5).
-- **Visibility Matrix IA "Ninguém" agora respeitada inclusive para super_admin (P7)** + remove toggles duplicados do card Visibilidade (P6).
-- **Tarja preta no overscroll eliminada em toda a plataforma (P8).**
-- **Server Actions resilientes** com `safeAction` wrapper — defesa contra crashes futuros.
-
-### Novidades da release v0.12.0 (2026-04-30)
-
-- **Credenciais (API keys) gerenciáveis por provedor.** Card "Chaves de API" em `/configuracoes` com CRUD por provedor — listar, criar, renomear, rotacionar e deletar chaves. Ponto verde marca a chave em uso pelo Agente Nex. Trocar modelo ou provedor não exige mais re-digitar a chave.
-- **Custo BRL como primário no Consumo do Agente Nex.** Card "Custo total", charts (área/donut/barras) e tabela de chamadas detalhadas mostram R$ em primário, com USD secundário em fonte menor. Mínimo 4 casas decimais em todas as visualizações.
-- **Cotação USD→BRL cartão de crédito** capturada por chamada (`llm_usage.usd_to_brl_rate`). Fonte AwesomeAPI com cache 4h e spread configurável (`app_settings.llm.usd_brl.card_spread`, default 1.10, range [1.00, 1.30]).
-- **"Agente IA" → "Agente Nex"** em todos os call-sites (card, consumo, mensagens de erro, empty-states).
-- **Schema (runtime via `ensureLlmTables`):** nova tabela `llm_credentials`, `llm_configs.credential_id` (NULL), `llm_configs.encrypted_api_key` agora NULLABLE (legacy mantido por rollback), `llm_usage.cost_brl`/`usd_to_brl_rate`. Migração one-shot e idempotente.
-
-## Em produção anteriormente (v0.11.1)
-
-### Hotfix v0.11.1 (2026-04-30)
-
-- Páginas internas estavam quebradas com "This page couldn't load" desde o deploy do v0.10.4 (commit `0a3bfab`). PageHeader fora marcado como Client Component mas recebia ícone Lucide (função). Refatoração: PageHeader volta a ser Server Component; medição via filho `<PageHeaderHeightProbe>`.
-
-### Novidades da release v0.11.0
-
-- **Visibilidade granular por relatório** — dropdown de 3 níveis (Todos / Somente super admin / Ninguém) por cada um dos 7 relatórios, com aplicação global em sidebar, páginas e dropdowns.
-- **Visibilidade granular do Matrix IA** — mesma lógica para o inbox 31 (Matrix IA): some de tabelas, charts, KPIs, drill-downs e dropdowns conforme a regra escolhida.
-- **Catálogo LLM atualizado (cutoff abril/2026)** — OpenAI ganha família GPT-5 (5/5.1/5.2/5.4/5.5 + minis); Anthropic Sonnet 4.7 + Opus 4.7; Gemini 2.0 Pro; OpenRouter expandido para 40 modelos curados em 4 tiers.
-- **Bugs UI corrigidos no card Agente Nex**: dropdown de Modelo agora usa Popover.Portal (não fica preso em containers); ícone Eye da API key visualmente centralizado.
+760/89 testes/suítes PASS · typecheck 0 · workflow rigoroso (spec v1→v2→v3 com 22+26 achados; plan v1→v2→v3 com 25+29 achados; 28 tasks via subagent-driven-development).
 
 ---
 
-## Em produção anteriormente (v0.8.0)
+## Releases recentes
 
-### Novidades desta release
+### v0.14.x — Dashboard polish
 
-- **Hotfix Bad Gateway** — Dockerfile com chown correto em `/app/.next` resolve o `EACCES` que derrubava o container; `instrumentation.ts` adiciona handlers globais de unhandledRejection como rede de segurança; `prisma/seed.ts` ganha o adapter (Prisma 7).
-- **Pré-agregação de relatórios** — pipeline assíncrono (5 jobs BullMQ a cada 5 min) popula 6 tabelas de fatos no banco interno; relatórios `volumetria-heatmap` e `volumetria-dow` migrados; demais 9 relatórios continuam on-demand mas exibem badge de freshness.
-- **Tempo "quase real"** — SSE de invalidação dispara `router.refresh()` no frontend assim que um job conclui (`facts:refreshed`).
-- **Página `/configuracoes/jobs`** (super_admin) — monitoramento de status + botão "Backfill 90 dias".
+- **v0.14.0** (2026-05-01) — Pill "Hoje"→"Dia", PeriodNavigator (← →) no canto sup-direito do chart, eixo X cobrindo todo o range (semana/mês inteiros), `forcedGranularity`, `formatWaiting` centralizado, cache key v5→v6.
+- **v0.14.2** (2026-05-01) — Coorte por `last_activity_at` em open/pending/no-response/byTeam/topInboxes/byStatus(0,2,3); received/resolved e byStatus(1) mantêm `created_at`. Bug crítico resolvido: conversa criada 30/04 reaberta 01/05 não aparecia em "Abertas". SQL chart com FULL OUTER JOIN de 2 CTEs. Cache v6→v7.
+- **v0.14.3** (2026-05-01) — Bug "Tudo respondido" mesmo com conversa do contato sem resposta: CTE `last_msg` pegava activity (msg_type=2) e template (msg_type=3) como "última msg". Fix: `WHERE m.message_type IN (0,1)`. Cache v7→v8.
 
-### Operação após primeiro deploy
+### v0.13.x — Dashboard configurabilidade + LLM hotfixes
 
-1. Aplicar migrations (automático via entrypoint).
-2. Worker sobe os 5 schedules cron automaticamente.
-3. Super_admin acessa `/configuracoes/jobs`, clica "Backfill 90 dias" para cada dimensão (4 cliques). Tempo estimado: 5–15 min.
+- **v0.13.0** (2026-04-30) — Configurações de Dashboard (início da semana + modo current/rolling), drill-down de status completo, paginação server-side 50/pg, eixo X cheio 0–24h, pills `7 dias`→`Semana`/`30 dias`→`Mês`.
+- **v0.13.1** — Backfill BRL: `cost_brl` + `usd_to_brl_rate` em rows BRL=NULL (cotação atual cartão como aproximação retroativa).
+- **v0.13.2/v0.13.3** — Rollback parcial (ConversationsLineChart simplificado + `getDashboardPeriod`/`getDashboardSettings` removidos por ReferenceError em runtime).
+- **v0.13.4** — `deepTestOpenAI`: 404 e 400 capturam o body e exibem mensagem oficial da OpenAI no toast.
+- **v0.13.5** — `PROVIDER_CATALOG.openai` reescrito com 19 IDs reais (validados em developers.openai.com/api/docs/models/all). Removidos IDs inventados (gpt-5.1-mini etc).
+- **v0.13.6** — Probe "Testar conexão" usa `max_completion_tokens=256` e trata "max_tokens limit reached" como `reachable=true`. `translateProviderMessage(raw, model)` mapeia padrões EN→PT em todos os providers.
+- **v0.13.7/v0.13.8/v0.13.9** — Dashboard chart redesenhado: `formatDuration "1 dia"/"3 dias"`, `actions/dashboard.ts` voltam com try/catch defensivo + FALLBACK_SETTINGS, 4 séries multi-cor, eixo X cheio. Hotfix RSC error: `dashboard-settings` simplificado (sem `server-only` + WHERE key IN literal). Visibility Agente Nex Matrix IA fix.
 
+### v0.12.x — Credenciais LLM + BRL
 
+- **v0.12.0** (2026-04-30) — Credenciais (API keys) gerenciáveis por provedor (CRUD com ponto verde marcando a ativa). Cotação USD→BRL cartão capturada por chamada (`llm_usage.cost_brl` + `usd_to_brl_rate`, AwesomeAPI cache 4h, spread `app_settings.llm.usd_brl.card_spread` default 1.10). Custo BRL como primário no Consumo Nex. "Agente IA" → "Agente Nex" em todos call-sites. Schema (runtime via `ensureLlmTables`): `llm_credentials`, `llm_configs.credential_id` (NULL), `encrypted_api_key` NULLABLE.
+- **v0.12.1** — GPT-5.x/o-series usam `max_completion_tokens` sem `temperature`. `MODEL_PRICING` atualizado abril/2026. Card Agente Nex com abas internas (Configuração/Chaves de API). Spread cartão sem limite superior + custos com 3 casas decimais. Visibility Matrix IA "Ninguém" respeitada inclusive para super_admin. Tarja preta no overscroll eliminada. `safeAction` wrapper em Server Actions.
+- **v0.12.2** — Root cause "couldn't load": `src/lib/actions/exchange-rate.ts` tinha `export { DEFAULT_CARD_SPREAD }` em arquivo `"use server"`. Next.js 16 só aceita exports de funções async. Regra: arquivos em `src/lib/actions/**` só exportam funções async + tipos.
+- **v0.12.3** — `GET /v1/models` valida só a chave; `POST /v1/chat/completions` valida o modelo. `backfillUsageCosts()` recalcula `cost_usd` em rows com `cost_usd=0`. `runNexAgent` registra `logUsage` por iteração de tool-call.
 
-### Plataforma
-- **Stack:** Next.js 16 (App Router) + TypeScript + Tailwind v4 + base-ui
-- **Auth:** NextAuth v5 (JWT, Credentials)
-- **DB app:** Postgres + Prisma v7
+### v0.11.x — Visibilidade granular
+
+- **v0.11.0** — Visibilidade granular por relatório (Todos / Somente super admin / Ninguém) para 7 relatórios + Matrix IA. Catálogo LLM cutoff abril/2026 (GPT-5 família + Sonnet/Opus 4.7 + Gemini 2.0 Pro + OpenRouter expandido).
+- **v0.11.1** — Hotfix PageHeader (Server Component) — fix "This page couldn't load" desde v0.10.4.
+
+### v0.10.0 — Dashboard Pulse
+
+KPIs coorte única + sem-resposta hero + distribuições clicáveis (bar/donut toggle) + drill-down central + TZ fix + account selector consolidado no sidebar.
+
+### v0.9.0 — Conversas Poderoso
+
+Query builder E/OU + painel ordenação cadeia + drill-down inline + sticky toolbar/thead + status feminino + etiquetas + tipografia.
+
+### v0.8.0 — Pré-agregação + infraestrutura
+
+Pipeline assíncrono (5 jobs BullMQ a cada 5 min) popula 6 tabelas de fatos no banco interno; relatórios `volumetria-heatmap` e `volumetria-dow` migrados; SSE de invalidação dispara `router.refresh()` ao concluir job. Página `/configuracoes/jobs` (super_admin) com botão "Backfill 90 dias". Hotfix Bad Gateway: Dockerfile com chown correto em `/app/.next` resolve EACCES; `instrumentation.ts` adiciona handlers globais; `prisma/seed.ts` com adapter (Prisma 7).
+
+### v0.7.0 — Polimento UX + Agente Nex 2.0
+
+Sidebar/filtros/tour/largura + catálogo 42 modelos atualizados + deep test + auto-save.
+
+---
+
+## Plataforma
+
+### Stack
+
+- **Framework:** Next.js 16 (App Router) + TypeScript + Tailwind v4 + base-ui (`render` prop, NUNCA `asChild`)
+- **Auth:** NextAuth v5 (JWT, Credentials, bcryptjs, session refresh por requisição via callback `jwt`)
+- **DB app:** Postgres + Prisma v7 (`@prisma/adapter-pg`, client de `@/generated/prisma/client`)
 - **DB Chatwoot:** Postgres read-only
-- **Cache/queue/realtime:** Redis 7 + BullMQ + Redis Pub/Sub + SSE
-- **Deploy:** GitHub Actions → GHCR (público via GITHUB_TOKEN built-in) → Portainer Swarm + Traefik
+- **Cache/queue/realtime:** Redis 7 + BullMQ + Redis Pub/Sub + SSE em `/api/events`
+- **Tema:** ThemeProvider customizado via cookie SSR-aware (NUNCA `next-themes`); `fetch POST /api/user/theme`
+- **Toast:** Sonner customizado (pilha bottom-up, timers independentes)
+- **Ícones:** Lucide React (emojis proibidos em UI)
+- **Encryption:** AES-256 (`src/lib/encryption.ts`)
+- **Audit:** `src/lib/audit.ts → logAudit()`
+- **Rate limit:** Redis para login + endpoints sensíveis
+- **Soft delete:** padrão `deletedAt: DateTime?`
+- **Testes:** Jest (`jest-mock-extended`, mocks de `@/lib/prisma`, `@/lib/auth`, `@/lib/audit`, `next/cache`)
+- **Deploy:** GitHub Actions → GHCR (`ghcr.io/jvzanini/nexus-insights`) → Portainer Swarm + Traefik (SSL automático Let's Encrypt)
 
-### Relatórios disponíveis hoje (7)
-- **Dashboard / Visão Geral** — pizza de status + volumetria simples + KPIs.
-- **Performance** — tempos de resposta + SLA + CSAT (parcial).
-- **Equipe** — ranking de atendentes + departamento.
-- **Distribuição** — heatmap horário × dia da semana.
-- **Origem & IA** — leads recebidos + Matrix IA.
-- **Conversas** — lista detalhada (15 colunas + filtros toolbar+drawer + ordenação multi-sort + busca interna nos selects).
-- **Mensagens não respondidas** — backlog em aberto.
+### Estrutura de pastas
 
-### Funcionalidades principais
-- **RBAC** em duas camadas: `platformRole` (super_admin > admin > manager > viewer) + `companyRole` (Chatwoot multi-account).
-- **Filtros** — toolbar compacta + drawer lateral com busca interna, "Selecionar todos/visíveis", chips aplicados.
-- **Tour interativo** com botão `?` em cada relatório (Conversas tem 9 etapas).
-- **Sidebar** com active state pílula sólida (raiz) + dot violet (submenu); longest-prefix-match resolve bug pai/filho.
-- **PageShell** com variantes wide (1600px) / narrow (1280px).
-- **Toggle Matrix IA** em /configuracoes — quando OFF, inbox 31 some de tabelas, gráficos, KPIs e dropdowns para todos exceto super_admin.
-- **Agente Nex** (chatbot IA bubble flutuante) com config 2.0:
-  - Catálogo de 42 modelos atualizados (abril/2026): OpenAI GPT-4o/4.1/o1-o3, Anthropic Claude 3.5/4.5/4.6/4.7, Gemini 1.5/2.0/2.5, OpenRouter ~17 modelos free/low/medium/high.
-  - `<SearchableSelect>` com busca + tier badges $/$$/$$$/FREE.
-  - Primeira opção sempre "Outro (digitar manualmente)" — habilita modelo customizado.
-  - Atalhos "Criar API key" + "Adicionar crédito" por provider.
-  - Test connection profundo: detecta `invalid_key`, `model_not_found`, `no_credit`, `rate_limit`.
-  - Auto-save após teste OK.
-- **Consumo IA** dashboard (super_admin) — KPIs + charts + tabela paginada.
+- `src/app/(auth)` (rotas públicas) e `src/app/(protected)` (autenticadas)
+- `src/lib/actions/` consolidado para Server Actions (regra: só exporta async functions + tipos)
+- `src/lib/tenant.ts` (`getAccessibleCompanyIds`, `buildTenantFilter`, `assertCompanyAccess`)
+- `src/lib/auth-helpers.ts`, `src/auth.ts`, `src/auth.config.ts`, `src/middleware.ts`
+- `src/lib/nex/*` — prompt, kb, transcribe, audio-storage, ensure-tables
+- `src/lib/llm/*` — credentials, get-active-config, pricing, exchange-rate, providers, queries, agent
+- `src/components/nex/*` — bubble, chat-panel, message, audio-player, audio-recorder
+- `src/components/agente-nex/*` — llm-config-form, prompt-config-form, resources-toggles, kb-section, kb-upload-dialog, playground
+- `src/app/(protected)/agente-nex/*` — page, layout, configuracao, chaves, prompt, consumo
+- `src/app/api/nex/transcribe/route.ts` — Whisper Route Handler
 
-### Componentes UI base
-- `<Sheet>`, `<CollapsibleSection>`, `<MultiSelectCheckbox>` 2.0, `<SearchableSelect>`, `<TierBadge>`, `<PageShell>` — todos testados.
+### RBAC
 
----
+Duas camadas: `platformRole` (super_admin > admin > manager > viewer) + `companyRole` (Chatwoot multi-account, via `UserCompanyMembership`).
 
-## Próximas releases (não implementado ainda)
+### Relatórios disponíveis (7)
 
-### v0.8.0 — Próximos relatórios novos (em decisão pelo João)
+- Dashboard / Visão Geral
+- Performance
+- Equipe
+- Distribuição
+- Origem & IA
+- Conversas (15 colunas + filtros toolbar+drawer + ordenação multi-sort + busca interna)
+- Mensagens não respondidas
 
-**Status:** brainstorm completo em `docs/superpowers/brainstorms/2026-04-30-novos-relatorios.md`. 52 ideias categorizadas (A-J). Top 5 propostos para v0.8.0:
+### Funcionalidades
 
-1. **Pulse Semanal Comparativo** (categoria A — visão executiva).
-2. **First Contact Resolution + Reopen Rate** (categoria B — qualidade real).
-3. **Forecast 7 dias + Detector de Anomalia** (categoria A/H — antecipação).
-4. **Topic Clustering com Agente Nex** (categoria E/J — descoberta de temas via IA).
-5. **Live Queue Dashboard** (categoria H — TV operacional ao vivo).
-
-**Pré-condições pendentes** (algumas ideias dependem):
-- CSAT — confirmar se `csat_survey_responses` está povoado no banco Chatwoot.
-- Funil/Negócio — alinhar com Matrix Fitness quais `custom_attributes` em conversations sinalizam "matriculado", "visita agendada".
-- SLA — definir SLA configurado (ex: 5 min FRT em horário comercial).
-
-**Aguardando aprovação do João** para fechar escopo da v0.8.0 e partir para spec → plan → implementação.
+- **Filtros** — toolbar compacta + drawer lateral com busca interna, "Selecionar todos/visíveis", chips aplicados
+- **Tour interativo** com botão `?` por relatório
+- **Sidebar** com active state pílula sólida + dot violet (longest-prefix-match)
+- **PageShell** com variantes wide (1600px) / narrow (1280px)
+- **Visibilidade granular** por relatório (Todos / super_admin / Ninguém) + Matrix IA
+- **Agente Nex** (chatbot IA bubble flutuante) com Suite dedicada `/agente-nex` (Configuração / Chaves / Prompt / Consumo)
+  - 19 modelos OpenAI canônicos (validados em developers.openai.com)
+  - Multi-provider (Anthropic, Gemini, OpenRouter — 42 modelos catalogados)
+  - Áudio Whisper + system prompt config + KB (PDF/TXT) + playground
+  - Custo BRL primário (cotação cartão por chamada)
+- **Pré-agregação** — 6 tabelas de fatos refrescadas a cada 5 min via BullMQ + SSE; runbook em `docs/runbooks/pre-agregacao.md`
 
 ---
 
@@ -189,23 +163,27 @@
 
 Abrir o projeto e dizer **um dos seguintes**:
 
-### Caso A — quer continuar a v0.8.0 (relatórios novos)
-> "Continue de onde paramos. Lê `docs/superpowers/brainstorms/2026-04-30-novos-relatorios.md` e me mostra os 5 relatórios propostos para a v0.8.0. Quero decidir o escopo agora."
+### Caso A — feature/bug pontual
+> "Lê `docs/STATUS.md` (estado atual em produção) e me ajuda com [tópico]."
 
-### Caso B — quer fazer outra coisa (feedback/bug/feature pontual)
-> "Quero ajustar/adicionar [tópico]. Lê o estado atual em `docs/STATUS.md` e me ajuda."
-
-### Caso C — quer fazer review do que está em produção
+### Caso B — review do que está em produção
 > "Faz um pente fino na produção (https://insights.nexusai360.com). Lista o que está bom e o que poderia melhorar."
+
+### Caso C — continuar com novos relatórios
+> "Lê `docs/superpowers/brainstorms/2026-04-30-novos-relatorios.md` (52 ideias categorizadas) e me ajuda a definir o que vem depois da Suite Agente Nex."
 
 ---
 
-## Histórico de releases
+## Documentação canônica
 
-- **v0.4.0 (MVP)** — base do Roteador + auth + RBAC + 7 relatórios v1 + cache + tour + filtros básicos.
-- **v0.5.0** — refinamentos UX iniciais (rejeitado por qualidade — base do v0.6.0).
-- **v0.6.0** — 5 super-relatórios consolidados + sortable/groupable tables + charts modernos + drill-down + Agente Nex 1.0 + dashboard de Consumo IA.
-- **v0.6.1** — Conversas parruda + busca global Cmd+K + tour + toggles Nex/Matrix IA + fixes 500.
-- **v0.7.0** (atual) — Polimento UX (sidebar / filtros / tour / largura) + Agente Nex 2.0 + Matrix IA sync total + sidebar bug fix.
+- **`CLAUDE.md`** — regras supremas (skills obrigatórias + double-check + padrão arquitetural).
+- **`AGENTS.md`** — protocolo multi-agente (active files + HISTORY).
+- **`CHANGELOG.md`** — log de releases.
+- **`docs/STATUS.md`** — este arquivo (estado atual + histórico curto).
+- **`docs/agents/_README.md`** — protocolo coordenação detalhado.
+- **`docs/agents/HISTORY.md`** — log append-only de atividade dos agentes.
+- **`docs/superpowers/specs/`** — design docs (uma por feature).
+- **`docs/superpowers/plans/`** — implementation plans (uma por feature).
+- **`docs/runbooks/`** — runbooks operacionais.
 
-Ver detalhes em `CHANGELOG.md` e em `docs/superpowers/specs/`.
+Detalhes técnicos por release em `CHANGELOG.md` + design docs em `docs/superpowers/specs/`.

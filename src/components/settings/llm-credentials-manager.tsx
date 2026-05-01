@@ -51,7 +51,8 @@ type DialogState =
  * Componente "headless" (sem `<Card>` wrapper) que gerencia a lista de
  * credenciais por provider + dialogs de criar/renomear/trocar.
  *
- * Renderizado dentro de `LlmConfigCard` na aba "Chaves de API".
+ * Consumido pela página `/agente-nex/chaves` (Server Component que embrulha
+ * em PageShell + Card e injeta `initial` + `activeCredentialId`).
  */
 export function LlmCredentialsManager({ initial, activeCredentialId }: Props) {
   const router = useRouter();

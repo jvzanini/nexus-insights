@@ -14,37 +14,46 @@
 
 ---
 
-## 2. Skills obrigatórias (SUPREMA E ABSOLUTA)
+## 2. Skills obrigatórias (REGRA SUPREMA, ABSOLUTA E INVIOLÁVEL)
+
+> **NUNCA furar essa regra. NUNCA pular skill. NUNCA "vou fazer rapidinho sem invocar".**
+> Vale para o controlador (sessão principal) **E** para todo subagente despachado.
+> Se descobrir, no meio do trabalho, que uma skill aplica → **PARAR e invocar imediatamente**, mesmo que já tenha começado.
 
 ### 2.1 Superpowers — para tudo que envolve construção/decisão técnica
 
-Usar **obrigatoriamente** as skills `superpowers:*` em todas as etapas:
+Invocar **obrigatoriamente** via `Skill` tool (nunca `Read` no arquivo da skill) nas seguintes etapas:
 
 | Etapa | Skill obrigatória |
 |-------|-------------------|
-| Brainstorm / discovery | `superpowers:brainstorming` |
-| Escrever spec | `superpowers:writing-plans` (a spec antecede o plan; ver §3) |
-| Escrever plan de implementação | `superpowers:writing-plans` |
-| Implementar | `superpowers:test-driven-development` + `superpowers:executing-plans` |
-| Debug / falhas | `superpowers:systematic-debugging` |
-| Code review | `superpowers:requesting-code-review` |
-| Receber review | `superpowers:receiving-code-review` |
+| Brainstorm / discovery / decisão de escopo | `superpowers:brainstorming` |
+| Escrever spec (com double-check §3) | `superpowers:writing-plans` |
+| Escrever plan de implementação (com double-check §3) | `superpowers:writing-plans` |
+| Implementar (modo padrão) | `superpowers:subagent-driven-development` |
+| TDD dentro de cada task | `superpowers:test-driven-development` |
+| Debug / falhas / regressões | `superpowers:systematic-debugging` |
+| Pedir code review | `superpowers:requesting-code-review` |
+| Receber code review | `superpowers:receiving-code-review` |
 | Antes de declarar pronto | `superpowers:verification-before-completion` |
-| Finalizar branch | `superpowers:finishing-a-development-branch` |
-| Tarefas independentes | `superpowers:dispatching-parallel-agents` |
+| Finalizar branch / release | `superpowers:finishing-a-development-branch` |
+| Tarefas independentes em paralelo | `superpowers:dispatching-parallel-agents` |
 
-**Invocar via `Skill` tool** (não ler arquivo diretamente).
+**Workflow padrão (não negociável)** para qualquer feature não trivial:
+`brainstorming` → `writing-plans` (spec + plan, ambos com v1→v2→v3 do §3) → `subagent-driven-development` (com TDD por task) → `verification-before-completion` → `requesting-code-review` → `finishing-a-development-branch`.
 
-### 2.2 UI/UX Pro Max — para tudo que é tela, layout, componente
+### 2.2 UI/UX Pro Max — REGRA ABSOLUTA para qualquer toque em UI
 
-Usar **obrigatoriamente** `ui-ux-pro-max:ui-ux-pro-max` em **qualquer** trabalho que envolva:
+**Antes de escrever ou ajustar UMA linha** de código de UI/UX, invocar `ui-ux-pro-max:ui-ux-pro-max` via `Skill` tool. Vale para:
 
-- Construção, ajuste ou revisão de telas, layouts, componentes, design tokens.
-- Decisões de UX, estados de interação, acessibilidade, responsividade.
-- Escolha de paleta, tipografia, espaçamento, animações.
-- Patterns de dashboard, tabelas, formulários, gráficos, navegação.
+- Construir, ajustar ou revisar telas, layouts, componentes, design tokens.
+- Decisões de UX: estados de interação, hover/focus/disabled, acessibilidade, responsividade, motion.
+- Escolha de paleta, tipografia, espaçamento, sombras, gradientes, ícones, raios.
+- Patterns: dashboard, tabelas, formulários, gráficos, navegação, sidebars, modals, dialogs, toasts, dropdowns, popovers.
+- Microcorreções visuais (ex.: "centralizar ícone", "ajustar padding", "trocar cor de hover") — **mesmo "ajuste pequeno" exige a skill primeiro**.
 
-Antes de escrever uma linha de código de UI: invocar a skill.
+**Aplica também aos subagentes:** ao despachar `subagent-driven-development` para qualquer task que mexa em UI, o prompt do subagente **deve instruir explicitamente** a invocar `ui-ux-pro-max:ui-ux-pro-max` antes de codar.
+
+**Exceções: nenhuma.** Se a task é UI, a skill é invocada — sem rationalização ("é trivial", "já sei como fazer", "é só um one-liner"). Se sentir o impulso de pular, é exatamente nesse momento que ela deve ser invocada.
 
 ---
 
