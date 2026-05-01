@@ -1,5 +1,24 @@
 # Changelog
 
+## [v0.15.1] 2026-05-01 — Hotfix microfone bloqueado por Permissions-Policy
+
+> Super_admin reportou: ao clicar no mic da bolha aparece "Acesso ao microfone negado" mesmo permitindo no browser.
+
+### Causa
+
+`next.config.ts` definia o header `Permissions-Policy: camera=(), microphone=(), geolocation=()` em **todas as rotas**. A diretiva `microphone=()` (lista de origens vazia) instrui o navegador a bloquear `getUserMedia` para microfone **independentemente da permissão do usuário**. Quando o `AudioRecorder` chamava `navigator.mediaDevices.getUserMedia({ audio: true })`, o browser disparava `NotAllowedError` antes mesmo de mostrar o prompt — daí o toast genérico "Acesso ao microfone negado".
+
+### Fix
+
+`Permissions-Policy: camera=(), microphone=(self), geolocation=()` — `(self)` libera o `getUserMedia` para microfone na própria origem (`insights.nexusai360.com`). Camera e geolocation seguem bloqueados.
+
+### Notas
+
+- Não toca no fluxo do AudioRecorder; apenas remove o bloqueio do navegador.
+- Após deploy: hard refresh (Cmd/Ctrl+Shift+R) garante que o header novo seja recebido.
+
+---
+
 ## [v0.15.0] 2026-05-01 — Suite Agente Nex (sidebar dedicado + áudio + prompt config)
 
 ### Adicionado
