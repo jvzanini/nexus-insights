@@ -39,6 +39,13 @@ import { cn } from "@/lib/utils";
 export interface AudioRecorderProps {
   onSend: (blob: Blob, durationSeconds: number) => void;
   onCancel?: () => void;
+  /**
+   * Disparado sempre que o recorder entra/sai do estado ativo
+   * (`recording` ou `paused`). Usado pelo NexChatPanel para esconder
+   * o textarea + botão enviar texto enquanto a gravação está em curso,
+   * dando o input bar inteiro pra barra de gravação.
+   */
+  onRecordingStateChange?: (active: boolean) => void;
   className?: string;
 }
 
@@ -58,6 +65,7 @@ const PREFERRED_MIMES = [
 export function AudioRecorder({
   onSend,
   onCancel,
+  onRecordingStateChange,
   className,
 }: AudioRecorderProps) {
   const [status, setStatus] = React.useState<Status>("idle");
@@ -66,11 +74,24 @@ export function AudioRecorder({
   const recorderRef = React.useRef<MediaRecorder | null>(null);
   const streamRef = React.useRef<MediaStream | null>(null);
   const chunksRef = React.useRef<Blob[]>([]);
-  const startedAtRef = React.useRef<number>(0);
+  // Tempo (ms) acumulado em segmentos de gravação ANTERIORES ao atual.
+  // Reseta a cada start() e cresce a cada pause(). Usado pra calcular o
+  // elapsed total respeitando pausas (BUG v0.15.1: timer corria mesmo pausado).
+  const recordedMsRef = React.useRef<number>(0);
+  // Timestamp (ms) em que o segmento ATUAL de gravação começou.
+  // Atualizado em start() e em resume(). Quando pausado, fica "congelado"
+  // — não somamos delta a partir dele, só do `recordedMsRef`.
+  const segmentStartedAtRef = React.useRef<number>(0);
   // setInterval id — em browser é number; tipamos como ReturnType para suportar Node em teste.
   const tickRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
   // Flag pra evitar reentrância no auto-send vs send manual.
   const sendingRef = React.useRef(false);
+
+  // Notifica o pai quando o recorder fica ativo (recording/paused) ou volta a idle.
+  // O callback é estável o suficiente; se mudar entre renders, reage normalmente.
+  React.useEffect(() => {
+    onRecordingStateChange?.(status !== "idle");
+  }, [status, onRecordingStateChange]);
 
   // ----------------------------------------------------------------------
   // Cleanup helpers (memoizados pra usar dentro de outros callbacks).
@@ -93,7 +114,8 @@ export function AudioRecorder({
     }
     recorderRef.current = null;
     chunksRef.current = [];
-    startedAtRef.current = 0;
+    recordedMsRef.current = 0;
+    segmentStartedAtRef.current = 0;
   }, []);
 
   // Cleanup no unmount — protege contra leak de stream se o usuário fechar a bolha.
@@ -145,6 +167,26 @@ export function AudioRecorder({
   // start / pause / resume / cancel / sendNow
   // ----------------------------------------------------------------------
 
+  // Helper interno — (re)inicia o tick que atualiza o elapsed visível.
+  // Usa a fórmula `recordedMsRef + (now - segmentStartedAtRef)` para que
+  // pausas suspendam a contagem. O tick é destruído em pause/cancel/send.
+  const startTick = React.useCallback(() => {
+    if (tickRef.current !== null) {
+      clearInterval(tickRef.current);
+    }
+    tickRef.current = setInterval(() => {
+      const segMs = Date.now() - segmentStartedAtRef.current;
+      const totalMs = recordedMsRef.current + segMs;
+      const seconds = Math.floor(totalMs / 1000);
+      setElapsed(seconds);
+      if (seconds >= MAX_DURATION_SEC) {
+        // Toast aviso 1x, depois auto-send.
+        toast.message("Limite de 5 min — enviando…");
+        sendNowRef.current();
+      }
+    }, 250);
+  }, []);
+
   const start = React.useCallback(async () => {
     if (!supported) {
       toast.error("Gravação de áudio não suportada neste navegador");
@@ -165,21 +207,14 @@ export function AudioRecorder({
 
       recorderRef.current = rec;
       chunksRef.current = [];
-      startedAtRef.current = Date.now();
+      recordedMsRef.current = 0;
+      segmentStartedAtRef.current = Date.now();
       setElapsed(0);
       setStatus("recording");
 
       rec.start(250);
 
-      tickRef.current = setInterval(() => {
-        const seconds = Math.floor((Date.now() - startedAtRef.current) / 1000);
-        setElapsed(seconds);
-        if (seconds >= MAX_DURATION_SEC) {
-          // Toast aviso 1x, depois auto-send.
-          toast.message("Limite de 5 min — enviando…");
-          sendNowRef.current();
-        }
-      }, 250);
+      startTick();
     } catch (err) {
       cleanup();
       setStatus("idle");
@@ -191,7 +226,7 @@ export function AudioRecorder({
           : "Não foi possível acessar o microfone",
       );
     }
-  }, [cleanup, pickMimeType, supported]);
+  }, [cleanup, pickMimeType, startTick, supported]);
 
   const pauseOrResume = React.useCallback(() => {
     const rec = recorderRef.current;
@@ -199,6 +234,13 @@ export function AudioRecorder({
     if (status === "recording") {
       try {
         rec.pause();
+        // Acumula o tempo do segmento atual em recordedMsRef e para o tick —
+        // assim o timer mostrado congela no valor exato em que pausou.
+        recordedMsRef.current += Date.now() - segmentStartedAtRef.current;
+        if (tickRef.current !== null) {
+          clearInterval(tickRef.current);
+          tickRef.current = null;
+        }
         setStatus("paused");
       } catch {
         /* alguns browsers não suportam pause — ignora */
@@ -206,12 +248,16 @@ export function AudioRecorder({
     } else if (status === "paused") {
       try {
         rec.resume();
+        // Inicia novo segmento: tempo passa a ser medido a partir de agora;
+        // o que ficou acumulado em recordedMsRef permanece intacto.
+        segmentStartedAtRef.current = Date.now();
+        startTick();
         setStatus("recording");
       } catch {
         /* idem */
       }
     }
-  }, [status]);
+  }, [startTick, status]);
 
   const cancel = React.useCallback(() => {
     const rec = recorderRef.current;
@@ -236,10 +282,14 @@ export function AudioRecorder({
     sendingRef.current = true;
 
     // Trava o duration ANTES do stop assíncrono — onstop dispara depois.
-    const duration = Math.max(
-      1,
-      Math.floor((Date.now() - startedAtRef.current) / 1000),
-    );
+    // Se estiver pausado, recordedMsRef já contém o tempo total congelado;
+    // se estiver gravando, soma o segmento atual em curso.
+    const totalMs =
+      recordedMsRef.current +
+      (rec.state === "recording"
+        ? Date.now() - segmentStartedAtRef.current
+        : 0);
+    const duration = Math.max(1, Math.floor(totalMs / 1000));
     const mime = rec.mimeType || "audio/webm";
 
     rec.onstop = () => {

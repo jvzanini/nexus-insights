@@ -19,29 +19,47 @@ describe("AudioPlayer", () => {
     render(<AudioPlayer src="blob:fake" durationSeconds={12} />);
     expect(screen.getByLabelText("Tocar")).toBeInTheDocument();
     expect(screen.getByLabelText("Progresso")).toBeInTheDocument();
-    expect(screen.getByLabelText("Velocidade")).toBeInTheDocument();
+    // Botão de velocidade aparece com o speed atual no aria-label.
+    expect(
+      screen.getByLabelText(/velocidade 1× \(clique para próxima\)/i),
+    ).toBeInTheDocument();
   });
 
-  it("dropdown de velocidade mostra exatamente 5 opções (1×, 1.25×, 1.5×, 1.75×, 2×)", () => {
+  it("botão de velocidade renderiza com 1× inicial e expõe os 5 speeds canônicos (v0.15.2)", () => {
     render(<AudioPlayer src="blob:fake" />);
-    const select = screen.getByLabelText("Velocidade") as HTMLSelectElement;
-    expect(select.options).toHaveLength(SPEEDS.length);
-    expect(SPEEDS).toHaveLength(5);
-    const labels = Array.from(select.options).map((o) => o.textContent);
-    expect(labels).toEqual(["1×", "1.25×", "1.5×", "1.75×", "2×"]);
+    const button = screen.getByLabelText(
+      /velocidade 1× \(clique para próxima\)/i,
+    );
+    expect(button.textContent).toContain("1×");
+    expect(SPEEDS).toEqual([1, 1.25, 1.5, 1.75, 2]);
   });
 
-  it("trocar speed altera audio.playbackRate", () => {
+  it("clicar no botão cicla 1× → 1.25× → 1.5× → 1.75× → 2× → 1× (v0.15.2)", () => {
     const { container } = render(<AudioPlayer src="blob:fake" />);
     const audio = container.querySelector("audio") as HTMLAudioElement;
-    const select = screen.getByLabelText("Velocidade") as HTMLSelectElement;
+    const getButton = () =>
+      screen.getByRole("button", { name: /velocidade .+ \(clique para próxima\)/i });
 
     expect(audio.playbackRate).toBe(1);
+    expect(getButton().textContent).toContain("1×");
 
-    fireEvent.change(select, { target: { value: "1.75" } });
-    expect(audio.playbackRate).toBeCloseTo(1.75);
+    fireEvent.click(getButton());
+    expect(getButton().textContent).toContain("1.25×");
+    expect(audio.playbackRate).toBeCloseTo(1.25);
 
-    fireEvent.change(select, { target: { value: "2" } });
+    fireEvent.click(getButton());
+    expect(getButton().textContent).toContain("1.5×");
+
+    fireEvent.click(getButton());
+    expect(getButton().textContent).toContain("1.75×");
+
+    fireEvent.click(getButton());
+    expect(getButton().textContent).toContain("2×");
     expect(audio.playbackRate).toBeCloseTo(2);
+
+    // Cicla — volta para 1×.
+    fireEvent.click(getButton());
+    expect(getButton().textContent).toContain("1×");
+    expect(audio.playbackRate).toBeCloseTo(1);
   });
 });

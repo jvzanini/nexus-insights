@@ -7,13 +7,15 @@
  *  - Play / Pause.
  *  - Barra de progresso (input range bound em audio.currentTime).
  *  - Tempo `mm:ss / mm:ss` em fonte tabular (sem layout shift).
- *  - Dropdown de velocidade com 5 níveis (1×, 1.25×, 1.5×, 1.75×, 2×).
+ *  - Botão cíclico de velocidade (1× → 1.25× → 1.5× → 1.75× → 2× → 1×) com
+ *    ícone Gauge — substituiu o `<select>` (v0.15.2: super_admin reportou
+ *    que dropdown tinha UX ruim em mobile e parecia "deslocado" do design).
  *
  * Speed memorizada por instância (não persiste entre mensagens).
  * Sem dependência de WebAudio — usa apenas API HTMLMediaElement.
  */
 
-import { Pause, Play } from "lucide-react";
+import { Gauge, Pause, Play } from "lucide-react";
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
@@ -37,7 +39,9 @@ export function AudioPlayer({
   const [isPlaying, setIsPlaying] = React.useState(false);
   const [currentTime, setCurrentTime] = React.useState(0);
   const [duration, setDuration] = React.useState<number>(durationSeconds ?? 0);
-  const [speed, setSpeed] = React.useState<AudioSpeed>(1);
+  // Index na tupla SPEEDS — cicla com módulo no clique do botão Gauge.
+  const [speedIndex, setSpeedIndex] = React.useState(0);
+  const speed: AudioSpeed = SPEEDS[speedIndex] ?? 1;
 
   // Sincroniza playbackRate sempre que speed muda OU o elemento aparece.
   React.useEffect(() => {
@@ -56,16 +60,9 @@ export function AudioPlayer({
     }
   }, []);
 
-  const handleSpeedChange = React.useCallback(
-    (event: React.ChangeEvent<HTMLSelectElement>) => {
-      const next = Number(event.target.value) as AudioSpeed;
-      if (!SPEEDS.includes(next)) return;
-      setSpeed(next);
-      const el = audioRef.current;
-      if (el) el.playbackRate = next;
-    },
-    [],
-  );
+  const cycleSpeed = React.useCallback(() => {
+    setSpeedIndex((i) => (i + 1) % SPEEDS.length);
+  }, []);
 
   const handleSeek = React.useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -159,22 +156,20 @@ export function AudioPlayer({
         {formatTime(currentTime)} / {formatTime(duration)}
       </span>
 
-      <select
-        value={speed}
-        onChange={handleSpeedChange}
-        aria-label="Velocidade"
+      <button
+        type="button"
+        onClick={cycleSpeed}
+        aria-label={`Velocidade ${formatSpeed(speed)} (clique para próxima)`}
+        title={`Velocidade ${formatSpeed(speed)} — clique para próxima`}
         className={cn(
-          "h-6 shrink-0 cursor-pointer rounded-md border border-violet-300/50 bg-background/60 px-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-background",
+          "flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded-md border border-violet-300/50 bg-background/60 px-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-background",
           "focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none",
           "dark:border-violet-700/40",
         )}
       >
-        {SPEEDS.map((value) => (
-          <option key={value} value={value}>
-            {formatSpeed(value)}
-          </option>
-        ))}
-      </select>
+        <Gauge className="h-3 w-3" aria-hidden="true" />
+        <span className="font-mono tabular-nums">{formatSpeed(speed)}</span>
+      </button>
     </div>
   );
 }

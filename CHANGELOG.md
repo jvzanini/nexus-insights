@@ -1,5 +1,22 @@
 # Changelog
 
+## [v0.15.2] 2026-05-01 — Hotfix UX bubble audio (3 bugs)
+
+> Super_admin reportou: (1) input bar quebrado quando gravando (textarea esmagado + 2 botões enviar), (2) timer continua avançando quando pausado, (3) speed dropdown ruim de usar.
+
+### Fix
+
+- **Input bar reorganizado:** quando gravando/pausado, textarea + label "Enter envia" + botão enviar texto somem; AudioRecorder ocupa todo o espaço com Send único. Implementado via prop `onRecordingStateChange?: (active: boolean) => void` no `AudioRecorder` + state `isRecording` no `NexChatPanel`.
+- **Timer respeita pause:** novos refs `recordedMsRef` (tempo acumulado em segmentos anteriores) + `segmentStartedAtRef` (início do segmento atual) — pausar para de contar (clearInterval + soma elapsed em recordedMsRef), retomar continua de onde parou (reseta segmentStartedAtRef + restart do tick). Fórmula: `total = recordedMsRef + (now - segmentStartedAtRef)`. `sendNow` lê `rec.state` para saber se soma o segmento corrente.
+- **AudioPlayer speed cíclico:** `<select>` virou `<button>` com ícone `Gauge` (lucide) — click cicla 1× → 1.25× → 1.5× → 1.75× → 2× → 1×. aria-label dinâmico "Velocidade Nx (clique para próxima)" + tooltip via title.
+
+### Tests
+
+- `audio-recorder.test.tsx`: + teste `onRecordingStateChange` (idle→true→true em pause→false em cancel) + teste timer congela em pause e retoma corretamente (jest fake timers).
+- `audio-player.test.tsx`: trocados testes do `<select>` por testes do botão cíclico (1× inicial → 1.25× → ... → 2× → 1×).
+- `nex-message.test.tsx`: ajustado aria-label para o novo formato.
+- 762/762 testes verdes, typecheck 0 erros.
+
 ## [v0.15.1] 2026-05-01 — Hotfix microfone bloqueado por Permissions-Policy
 
 > Super_admin reportou: ao clicar no mic da bolha aparece "Acesso ao microfone negado" mesmo permitindo no browser.

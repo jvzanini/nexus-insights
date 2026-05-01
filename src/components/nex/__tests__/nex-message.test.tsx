@@ -47,7 +47,11 @@ describe("NexMessage", () => {
       />,
     );
     expect(screen.getByLabelText("Tocar")).toBeInTheDocument();
-    expect(screen.getByLabelText("Velocidade")).toBeInTheDocument();
+    // v0.15.2: dropdown de velocidade virou botão cíclico com aria-label
+    // "Velocidade <X>× (clique para próxima)".
+    expect(
+      screen.getByLabelText(/velocidade 1× \(clique para próxima\)/i),
+    ).toBeInTheDocument();
   });
 
   it("aria-label diz 'Copiar mensagem' (genérico, não 'resposta')", () => {
