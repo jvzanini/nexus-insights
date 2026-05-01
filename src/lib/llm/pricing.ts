@@ -14,6 +14,12 @@ export interface ModelPricing {
   inputPerMillion: number;
   /** Custo de tokens de output em USD por 1.000.000 de tokens. */
   outputPerMillion: number;
+  /**
+   * Custo em USD por minuto de áudio processado. Usado por modelos cobrados
+   * por duração (ex.: whisper-1 a $0.006/min). Quando definido, o cálculo
+   * por tokens é ignorado e o custo é derivado de `extras.durationMs`.
+   */
+  perMinuteUsd?: number;
 }
 
 export const MODEL_PRICING: Record<string, ModelPricing> = {
@@ -47,6 +53,12 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   o1: { inputPerMillion: 15.0, outputPerMillion: 60.0 },
   o3: { inputPerMillion: 2.0, outputPerMillion: 8.0 },
   "o3-pro": { inputPerMillion: 20.0, outputPerMillion: 80.0 },
+  // Audio (transcrição) — cobrado por minuto, não por token.
+  "whisper-1": {
+    inputPerMillion: 0,
+    outputPerMillion: 0,
+    perMinuteUsd: 0.006,
+  },
 
   // ---------------------------------------------------------------------
   // Anthropic — Claude 4.x family (abril/2026)
@@ -124,9 +136,19 @@ export function calculateCost(
   model: string,
   tokensInput: number,
   tokensOutput: number,
+  extras?: { durationMs?: number },
 ): number {
   const pricing = MODEL_PRICING[model];
   if (!pricing) return 0;
+  // Modelos cobrados por minuto (ex.: whisper-1) usam duração em vez de tokens.
+  if (
+    pricing.perMinuteUsd !== undefined &&
+    extras?.durationMs !== undefined &&
+    extras.durationMs > 0
+  ) {
+    const cost = (extras.durationMs / 60_000) * pricing.perMinuteUsd;
+    return Math.round(cost * 1_000_000) / 1_000_000;
+  }
   const cost =
     (tokensInput * pricing.inputPerMillion +
       tokensOutput * pricing.outputPerMillion) /
