@@ -40,12 +40,42 @@ async function createTables(): Promise<void> {
       ADD COLUMN IF NOT EXISTS "kind" TEXT NOT NULL DEFAULT 'PDF',
       ADD COLUMN IF NOT EXISTS "source_url" TEXT NULL;
   `);
+  // v0.16.0: nex_settings.seeded_defaults_at + backfill condicional de guardrails default.
+  await pgPool.query(`
+    ALTER TABLE "nex_settings"
+      ADD COLUMN IF NOT EXISTS "seeded_defaults_at" TIMESTAMPTZ NULL;
+  `);
+  // v0.16.0: chatwoot_account_urls (mapping account_id → URL pública para deep-links do Agente Nex).
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS "chatwoot_account_urls" (
+      "account_id"     INTEGER PRIMARY KEY,
+      "public_url"     TEXT NOT NULL,
+      "label"          TEXT NULL,
+      "updated_at"     TIMESTAMPTZ NOT NULL DEFAULT now(),
+      "updated_by_id"  UUID NULL
+    );
+  `);
   await pgPool.query(
     `CREATE INDEX IF NOT EXISTS "nex_kb_documents_created_at_idx" ON "nex_kb_documents"("created_at" DESC);`,
   );
   await pgPool.query(
     `INSERT INTO nex_settings (id) VALUES ('global') ON CONFLICT (id) DO NOTHING;`,
   );
+  // v0.16.0: backfill condicional de guardrails default (apenas se nunca tocado).
+  await pgPool.query(`
+    UPDATE "nex_settings"
+    SET "guardrails" = '[
+      "Nunca exponha dados de uma conta diferente da ativa no contexto.",
+      "Nunca compartilhe API keys, tokens, secrets, IDs internos ou variáveis de ambiente.",
+      "Sempre cite a fonte do número (qual relatório/tool e qual data de referência).",
+      "Se um número parecer impossível ou inconsistente, alerte o usuário antes de afirmar.",
+      "Não execute, sugira ou simule ações destrutivas (apagar conversas, mudar config sem confirmação, mexer em produção)."
+    ]'::jsonb,
+    "seeded_defaults_at" = now()
+    WHERE "id" = 'global'
+      AND "seeded_defaults_at" IS NULL
+      AND ("guardrails" IS NULL OR "guardrails" = '[]'::jsonb);
+  `);
 }
 
 export async function ensureNexTables(): Promise<void> {
