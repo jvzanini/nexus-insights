@@ -131,6 +131,18 @@ export async function deepTestOpenAI(
     return { reachable: false, errorKind: "invalid_key" };
   }
 
+  // Captura a lista de IDs disponíveis nessa chave — usado pra ajudar o
+  // super_admin quando o modelo escolhido falhar com "does not have access".
+  let availableIds: string[] = [];
+  if (modelsRes.ok) {
+    try {
+      const body = (await modelsRes.json()) as { data?: Array<{ id: string }> };
+      availableIds = body.data?.map((m) => m.id) ?? [];
+    } catch {
+      availableIds = [];
+    }
+  }
+
   // 2. POST /v1/chat/completions minimal — confirma que key+modelo funcionam.
   // Modelos GPT-5.x e família o-series (o1/o3/o4) só aceitam
   // `max_completion_tokens` e rejeitam `temperature` != default → ajustamos
@@ -183,12 +195,31 @@ export async function deepTestOpenAI(
         provMsg ?? text,
       );
     if (isModelError) {
+      // Sugere alternativas: filtra IDs que parecem chat models (gpt-*, o1/o3/o4-*,
+      // chatgpt-*) e ordena pelos prefixos mais próximos do que o usuário pediu.
+      const chatLike = availableIds
+        .filter((id) =>
+          /^(gpt-|chatgpt|o1-|o1$|o3-|o3$|o4-|o4$)/i.test(id),
+        )
+        .sort((a, b) => a.localeCompare(b));
+      // Tenta encontrar match por prefixo (ex.: pediu "gpt-5.1-mini",
+      // tem "gpt-5.1-mini-2025-XX-XX" disponível).
+      const prefixMatches = chatLike.filter(
+        (id) => id === model || id.startsWith(`${model}-`),
+      );
+      const baseMsg = provMsg
+        ? `OpenAI: ${provMsg}`
+        : `Modelo "${model}" não encontrado neste provedor (HTTP ${chatRes.status}).`;
+      const hint =
+        prefixMatches.length > 0
+          ? ` Sua chave tem acesso a snapshot(s) compatível(is): ${prefixMatches.slice(0, 3).join(", ")} — selecione "Outro (digitar manualmente)" no select de Modelo e cole um desses.`
+          : chatLike.length > 0
+            ? ` Modelos chat disponíveis nesta chave: ${chatLike.slice(0, 8).join(", ")}${chatLike.length > 8 ? `, +${chatLike.length - 8} outros` : ""}.`
+            : "";
       return {
         reachable: false,
         errorKind: "model_not_found",
-        message: provMsg
-          ? `OpenAI: ${provMsg}`
-          : `Modelo "${model}" não encontrado neste provedor (HTTP ${chatRes.status}).`,
+        message: `${baseMsg}${hint}`,
       };
     }
     return {

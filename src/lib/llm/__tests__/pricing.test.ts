@@ -36,11 +36,13 @@ describe("calculateCost", () => {
     expect(cost).toEqual(Number(cost.toFixed(6)));
   });
 
-  it("calcula custo correto para gpt-5.1-mini (0.25 in / 2.00 out)", () => {
+  it("calcula custo correto para gpt-5-mini (0.25 in / 2.00 out)", () => {
+    // gpt-5.1-mini não existe na OpenAI (validado em /api/docs/models/all
+    // May/2026). gpt-5-mini é o ID real correspondente.
     // 1M in * 0.25 / 1M = 0.25
     // 1M out * 2.00 / 1M = 2.00
     // total = 2.25
-    expect(calculateCost("gpt-5.1-mini", 1_000_000, 1_000_000)).toBeCloseTo(
+    expect(calculateCost("gpt-5-mini", 1_000_000, 1_000_000)).toBeCloseTo(
       2.25,
       6,
     );

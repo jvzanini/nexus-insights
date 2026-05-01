@@ -1,5 +1,32 @@
 # Changelog
 
+## [v0.13.5] 2026-05-01 — Catálogo LLM com IDs reais da OpenAI (remove modelos inventados)
+
+> **DEFINITIVO** para o problema "Modelo gpt-5.1-mini não encontrado neste provedor". A causa **real** estava no `PROVIDER_CATALOG` do nosso app, que listava modelos como `gpt-5.1-mini`, `gpt-5.1-nano`, `gpt-5.2`, `gpt-4.1-nano`, `o4-mini`, `o3-mini` — IDs que **não existem na OpenAI**. Foram inventados pelo agente que atualizou o catálogo no v0.11.0 (commit `fae51ae`). A OpenAI sempre retornou 404, e nossa UI mostrava "Modelo X não encontrado" — o que era literalmente verdade, porque o ID não existia em lugar nenhum.
+
+### Como descobri
+
+Validei a lista canônica da OpenAI em [`developers.openai.com/api/docs/models/all`](https://developers.openai.com/api/docs/models/all) (cutoff May/2026). A família GPT-5 que existe oficialmente é: `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5.1` (sem mini/nano), `gpt-5.4`, `gpt-5.4-pro`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5.5`, `gpt-5.5-pro`, `gpt-5-codex`, `gpt-5.3-codex`, `gpt-5.1-codex-mini`. Variantes não citadas (especificamente "gpt-5.1-mini" puro) não existem.
+
+### O que mudou
+
+- **`PROVIDER_CATALOG.openai.models`** reescrito com os 19 IDs reais da OpenAI. Removidos: `gpt-5.1-mini`, `gpt-5.1-nano`, `gpt-5.2`, `gpt-5.2-mini`, `gpt-4.1-nano`, `o1-mini`, `o3-mini`, `o4-mini`. Adicionados: `gpt-5.5-pro`, `gpt-5.4-pro`, `gpt-5.4-nano`, `gpt-5-nano`, `gpt-5-codex`, `gpt-5.3-codex`, `gpt-5.1-codex-mini`, `o3-pro`, `gpt-4`.
+- **`MODEL_PRICING`** alinhado: removidas as entradas de IDs inventados, adicionadas as dos IDs reais.
+- **`PROVIDER_CATALOG.openrouter.models`**: removido `openai/gpt-5.1-mini`; adicionado `openai/gpt-5-mini` e mantido `openai/gpt-5.4-mini`.
+- **Mensagem de erro** (já v0.13.4) agora mostra body literal da OpenAI **+ sugestão de modelos compatíveis** que a chave do super_admin tem acesso (vindos de `GET /v1/models`). Ex.: tenta `gpt-5.1-mini` → toast diz `OpenAI: The model 'gpt-5.1-mini' does not exist. Sua chave tem acesso a snapshot(s) compatível(is): gpt-5-mini, gpt-5.4-mini`.
+- Tests `pricing.test.ts` e `catalog.test.ts` atualizados — incluem assertion que IDs inventados (`gpt-5.1-mini`, `gpt-4.1-nano`, `o4-mini`) **não estão** no catálogo.
+
+### Para o super_admin
+
+A partir desta release o select de Modelo no card "Agente Nex" só mostra IDs que a OpenAI realmente reconhece. **O modelo equivalente ao "GPT-5.1 mini" que você queria é `gpt-5-mini`** (sem o ".1") — esse existe e funciona.
+
+### Outras notas
+
+- Ainda existe `allowCustomModel: true` no catálogo: a opção "Outro (digitar manualmente)" continua disponível pra colar IDs novos da OpenAI quando lançarem.
+- 77 suites / 670 tests PASS · typecheck 0 erros.
+
+---
+
 ## [v0.13.4] 2026-05-01 — Mensagem real do provider quando o modelo é rejeitado
 
 > Quando o super_admin tenta usar um modelo que a chave da OpenAI não tem acesso (típico em GPT-5.x para contas Tier 1-3), a UI mostrava genericamente "Modelo X não encontrado neste provedor" — sem dizer **se** era nome errado, falta de acesso ou problema na chave. Esta release captura o body literal da resposta da OpenAI e mostra exatamente o que ela disse.

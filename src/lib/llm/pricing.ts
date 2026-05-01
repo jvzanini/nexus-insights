@@ -18,33 +18,35 @@ export interface ModelPricing {
 
 export const MODEL_PRICING: Record<string, ModelPricing> = {
   // ---------------------------------------------------------------------
-  // OpenAI — preços oficiais abril/2026 (USD por 1M tokens)
+  // OpenAI — IDs validados em developers.openai.com/api/docs/models/all
+  // (cutoff May/2026). Modelos NÃO listados na OpenAI foram removidos
+  // (gpt-5.1-mini, gpt-5.1-nano, gpt-5.2-*, gpt-4.1-nano, o4-mini, o3-mini).
   // ---------------------------------------------------------------------
-  // GPT-5.x (reasoning, max_completion_tokens)
+  "gpt-5.5": { inputPerMillion: 1.25, outputPerMillion: 10.0 },
+  "gpt-5.5-pro": { inputPerMillion: 15.0, outputPerMillion: 75.0 },
+  "gpt-5.4": { inputPerMillion: 1.25, outputPerMillion: 10.0 },
+  "gpt-5.4-pro": { inputPerMillion: 15.0, outputPerMillion: 75.0 },
+  "gpt-5.4-mini": { inputPerMillion: 0.25, outputPerMillion: 2.0 },
+  "gpt-5.4-nano": { inputPerMillion: 0.05, outputPerMillion: 0.4 },
+  "gpt-5.1": { inputPerMillion: 1.25, outputPerMillion: 10.0 },
+  "gpt-5.1-codex-mini": { inputPerMillion: 0.25, outputPerMillion: 2.0 },
   "gpt-5": { inputPerMillion: 1.25, outputPerMillion: 10.0 },
   "gpt-5-mini": { inputPerMillion: 0.25, outputPerMillion: 2.0 },
   "gpt-5-nano": { inputPerMillion: 0.05, outputPerMillion: 0.4 },
-  "gpt-5.1": { inputPerMillion: 1.25, outputPerMillion: 10.0 },
-  "gpt-5.1-mini": { inputPerMillion: 0.25, outputPerMillion: 2.0 },
-  "gpt-5.1-nano": { inputPerMillion: 0.05, outputPerMillion: 0.4 },
-  "gpt-5.2": { inputPerMillion: 1.25, outputPerMillion: 10.0 },
-  "gpt-5.2-mini": { inputPerMillion: 0.25, outputPerMillion: 2.0 },
-  "gpt-5.4": { inputPerMillion: 1.25, outputPerMillion: 10.0 },
-  "gpt-5.5": { inputPerMillion: 1.25, outputPerMillion: 10.0 },
-  // GPT-4.1.x
+  "gpt-5-codex": { inputPerMillion: 1.25, outputPerMillion: 10.0 },
+  "gpt-5.3-codex": { inputPerMillion: 1.25, outputPerMillion: 10.0 },
+  // GPT-4
   "gpt-4.1": { inputPerMillion: 2.0, outputPerMillion: 8.0 },
   "gpt-4.1-mini": { inputPerMillion: 0.4, outputPerMillion: 1.6 },
-  "gpt-4.1-nano": { inputPerMillion: 0.1, outputPerMillion: 0.4 },
-  // GPT-4o (legado, ainda em uso)
+  "gpt-4": { inputPerMillion: 30.0, outputPerMillion: 60.0 },
+  // GPT-4o (legado, ainda atende)
   "gpt-4o": { inputPerMillion: 2.5, outputPerMillion: 10.0 },
   "gpt-4o-mini": { inputPerMillion: 0.15, outputPerMillion: 0.6 },
   "gpt-4-turbo": { inputPerMillion: 10.0, outputPerMillion: 30.0 },
   // o-series (reasoning)
   o1: { inputPerMillion: 15.0, outputPerMillion: 60.0 },
-  "o1-mini": { inputPerMillion: 3.0, outputPerMillion: 12.0 },
   o3: { inputPerMillion: 2.0, outputPerMillion: 8.0 },
-  "o3-mini": { inputPerMillion: 1.1, outputPerMillion: 4.4 },
-  "o4-mini": { inputPerMillion: 1.1, outputPerMillion: 4.4 },
+  "o3-pro": { inputPerMillion: 20.0, outputPerMillion: 80.0 },
 
   // ---------------------------------------------------------------------
   // Anthropic — Claude 4.x family (abril/2026)
@@ -88,7 +90,11 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   // ---------------------------------------------------------------------
   // OpenRouter — espelha o custo do modelo direto. Inclui aliases comuns.
   // ---------------------------------------------------------------------
-  "openrouter/openai/gpt-5.1-mini": {
+  "openrouter/openai/gpt-5-mini": {
+    inputPerMillion: 0.25,
+    outputPerMillion: 2.0,
+  },
+  "openrouter/openai/gpt-5.4-mini": {
     inputPerMillion: 0.25,
     outputPerMillion: 2.0,
   },
@@ -131,23 +137,22 @@ export function calculateCost(
 
 export const PROVIDER_MODELS: Record<LlmProvider, string[]> = {
   openai: [
+    "gpt-5.5",
+    "gpt-5.5-pro",
+    "gpt-5.4",
+    "gpt-5.4-pro",
+    "gpt-5.4-mini",
+    "gpt-5.4-nano",
+    "gpt-5.1",
     "gpt-5",
     "gpt-5-mini",
     "gpt-5-nano",
-    "gpt-5.1",
-    "gpt-5.1-mini",
-    "gpt-5.1-nano",
     "gpt-4.1",
     "gpt-4.1-mini",
-    "gpt-4.1-nano",
-    "gpt-4o",
-    "gpt-4o-mini",
-    "gpt-4-turbo",
+    "gpt-4",
     "o3",
-    "o3-mini",
-    "o4-mini",
+    "o3-pro",
     "o1",
-    "o1-mini",
   ],
   anthropic: [
     "claude-sonnet-4-7-20250624",
@@ -169,7 +174,8 @@ export const PROVIDER_MODELS: Record<LlmProvider, string[]> = {
     "gemini-1.5-flash",
   ],
   openrouter: [
-    "openrouter/openai/gpt-5.1-mini",
+    "openrouter/openai/gpt-5-mini",
+    "openrouter/openai/gpt-5.4-mini",
     "openrouter/openai/gpt-4.1-mini",
     "openrouter/anthropic/claude-sonnet-4.7",
     "openrouter/google/gemini-2.5-flash",

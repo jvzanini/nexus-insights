@@ -66,9 +66,18 @@ describe("PROVIDER_CATALOG", () => {
     }
   });
 
-  it("OpenAI inclui modelos chave: gpt-4o, gpt-4o-mini, o1, o3", () => {
+  it("OpenAI inclui modelos chave reais (validados May/2026): gpt-5, gpt-5-mini, gpt-4.1, o3", () => {
+    // Catálogo limpo em v0.13.5 — IDs verificados em
+    // https://developers.openai.com/api/docs/models/all (cutoff May/2026).
+    // Removidos os inventados (gpt-5.1-mini, gpt-4.1-nano, o4-mini, etc).
     const ids = PROVIDER_CATALOG.openai.models.map((m) => m.id);
-    expect(ids).toEqual(expect.arrayContaining(["gpt-4o", "gpt-4o-mini", "o1", "o3"]));
+    expect(ids).toEqual(
+      expect.arrayContaining(["gpt-5", "gpt-5-mini", "gpt-4.1", "o3"]),
+    );
+    // Garante que IDs inventados (causavam 404 da OpenAI) NÃO estão no catálogo.
+    expect(ids).not.toContain("gpt-5.1-mini");
+    expect(ids).not.toContain("gpt-4.1-nano");
+    expect(ids).not.toContain("o4-mini");
   });
 
   it("Anthropic inclui modelos novos (sonnet 4.5, opus 4.7)", () => {
