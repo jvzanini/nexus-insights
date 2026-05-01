@@ -12,6 +12,10 @@ import {
   Map,
   Sparkles,
   Database,
+  SlidersHorizontal,
+  KeyRound,
+  BookOpen,
+  TrendingUp,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { PlatformRole } from "@/generated/prisma/client";
@@ -97,6 +101,19 @@ export const NAV_ITEMS: NavItem[] = [
     ],
   },
   {
+    label: "Agente Nex",
+    href: "/agente-nex",
+    icon: Sparkles,
+    superAdminOnly: true,
+    section: "admin",
+    children: [
+      { label: "Configuração", href: "/agente-nex/configuracao", icon: SlidersHorizontal, superAdminOnly: true },
+      { label: "Chaves de API", href: "/agente-nex/chaves", icon: KeyRound, superAdminOnly: true },
+      { label: "Prompt", href: "/agente-nex/prompt", icon: BookOpen, superAdminOnly: true },
+      { label: "Consumo", href: "/agente-nex/consumo", icon: TrendingUp, superAdminOnly: true },
+    ],
+  },
+  {
     label: "Usuários",
     href: "/usuarios",
     icon: Users,
@@ -108,13 +125,6 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/configuracoes",
     icon: Settings,
     superAdminOnly: true,
-  },
-  {
-    label: "Consumo IA",
-    href: "/configuracoes/consumo",
-    icon: Sparkles,
-    superAdminOnly: true,
-    section: "admin",
   },
   {
     label: "Jobs de pré-agregação",
