@@ -1,5 +1,35 @@
 # Changelog
 
+## [v0.13.6] 2026-05-01 — Mensagens dos providers em PT-BR + probe com orçamento de tokens compatível com reasoning
+
+> Dois ajustes em cima do v0.13.5: (1) probe de Testar conexão batia em "max_tokens or model output limit was reached" em modelos reasoning (gastam tokens internos no thinking) — `max_completion_tokens` subiu de 1 para 256. Aproveitamos para tratar essa mensagem específica como **conexão OK**. (2) Toda mensagem em inglês vinda dos providers (OpenAI/Anthropic/Gemini/OpenRouter) agora passa por um tradutor que cobre os padrões mais comuns.
+
+### Probe ajustado
+
+- `deepTestOpenAI` reasoning: `max_completion_tokens: 256` (era 1) — cobre thinking + resposta curta com folga. Custo do teste em `gpt-5.4-mini`: ~$0,000512.
+- `deepTestOpenAI` non-reasoning: `max_tokens: 16` (era 1) — margem maior para qualquer modelo conservador.
+- `400 "max_tokens or model output limit was reached"` agora é tratado como `reachable: true` (a chave e o modelo funcionam, só faltou orçamento no probe).
+
+### Tradutor de mensagens (PT-BR)
+
+Novo helper `translateProviderMessage(raw, model)` que mapeia padrões em inglês para PT-BR. Cobre:
+
+- `"only supported in v1/responses"` → "Este modelo (X) só funciona via API 'Responses' da OpenAI. O Agente Nex ainda não suporta — escolha outro modelo (gpt-5-mini, gpt-5.4-mini, gpt-4.1-mini ou similar)."
+- `"does not exist or you do not have access"` → "Modelo X indisponível nesta chave (acesso restrito ou ID inválido)."
+- `"do not have access"` → "Sua chave não tem acesso a este modelo. Verifique o tier da sua conta na OpenAI."
+- `"max_tokens or model output limit was reached"` → "O modelo não conseguiu completar a resposta no orçamento de tokens do teste — mas a chave e o modelo funcionam." (note: hoje já viramos `reachable: true` antes de chegar aqui).
+- `"context length exceeded"`, `"insufficient_quota"`, `"rate_limit"`, `"invalid api key"` — todos com mensagens equivalentes em PT-BR.
+- Sem padrão conhecido → retorna a mensagem original (melhor inglês que perder informação).
+
+Aplicado em **todos os caminhos de erro** de `deepTestOpenAI`, `deepTestAnthropic`, `deepTestGemini` e `deepTestOpenRouter`. O prefixo "OpenAI:" / "Anthropic:" / etc. saiu — agora a mensagem fica direta.
+
+### Outras notas
+
+- 77 suites / 671 tests PASS · typecheck 0 erros.
+- API "Responses" da OpenAI (necessária para `gpt-5.1`, `gpt-5.5` em alguns casos) fica como follow-up futuro — por ora a mensagem orienta o super_admin a escolher um modelo compatível.
+
+---
+
 ## [v0.13.5] 2026-05-01 — Catálogo LLM com IDs reais da OpenAI (remove modelos inventados)
 
 > **DEFINITIVO** para o problema "Modelo gpt-5.1-mini não encontrado neste provedor". A causa **real** estava no `PROVIDER_CATALOG` do nosso app, que listava modelos como `gpt-5.1-mini`, `gpt-5.1-nano`, `gpt-5.2`, `gpt-4.1-nano`, `o4-mini`, `o3-mini` — IDs que **não existem na OpenAI**. Foram inventados pelo agente que atualizou o catálogo no v0.11.0 (commit `fae51ae`). A OpenAI sempre retornou 404, e nossa UI mostrava "Modelo X não encontrado" — o que era literalmente verdade, porque o ID não existia em lugar nenhum.

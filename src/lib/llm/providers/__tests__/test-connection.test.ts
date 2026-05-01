@@ -94,6 +94,27 @@ describe("test-connection", () => {
       expect(r.creditOk).toBe(false);
     });
 
+    it("400 'max_tokens limit was reached' → reachable=true (modelo aceitou)", async () => {
+      // Reasoning models gastam tokens internos no thinking. Quando o probe
+      // é apertado, vem 400 com essa msg — mas a key+modelo funcionam.
+      fetchMock.mockResolvedValueOnce(
+        mockJson({ data: [{ id: "gpt-5.4-mini" }] }, 200),
+      );
+      fetchMock.mockResolvedValueOnce(
+        mockText(
+          JSON.stringify({
+            error: {
+              message:
+                "Could not finish the message because max_tokens or model output limit was reached. Please try again with higher max_tokens.",
+            },
+          }),
+          400,
+        ),
+      );
+      const r = await deepTestOpenAI("k", "gpt-5.4-mini");
+      expect(r.reachable).toBe(true);
+    });
+
     it("200 → reachable=true", async () => {
       fetchMock.mockResolvedValueOnce(mockJson({ data: [{ id: "gpt-4o" }] }, 200));
       fetchMock.mockResolvedValueOnce(
@@ -133,7 +154,7 @@ describe("test-connection", () => {
       await deepTestOpenAI("k", "gpt-4o");
       const chatCall = fetchMock.mock.calls[1];
       const body = JSON.parse(String(chatCall[1]?.body));
-      expect(body.max_tokens).toBe(1);
+      expect(body.max_tokens).toBe(16);
       expect(body.temperature).toBe(0);
       expect(body.max_completion_tokens).toBeUndefined();
     });
@@ -154,7 +175,7 @@ describe("test-connection", () => {
       await deepTestOpenAI("k", "gpt-5.1-mini");
       const chatCall = fetchMock.mock.calls[1];
       const body = JSON.parse(String(chatCall[1]?.body));
-      expect(body.max_completion_tokens).toBe(1);
+      expect(body.max_completion_tokens).toBe(256);
       expect(body.max_tokens).toBeUndefined();
       expect(body.temperature).toBeUndefined();
     });
@@ -175,7 +196,7 @@ describe("test-connection", () => {
       await deepTestOpenAI("k", "o3-mini");
       const chatCall = fetchMock.mock.calls[1];
       const body = JSON.parse(String(chatCall[1]?.body));
-      expect(body.max_completion_tokens).toBe(1);
+      expect(body.max_completion_tokens).toBe(256);
       expect(body.temperature).toBeUndefined();
     });
   });

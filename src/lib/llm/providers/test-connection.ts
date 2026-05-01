@@ -104,6 +104,68 @@ function parseJsonSafe(text: string): unknown {
   }
 }
 
+/**
+ * Traduz padrões comuns das mensagens em inglês dos providers (OpenAI,
+ * Anthropic, Gemini, OpenRouter) para PT-BR. Quando o padrão não casa,
+ * retorna a mensagem original (melhor mostrar inglês do que sumir com a
+ * informação útil pro super_admin).
+ */
+export function translateProviderMessage(
+  raw: string | undefined | null,
+  model?: string,
+): string | undefined {
+  if (!raw) return undefined;
+  const m = raw.toLowerCase();
+  // OpenAI: API split entre Chat Completions e Responses (modelos novos
+  // — gpt-5.1, gpt-5.5, alguns codex — só funcionam em /v1/responses).
+  if (
+    /only supported in.*v1\/responses|use the.*responses.*api|only available.*via.*responses/i.test(
+      raw,
+    )
+  ) {
+    const id = model ? ` (${model})` : "";
+    return `Este modelo${id} só funciona via API "Responses" da OpenAI. O Agente Nex ainda não suporta essa API — escolha outro modelo (gpt-5-mini, gpt-5.4-mini, gpt-4.1-mini ou similar).`;
+  }
+  // Acesso negado / modelo não disponível.
+  if (/does not exist or you do not have access/i.test(raw)) {
+    return `Modelo${model ? ` "${model}"` : ""} indisponível nesta chave (acesso restrito ou ID inválido).`;
+  }
+  if (/do not have access/i.test(raw)) {
+    return `Sua chave não tem acesso a este modelo${model ? ` (${model})` : ""}. Verifique o tier da sua conta na OpenAI.`;
+  }
+  if (/model.*does not exist|model.*not.*found|invalid.*model/i.test(raw)) {
+    return `Modelo${model ? ` "${model}"` : ""} não existe no provedor.`;
+  }
+  // Limites de orçamento/contexto.
+  if (
+    /max_tokens or model output limit was reached|max output tokens? reached/i.test(
+      m,
+    )
+  ) {
+    return "O modelo não conseguiu completar a resposta no orçamento de tokens do teste — mas a chave e o modelo funcionam.";
+  }
+  if (/context.*length.*exceeded|maximum context length/i.test(m)) {
+    return "Contexto da requisição excedeu o limite do modelo.";
+  }
+  // Quota / créditos.
+  if (/insufficient_quota|insufficient.?credit|credit_balance_too_low/i.test(m)) {
+    return "Conta sem crédito disponível neste provedor.";
+  }
+  if (/exceeded.*quota|quota.*exceeded/i.test(m)) {
+    return "Cota da conta excedida. Verifique o painel do provedor.";
+  }
+  // Rate limit.
+  if (/rate.?limit/i.test(m)) {
+    return "Limite de requisições atingido. Tente novamente em alguns segundos.";
+  }
+  // Auth.
+  if (/invalid.*api.?key|unauthorized|incorrect api key/i.test(m)) {
+    return "API key inválida ou expirada.";
+  }
+  // Sem padrão conhecido — devolve a mensagem original com prefixo neutro.
+  return raw;
+}
+
 /* -------------------------------------------------------------------------- */
 /*                                  OpenAI                                    */
 /* -------------------------------------------------------------------------- */
@@ -152,10 +214,14 @@ export async function deepTestOpenAI(
     model,
     messages: [{ role: "user", content: "ok" }],
   };
+  // Reasoning models gastam tokens internos no thinking antes da resposta —
+  // com 1 token de orçamento, batem em 400 "max_tokens or model output limit
+  // was reached" sem nem terminar o thinking. 256 cobre thinking + resposta
+  // curta com folga (~ $0,000512 por teste em gpt-5.4-mini).
   if (reasoningModel) {
-    chatBody.max_completion_tokens = 1;
+    chatBody.max_completion_tokens = 256;
   } else {
-    chatBody.max_tokens = 1;
+    chatBody.max_tokens = 16;
     chatBody.temperature = 0;
   }
 
@@ -189,45 +255,52 @@ export async function deepTestOpenAI(
       | { error?: { message?: string; code?: string; type?: string } }
       | null;
     const provMsg = parsed?.error?.message;
+    // "max_tokens or model output limit was reached" significa que a key+modelo
+    // FUNCIONAM — só faltou orçamento de tokens no probe. Conta como conexão OK.
+    if (
+      /max_tokens or model output limit was reached|max output tokens? reached/i.test(
+        provMsg ?? text,
+      )
+    ) {
+      return { reachable: true };
+    }
     const isModelError =
       chatRes.status === 404 ||
-      /model.*does not exist|model.*not.*found|invalid.*model|do not have access/i.test(
+      /model.*does not exist|model.*not.*found|invalid.*model|do not have access|only supported in.*v1\/responses/i.test(
         provMsg ?? text,
       );
     if (isModelError) {
-      // Sugere alternativas: filtra IDs que parecem chat models (gpt-*, o1/o3/o4-*,
-      // chatgpt-*) e ordena pelos prefixos mais próximos do que o usuário pediu.
+      // Sugere alternativas: filtra IDs que parecem chat models e ordena
+      // pelos prefixos mais próximos do que o usuário pediu.
       const chatLike = availableIds
         .filter((id) =>
           /^(gpt-|chatgpt|o1-|o1$|o3-|o3$|o4-|o4$)/i.test(id),
         )
         .sort((a, b) => a.localeCompare(b));
-      // Tenta encontrar match por prefixo (ex.: pediu "gpt-5.1-mini",
-      // tem "gpt-5.1-mini-2025-XX-XX" disponível).
       const prefixMatches = chatLike.filter(
         (id) => id === model || id.startsWith(`${model}-`),
       );
-      const baseMsg = provMsg
-        ? `OpenAI: ${provMsg}`
-        : `Modelo "${model}" não encontrado neste provedor (HTTP ${chatRes.status}).`;
+      const translated =
+        translateProviderMessage(provMsg, model) ??
+        `Modelo "${model}" não encontrado neste provedor (HTTP ${chatRes.status}).`;
       const hint =
         prefixMatches.length > 0
-          ? ` Sua chave tem acesso a snapshot(s) compatível(is): ${prefixMatches.slice(0, 3).join(", ")} — selecione "Outro (digitar manualmente)" no select de Modelo e cole um desses.`
+          ? ` Sua chave tem acesso a: ${prefixMatches.slice(0, 3).join(", ")} (selecione "Outro (digitar manualmente)" e cole um desses).`
           : chatLike.length > 0
-            ? ` Modelos chat disponíveis nesta chave: ${chatLike.slice(0, 8).join(", ")}${chatLike.length > 8 ? `, +${chatLike.length - 8} outros` : ""}.`
+            ? ` Modelos disponíveis nesta chave: ${chatLike.slice(0, 8).join(", ")}${chatLike.length > 8 ? `, +${chatLike.length - 8} outros` : ""}.`
             : "";
       return {
         reachable: false,
         errorKind: "model_not_found",
-        message: `${baseMsg}${hint}`,
+        message: `${translated}${hint}`,
       };
     }
     return {
       reachable: false,
       errorKind: "other",
-      message: provMsg
-        ? `OpenAI ${chatRes.status}: ${provMsg}`
-        : `OpenAI ${chatRes.status}: ${text || chatRes.statusText}`,
+      message:
+        translateProviderMessage(provMsg, model) ??
+        `Erro do provedor (HTTP ${chatRes.status}): ${text || chatRes.statusText}`,
     };
   }
   if (chatRes.status === 429) {
@@ -244,10 +317,15 @@ export async function deepTestOpenAI(
   }
   if (!chatRes.ok) {
     const text = await chatRes.text().catch(() => "");
+    const parsed = parseJsonSafe(text) as
+      | { error?: { message?: string } }
+      | null;
     return {
       reachable: false,
       errorKind: "other",
-      message: `OpenAI ${chatRes.status}: ${text || chatRes.statusText}`,
+      message:
+        translateProviderMessage(parsed?.error?.message, model) ??
+        `Erro do provedor (HTTP ${chatRes.status}): ${text || chatRes.statusText}`,
     };
   }
 
@@ -314,7 +392,9 @@ export async function deepTestAnthropic(
       return {
         reachable: false,
         errorKind: "model_not_found",
-        message: `Modelo "${model}" não encontrado neste provedor.`,
+        message:
+          translateProviderMessage(errMsg, model) ??
+          `Modelo "${model}" não encontrado neste provedor.`,
       };
     }
     if (
@@ -334,7 +414,9 @@ export async function deepTestAnthropic(
     return {
       reachable: false,
       errorKind: "other",
-      message: `Anthropic ${res.status}: ${errMsg || res.statusText}`,
+      message:
+        translateProviderMessage(errMsg, model) ??
+        `Erro do provedor (HTTP ${res.status}): ${errMsg || res.statusText}`,
     };
   }
 
@@ -386,20 +468,28 @@ export async function deepTestGemini(
 
   if (res.status === 400 || res.status === 404) {
     const text = await res.text().catch(() => "");
-    if (/not.*found|invalid.*model|model.*not.*support/i.test(text)) {
+    const parsed = parseJsonSafe(text) as
+      | { error?: { message?: string } }
+      | null;
+    const errMsg = parsed?.error?.message ?? text;
+    if (/not.*found|invalid.*model|model.*not.*support/i.test(errMsg)) {
       return {
         reachable: false,
         errorKind: "model_not_found",
-        message: `Modelo "${model}" não encontrado neste provedor.`,
+        message:
+          translateProviderMessage(errMsg, model) ??
+          `Modelo "${model}" não encontrado neste provedor.`,
       };
     }
-    if (/API_KEY_INVALID/i.test(text)) {
+    if (/API_KEY_INVALID/i.test(errMsg)) {
       return { reachable: false, errorKind: "invalid_key" };
     }
     return {
       reachable: false,
       errorKind: "other",
-      message: `Gemini ${res.status}: ${text || res.statusText}`,
+      message:
+        translateProviderMessage(errMsg, model) ??
+        `Erro do provedor (HTTP ${res.status}): ${errMsg || res.statusText}`,
     };
   }
 
@@ -409,10 +499,15 @@ export async function deepTestGemini(
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
+    const parsed = parseJsonSafe(text) as
+      | { error?: { message?: string } }
+      | null;
     return {
       reachable: false,
       errorKind: "other",
-      message: `Gemini ${res.status}: ${text || res.statusText}`,
+      message:
+        translateProviderMessage(parsed?.error?.message ?? text, model) ??
+        `Erro do provedor (HTTP ${res.status}): ${text || res.statusText}`,
     };
   }
 
@@ -501,15 +596,21 @@ export async function deepTestOpenRouter(
   }
   if (!chatRes.ok) {
     const text = await chatRes.text().catch(() => "");
-    if (/model.*not.*found|no.*model/i.test(text)) {
+    const parsed = parseJsonSafe(text) as
+      | { error?: { message?: string } }
+      | null;
+    const errMsg = parsed?.error?.message ?? text;
+    if (/model.*not.*found|no.*model/i.test(errMsg)) {
       return {
         reachable: false,
         errorKind: "model_not_found",
-        message: `Modelo "${model}" não encontrado neste provedor.`,
+        message:
+          translateProviderMessage(errMsg, model) ??
+          `Modelo "${model}" não encontrado neste provedor.`,
       };
     }
     if (chatRes.status === 429) {
-      if (/credit|balance|insufficient/i.test(text)) {
+      if (/credit|balance|insufficient/i.test(errMsg)) {
         return {
           reachable: false,
           errorKind: "no_credit",
@@ -523,7 +624,9 @@ export async function deepTestOpenRouter(
     return {
       reachable: false,
       errorKind: "other",
-      message: `OpenRouter ${chatRes.status}: ${text || chatRes.statusText}`,
+      message:
+        translateProviderMessage(errMsg, model) ??
+        `Erro do provedor (HTTP ${chatRes.status}): ${errMsg || chatRes.statusText}`,
     };
   }
 
