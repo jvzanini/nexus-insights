@@ -10,21 +10,49 @@
  * - Warning vermelho quando total > 30.000 (chars excedentes serão truncados
  *   na composição do system prompt — ver `composeSystemPrompt`).
  * - Lista de documentos com nome, tamanho do arquivo, contagem de chars e
- *   ação Excluir (com confirm() nativo, padrão da app — ver llm-config-form).
+ *   ação Excluir (com `<AlertDialog>` do design system; substitui o
+ *   `window.confirm` nativo a partir de v0.16.0).
  * - Empty state amigável.
  * - Botão "Adicionar documento" → abre `<KbUploadDialog>`.
+ * - Atalho "Adicionar API Chatwoot (sugerida)" — abre o mesmo dialog na aba
+ *   URL pré-preenchida com a documentação pública da API Chatwoot.
+ * - Para docs com `kind === "URL"`: ícone Link, URL clicável (target=_blank,
+ *   `rel="noopener noreferrer"`), e ação extra "Atualizar conteúdo" que
+ *   dispara `refreshKbUrlAction`.
  *
- * Após upload/delete bem-sucedido, o componente chamador (page Server) faz
- * `router.refresh()` e recebe `initial` atualizado via prop.
+ * Após upload/delete/refresh bem-sucedido, o componente chamador (page Server)
+ * faz `router.refresh()` e recebe `initial` atualizado via prop.
  */
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Loader2, Plus, Trash2, TriangleAlert } from "lucide-react";
+import {
+  FileText,
+  Link as LinkIcon,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Sparkles,
+  Trash2,
+  TriangleAlert,
+} from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { deleteKbDocumentAction } from "@/lib/actions/nex-prompt";
+import {
+  deleteKbDocumentAction,
+  refreshKbUrlAction,
+} from "@/lib/actions/nex-prompt";
 import type { KbSummary } from "@/lib/nex/kb";
 import { cn } from "@/lib/utils";
 
@@ -33,14 +61,34 @@ import { KbUploadDialog, formatFileSize } from "./kb-upload-dialog";
 const KB_TOTAL_CAP = 30_000;
 const KB_WARN_THRESHOLD = 25_000;
 
+const CHATWOOT_SUGGESTED_NAME = "Chatwoot API Reference";
+const CHATWOOT_SUGGESTED_URL = "https://www.chatwoot.com/developers/api/";
+
+type UploadDialogState =
+  | { open: false }
+  | { open: true; tab: "file" | "url"; urlName?: string; urlValue?: string };
+
 interface KbSectionProps {
   initial: KbSummary[];
 }
 
+function safeHostname(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
+}
+
 export function KbSection({ initial }: KbSectionProps) {
   const router = useRouter();
-  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadDialog, setUploadDialog] = useState<UploadDialogState>({
+    open: false,
+  });
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [refreshingId, setRefreshingId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<KbSummary | null>(null);
   const [, startTransition] = useTransition();
 
   const totalChars = useMemo(
@@ -56,23 +104,47 @@ export function KbSection({ initial }: KbSectionProps) {
   const isOverLimit = totalChars > KB_TOTAL_CAP;
   const isNearLimit = !isOverLimit && totalChars > KB_WARN_THRESHOLD;
 
-  function handleDelete(doc: KbSummary) {
-    if (typeof window !== "undefined") {
-      const ok = window.confirm(
-        `Excluir "${doc.name}" da base de conhecimento? Esta ação não pode ser desfeita.`,
-      );
-      if (!ok) return;
-    }
+  function handleConfirmDelete() {
+    const doc = confirmDelete;
+    if (!doc) return;
     setDeletingId(doc.id);
     startTransition(async () => {
       const result = await deleteKbDocumentAction(doc.id);
       setDeletingId(null);
+      setConfirmDelete(null);
       if (!result.ok) {
         toast.error(result.error ?? "Erro ao excluir documento");
         return;
       }
       toast.success("Documento removido");
       router.refresh();
+    });
+  }
+
+  function handleRefresh(doc: KbSummary) {
+    setRefreshingId(doc.id);
+    startTransition(async () => {
+      const result = await refreshKbUrlAction(doc.id);
+      setRefreshingId(null);
+      if (!result.ok) {
+        toast.error(result.error ?? "Erro ao atualizar conteúdo");
+        return;
+      }
+      toast.success("Conteúdo atualizado");
+      router.refresh();
+    });
+  }
+
+  function openAddDocument() {
+    setUploadDialog({ open: true, tab: "file" });
+  }
+
+  function openAddChatwootSuggestion() {
+    setUploadDialog({
+      open: true,
+      tab: "url",
+      urlName: CHATWOOT_SUGGESTED_NAME,
+      urlValue: CHATWOOT_SUGGESTED_URL,
     });
   }
 
@@ -173,23 +245,27 @@ export function KbSection({ initial }: KbSectionProps) {
             Nenhum documento adicionado ainda.
           </p>
           <p className="text-xs text-muted-foreground">
-            Envie um PDF ou TXT para enriquecer o contexto do Agente Nex.
+            Envie um PDF, TXT ou URL para enriquecer o contexto do Agente Nex.
           </p>
         </div>
       ) : (
         <ul className="space-y-2" aria-label="Documentos da base de conhecimento">
           {initial.map((doc) => {
             const isDeleting = deletingId === doc.id;
+            const isRefreshing = refreshingId === doc.id;
+            const isUrl = doc.kind === "URL";
+            const hostname = isUrl ? safeHostname(doc.sourceUrl) : null;
+            const Icon = isUrl ? LinkIcon : FileText;
             return (
               <li
                 key={doc.id}
                 className={cn(
                   "flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2.5 transition-opacity",
-                  isDeleting && "opacity-60",
+                  (isDeleting || isRefreshing) && "opacity-60",
                 )}
               >
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-500">
-                  <FileText className="h-4 w-4" aria-hidden="true" />
+                  <Icon className="h-4 w-4" aria-hidden="true" />
                 </span>
                 <div className="min-w-0 flex-1">
                   <p
@@ -198,27 +274,71 @@ export function KbSection({ initial }: KbSectionProps) {
                   >
                     {doc.name}
                   </p>
-                  <p className="text-xs tabular-nums text-muted-foreground">
-                    <span>{formatFileSize(doc.fileSize)}</span>
-                    <span className="mx-1.5 text-muted-foreground/60">•</span>
-                    <span>
-                      {doc.charCount.toLocaleString("pt-BR")} chars
-                    </span>
-                  </p>
+                  {isUrl && doc.sourceUrl ? (
+                    <p className="text-xs tabular-nums text-muted-foreground">
+                      <a
+                        href={doc.sourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={hostname ?? doc.sourceUrl}
+                        aria-label={`Abrir ${doc.sourceUrl} em nova aba`}
+                        className="inline-block max-w-full truncate align-bottom text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                      >
+                        {hostname ?? doc.sourceUrl}
+                      </a>
+                      <span className="mx-1.5 text-muted-foreground/60">•</span>
+                      <span>
+                        {doc.charCount.toLocaleString("pt-BR")} chars
+                      </span>
+                    </p>
+                  ) : (
+                    <p className="text-xs tabular-nums text-muted-foreground">
+                      <span>{formatFileSize(doc.fileSize)}</span>
+                      <span className="mx-1.5 text-muted-foreground/60">•</span>
+                      <span>
+                        {doc.charCount.toLocaleString("pt-BR")} chars
+                      </span>
+                    </p>
+                  )}
                 </div>
+                {isUrl ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => handleRefresh(doc)}
+                    disabled={isRefreshing || isDeleting}
+                    aria-label={`Atualizar conteúdo de ${doc.name}`}
+                    title="Atualizar conteúdo"
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    {isRefreshing ? (
+                      <Loader2
+                        className="h-4 w-4 animate-spin"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                    )}
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon-sm"
-                  onClick={() => handleDelete(doc)}
-                  disabled={isDeleting}
+                  onClick={() => setConfirmDelete(doc)}
+                  disabled={isDeleting || isRefreshing}
                   aria-label={`Excluir documento ${doc.name}`}
+                  title="Excluir"
                   className="text-muted-foreground hover:text-destructive"
                 >
                   {isDeleting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    <Loader2
+                      className="h-4 w-4 animate-spin"
+                      aria-hidden="true"
+                    />
                   ) : (
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
                   )}
                 </Button>
               </li>
@@ -228,11 +348,21 @@ export function KbSection({ initial }: KbSectionProps) {
       )}
 
       {/* Adicionar documento */}
-      <div className="flex justify-end">
+      <div className="flex flex-col-reverse items-stretch justify-end gap-2 sm:flex-row sm:items-center">
         <Button
           type="button"
           variant="outline"
-          onClick={() => setUploadOpen(true)}
+          size="sm"
+          onClick={openAddChatwootSuggestion}
+          className="border-border text-muted-foreground hover:text-foreground"
+        >
+          <Sparkles className="h-4 w-4" aria-hidden="true" />
+          Adicionar API Chatwoot (sugerida)
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={openAddDocument}
           className="border-border"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
@@ -240,7 +370,65 @@ export function KbSection({ initial }: KbSectionProps) {
         </Button>
       </div>
 
-      <KbUploadDialog open={uploadOpen} onOpenChange={setUploadOpen} />
+      <KbUploadDialog
+        open={uploadDialog.open}
+        onOpenChange={(next) => {
+          if (next) return; // abertura é controlada pelos botões
+          setUploadDialog({ open: false });
+        }}
+        initialTab={uploadDialog.open ? uploadDialog.tab : "file"}
+        initialUrlName={uploadDialog.open ? uploadDialog.urlName : undefined}
+        initialUrlValue={uploadDialog.open ? uploadDialog.urlValue : undefined}
+      />
+
+      {/* AlertDialog de confirmação de exclusão (substitui window.confirm) */}
+      <AlertDialog
+        open={confirmDelete !== null}
+        onOpenChange={(open) => {
+          if (!open && deletingId === null) setConfirmDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-foreground">
+              <TriangleAlert
+                className="h-5 w-5 text-destructive"
+                aria-hidden="true"
+              />
+              Excluir documento
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Excluir{" "}
+              <strong className="text-foreground">
+                &quot;{confirmDelete?.name ?? ""}&quot;
+              </strong>{" "}
+              da base de conhecimento? Essa ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              disabled={deletingId !== null}
+              className="cursor-pointer"
+            >
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              type="button"
+              onClick={handleConfirmDelete}
+              disabled={deletingId !== null}
+              className="gap-2 bg-red-600 text-white hover:bg-red-700 cursor-pointer transition-all duration-200"
+            >
+              {deletingId !== null ? (
+                <Loader2
+                  className="h-4 w-4 animate-spin"
+                  aria-hidden="true"
+                />
+              ) : null}
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

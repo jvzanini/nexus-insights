@@ -35,6 +35,10 @@ const MAX_URL = 2048;
 interface KbUrlFormProps {
   onSuccess: () => void;
   isDisabled?: boolean;
+  /** Pré-preenche o campo "Nome" (atalhos como "Adicionar API Chatwoot"). */
+  initialName?: string;
+  /** Pré-preenche o campo "URL" (atalhos sugeridos). */
+  initialUrl?: string;
 }
 
 function validateClientSide(name: string, url: string): string | null {
@@ -60,10 +64,15 @@ function validateClientSide(name: string, url: string): string | null {
   return null;
 }
 
-export function KbUrlForm({ onSuccess, isDisabled = false }: KbUrlFormProps) {
+export function KbUrlForm({
+  onSuccess,
+  isDisabled = false,
+  initialName = "",
+  initialUrl = "",
+}: KbUrlFormProps) {
   const router = useRouter();
-  const [name, setName] = useState("");
-  const [url, setUrl] = useState("");
+  const [name, setName] = useState(initialName);
+  const [url, setUrl] = useState(initialUrl);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 

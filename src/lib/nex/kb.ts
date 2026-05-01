@@ -21,6 +21,10 @@ export function sanitizeForPostgres(s: string): string {
 export interface KbSummary {
   id: string;
   name: string;
+  /** Tipo do documento (PDF/TXT/URL). v0.16.0+. */
+  kind: NexKbKind;
+  /** URL pública de origem quando `kind === "URL"`. Null caso contrário. */
+  sourceUrl: string | null;
   mimeType: string;
   fileSize: number;
   charCount: number;
@@ -53,6 +57,8 @@ export interface KbUrlDocument {
 interface KbRowSummary {
   id: string;
   name: string;
+  kind: NexKbKind;
+  source_url: string | null;
   mime_type: string;
   file_size: number;
   char_count: number;
@@ -70,13 +76,15 @@ interface KbRowForPrompt {
 export async function listKbDocuments(): Promise<KbSummary[]> {
   await ensureNexTables();
   const r = await pgPool.query<KbRowSummary>(
-    `SELECT id, name, mime_type, file_size, char_count, created_at, updated_at, uploaded_by_id
+    `SELECT id, name, kind, source_url, mime_type, file_size, char_count, created_at, updated_at, uploaded_by_id
      FROM nex_kb_documents
      ORDER BY created_at DESC`,
   );
   return r.rows.map((row) => ({
     id: row.id,
     name: row.name,
+    kind: row.kind,
+    sourceUrl: row.source_url,
     mimeType: row.mime_type,
     fileSize: row.file_size,
     charCount: row.char_count,

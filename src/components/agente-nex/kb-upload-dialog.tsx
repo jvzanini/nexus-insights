@@ -59,25 +59,38 @@ export function formatFileSize(bytes: number): string {
 interface KbUploadDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Aba inicial quando o dialog abre. Default `file`. */
+  initialTab?: "file" | "url";
+  /** Pré-preenche nome no form de URL (usado pelos atalhos sugeridos). */
+  initialUrlName?: string;
+  /** Pré-preenche URL no form de URL (usado pelos atalhos sugeridos). */
+  initialUrlValue?: string;
 }
 
-export function KbUploadDialog({ open, onOpenChange }: KbUploadDialogProps) {
+export function KbUploadDialog({
+  open,
+  onOpenChange,
+  initialTab = "file",
+  initialUrlName,
+  initialUrlValue,
+}: KbUploadDialogProps) {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const [activeTab, setActiveTab] = useState<"file" | "url">("file");
+  const [activeTab, setActiveTab] = useState<"file" | "url">(initialTab);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  // Reset interno sempre que o dialog abrir/fechar.
+  // Reset interno sempre que o dialog abrir/fechar — respeita `initialTab`.
   useEffect(() => {
     if (!open) {
       setFile(null);
       setError(null);
-      setActiveTab("file");
       if (inputRef.current) inputRef.current.value = "";
+    } else {
+      setActiveTab(initialTab);
     }
-  }, [open]);
+  }, [open, initialTab]);
 
   function validate(f: File): string | null {
     const mime = f.type || "";
@@ -284,8 +297,11 @@ export function KbUploadDialog({ open, onOpenChange }: KbUploadDialogProps) {
 
           <TabsContent value="url">
             <KbUrlForm
+              key={`${open ? "open" : "closed"}-${initialUrlName ?? ""}-${initialUrlValue ?? ""}`}
               onSuccess={() => onOpenChange(false)}
               isDisabled={isPending}
+              initialName={initialUrlName ?? ""}
+              initialUrl={initialUrlValue ?? ""}
             />
           </TabsContent>
         </Tabs>

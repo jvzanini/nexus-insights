@@ -3,7 +3,14 @@
  */
 import "@testing-library/jest-dom";
 
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 
 import type { KbSummary } from "@/lib/nex/kb";
 
@@ -20,6 +27,14 @@ jest.mock("@/lib/actions/nex-prompt", () => ({
     data: { id: "new", charCount: 100 },
   })),
   deleteKbDocumentAction: jest.fn(async () => ({ ok: true })),
+  addKbUrlAction: jest.fn(async () => ({
+    ok: true,
+    data: { id: "new", charCount: 100 },
+  })),
+  refreshKbUrlAction: jest.fn(async () => ({
+    ok: true,
+    data: { charCount: 200, truncated: false },
+  })),
 }));
 
 const toastMock = {
@@ -34,6 +49,7 @@ jest.mock("sonner", () => ({
 
 import {
   deleteKbDocumentAction,
+  refreshKbUrlAction,
   uploadKbDocumentAction,
 } from "@/lib/actions/nex-prompt";
 import { KbSection } from "../kb-section";
@@ -42,6 +58,8 @@ function makeDoc(overrides: Partial<KbSummary> = {}): KbSummary {
   return {
     id: "doc-1",
     name: "manual-treino.pdf",
+    kind: "PDF",
+    sourceUrl: null,
     mimeType: "application/pdf",
     fileSize: 350 * 1024, // 350 KB
     charCount: 12_000,
@@ -52,6 +70,19 @@ function makeDoc(overrides: Partial<KbSummary> = {}): KbSummary {
   };
 }
 
+function makeUrlDoc(overrides: Partial<KbSummary> = {}): KbSummary {
+  return makeDoc({
+    id: "doc-url-1",
+    name: "Chatwoot API Reference",
+    kind: "URL",
+    sourceUrl: "https://www.chatwoot.com/developers/api/",
+    mimeType: "text/plain",
+    fileSize: 8 * 1024,
+    charCount: 8_000,
+    ...overrides,
+  });
+}
+
 describe("KbSection", () => {
   beforeEach(() => {
     refresh.mockReset();
@@ -59,8 +90,7 @@ describe("KbSection", () => {
     toastMock.error.mockReset();
     (uploadKbDocumentAction as jest.Mock).mockClear();
     (deleteKbDocumentAction as jest.Mock).mockClear();
-    // confirm padrão: aceita
-    jest.spyOn(window, "confirm").mockReturnValue(true);
+    (refreshKbUrlAction as jest.Mock).mockClear();
   });
 
   afterEach(() => {
@@ -73,11 +103,11 @@ describe("KbSection", () => {
       screen.getByText(/Nenhum documento adicionado ainda/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /Adicionar documento/i }),
+      screen.getByRole("button", { name: /^Adicionar documento$/i }),
     ).toBeInTheDocument();
   });
 
-  it("renderiza um documento com nome, tamanho e charCount", () => {
+  it("renderiza um documento PDF com nome, tamanho e charCount", () => {
     const doc = makeDoc();
     render(<KbSection initial={[doc]} />);
 
@@ -87,6 +117,31 @@ describe("KbSection", () => {
     expect(
       screen.getByRole("button", {
         name: /Excluir documento manual-treino\.pdf/i,
+      }),
+    ).toBeInTheDocument();
+    // PDF não deve ter botão "Atualizar conteúdo".
+    expect(
+      screen.queryByRole("button", { name: /Atualizar conteúdo de/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renderiza um documento URL com link clicável e ação Atualizar", () => {
+    const doc = makeUrlDoc();
+    render(<KbSection initial={[doc]} />);
+
+    expect(screen.getByText("Chatwoot API Reference")).toBeInTheDocument();
+    const link = screen.getByRole("link", {
+      name: /Abrir https:\/\/www\.chatwoot\.com\/developers\/api\/ em nova aba/i,
+    });
+    expect(link).toHaveAttribute("href", "https://www.chatwoot.com/developers/api/");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    // hostname truncado visível no texto do link.
+    expect(link).toHaveTextContent("www.chatwoot.com");
+    // Ação Atualizar conteúdo presente.
+    expect(
+      screen.getByRole("button", {
+        name: /Atualizar conteúdo de Chatwoot API Reference/i,
       }),
     ).toBeInTheDocument();
   });
@@ -118,7 +173,8 @@ describe("KbSection", () => {
     expect(warning).toHaveTextContent(/5\.000 chars/);
   });
 
-  it("clica em excluir → confirm → chama deleteKbDocumentAction + toast + refresh", async () => {
+  it("clicar em Excluir abre AlertDialog (não window.confirm)", async () => {
+    const confirmSpy = jest.spyOn(window, "confirm").mockReturnValue(true);
     const doc = makeDoc();
     render(<KbSection initial={[doc]} />);
 
@@ -129,25 +185,69 @@ describe("KbSection", () => {
       fireEvent.click(trash);
     });
 
+    // window.confirm NÃO é mais usado.
+    expect(confirmSpy).not.toHaveBeenCalled();
+    // AlertDialog renderiza título + descrição.
+    await waitFor(() => {
+      expect(
+        screen.getByRole("alertdialog", { name: /Excluir documento/i }),
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText(/da base de conhecimento\? Essa ação não pode ser desfeita/i),
+    ).toBeInTheDocument();
+    // Action ainda não disparou.
+    expect(deleteKbDocumentAction).not.toHaveBeenCalled();
+  });
+
+  it("Cancelar no AlertDialog NÃO chama deleteKbDocumentAction", async () => {
+    const doc = makeDoc();
+    render(<KbSection initial={[doc]} />);
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: /Excluir documento manual-treino\.pdf/i,
+        }),
+      );
+    });
+
+    const cancelBtn = await screen.findByRole("button", { name: /Cancelar/i });
+    await act(async () => {
+      fireEvent.click(cancelBtn);
+    });
+
+    expect(deleteKbDocumentAction).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("Confirmar no AlertDialog chama deleteKbDocumentAction + toast + refresh", async () => {
+    const doc = makeDoc();
+    render(<KbSection initial={[doc]} />);
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: /Excluir documento manual-treino\.pdf/i,
+        }),
+      );
+    });
+
+    // Botão "Excluir" dentro do AlertDialog (action).
+    const dialog = await screen.findByRole("alertdialog", {
+      name: /Excluir documento/i,
+    });
+    const confirmBtn = within(dialog).getByRole("button", { name: /^Excluir$/i });
+
+    await act(async () => {
+      fireEvent.click(confirmBtn);
+    });
+
     await waitFor(() =>
       expect(deleteKbDocumentAction).toHaveBeenCalledWith("doc-1"),
     );
     expect(toastMock.success).toHaveBeenCalled();
     expect(refresh).toHaveBeenCalledTimes(1);
-  });
-
-  it("delete cancelado pelo usuário não chama action", async () => {
-    jest.spyOn(window, "confirm").mockReturnValue(false);
-    const doc = makeDoc();
-    render(<KbSection initial={[doc]} />);
-
-    const trash = screen.getByRole("button", {
-      name: /Excluir documento manual-treino\.pdf/i,
-    });
-    fireEvent.click(trash);
-
-    expect(deleteKbDocumentAction).not.toHaveBeenCalled();
-    expect(refresh).not.toHaveBeenCalled();
   });
 
   it("delete retornando ok=false dispara toast.error e NÃO chama refresh", async () => {
@@ -158,11 +258,19 @@ describe("KbSection", () => {
     const doc = makeDoc();
     render(<KbSection initial={[doc]} />);
 
-    const trash = screen.getByRole("button", {
-      name: /Excluir documento manual-treino\.pdf/i,
-    });
     await act(async () => {
-      fireEvent.click(trash);
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: /Excluir documento manual-treino\.pdf/i,
+        }),
+      );
+    });
+    const dialog = await screen.findByRole("alertdialog", {
+      name: /Excluir documento/i,
+    });
+    const confirmBtn = within(dialog).getByRole("button", { name: /^Excluir$/i });
+    await act(async () => {
+      fireEvent.click(confirmBtn);
     });
 
     await waitFor(() =>
@@ -173,17 +281,79 @@ describe("KbSection", () => {
 
   it("clicar em 'Adicionar documento' abre o dialog de upload", async () => {
     render(<KbSection initial={[]} />);
-    const addBtn = screen.getByRole("button", { name: /Adicionar documento/i });
+    const addBtn = screen.getByRole("button", { name: /^Adicionar documento$/i });
     await act(async () => {
       fireEvent.click(addBtn);
     });
 
-    // O dialog renderiza um título "Adicionar documento" (heading dentro do popup).
     await waitFor(() => {
       const headings = screen.getAllByText(/Adicionar documento/i);
-      // botão original + heading do dialog
       expect(headings.length).toBeGreaterThanOrEqual(2);
     });
     expect(uploadKbDocumentAction).not.toHaveBeenCalled();
   });
+
+  it("clicar em 'Adicionar API Chatwoot (sugerida)' abre dialog na aba URL pré-preenchida", async () => {
+    render(<KbSection initial={[]} />);
+
+    const suggestionBtn = screen.getByRole("button", {
+      name: /Adicionar API Chatwoot \(sugerida\)/i,
+    });
+    await act(async () => {
+      fireEvent.click(suggestionBtn);
+    });
+
+    // Dialog aberto + form URL com nome + url pré-preenchidos.
+    await waitFor(() => {
+      const nameInput = document.getElementById(
+        "kb-url-name",
+      ) as HTMLInputElement | null;
+      expect(nameInput?.value).toBe("Chatwoot API Reference");
+    });
+    const urlInput = document.getElementById(
+      "kb-url-input",
+    ) as HTMLInputElement | null;
+    expect(urlInput?.value).toBe("https://www.chatwoot.com/developers/api/");
+  });
+
+  it("clicar em 'Atualizar conteúdo' em URL doc dispara refreshKbUrlAction + toast + refresh", async () => {
+    const doc = makeUrlDoc();
+    render(<KbSection initial={[doc]} />);
+
+    const refreshBtn = screen.getByRole("button", {
+      name: /Atualizar conteúdo de Chatwoot API Reference/i,
+    });
+    await act(async () => {
+      fireEvent.click(refreshBtn);
+    });
+
+    await waitFor(() =>
+      expect(refreshKbUrlAction).toHaveBeenCalledWith("doc-url-1"),
+    );
+    expect(toastMock.success).toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("refresh retornando ok=false dispara toast.error e NÃO chama refresh router", async () => {
+    (refreshKbUrlAction as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      error: "Timeout ao baixar URL",
+    });
+    const doc = makeUrlDoc();
+    render(<KbSection initial={[doc]} />);
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: /Atualizar conteúdo de Chatwoot API Reference/i,
+        }),
+      );
+    });
+
+    await waitFor(() =>
+      expect(toastMock.error).toHaveBeenCalledWith("Timeout ao baixar URL"),
+    );
+    expect(refresh).not.toHaveBeenCalled();
+  });
 });
+
