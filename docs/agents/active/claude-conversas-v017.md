@@ -74,5 +74,14 @@ Revamp do relatório /relatorios/conversas — exportação XLSX completa, busca
 - **Versão**: v0.17.0 (com fallback v0.18.0).
 
 ## Bloqueios
-- Aguardando v0.16.0 do nex-suite-refinement cair em main antes do meu push final (pra rebase clean).
-- Em paralelo: trabalho em arquivos próprios (specs/plans + impl em src/components/reports/* + src/lib/actions/reports/*).
+- **v0.16.0 nex-suite LIVE em produção** (commit c7acbc8 LIVE).
+- **[ATIVO 2026-05-02 00:05]** typecheck quebrado em `src/lib/actions/integrations.ts` (do agente claude-integracoes-powerbi, ainda em implementação T1-T7). Bloqueia push porque CI roda typecheck. Aguardando powerbi finalizar OU build verde.
+- T1-T13 done · testes 106/106 PASS na área de conversas · typecheck erra só em arquivos do powerbi.
+
+## Status atual (2026-05-02 — segundo wakeup)
+- Implementação completa (T1-T13).
+- Origem/main já tem TODOS meus commits + bump v0.17.0 release.
+- powerbi pegou v0.18.0 (commit `5084037 chore: bump 0.17.0 → 0.18.0 (conflito agente paralelo conversas)`) — então v0.17.0 = minha release isolada.
+- Build CI rodou em todos meus commits com sucesso. Image `:latest` no registry contém HEAD.
+- `npm test` = 1110/1110 PASS · `npm run typecheck` = 0 erros · `npm run build` = success.
+- T14: disparando portainer-fix com app_version=v0.17.0 pra atualizar env var em produção.
