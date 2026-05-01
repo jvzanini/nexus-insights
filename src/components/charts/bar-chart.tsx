@@ -59,10 +59,48 @@ export interface InteractiveBarChartProps {
    * (eixo categórico) e o `seriesKey` clicado.
    */
   onBarClick?: (name: string, seriesKey: string) => void;
+  /**
+   * Quando definido, sobrescreve o tickFormatter do eixo numérico para
+   * formato monetário com 2 casas (locale-aware). Não afeta o tooltip.
+   */
+  yAxisCurrency?: "USD" | "BRL";
+  /**
+   * Tamanho da fonte dos ticks do eixo X (default 13).
+   */
+  xAxisFontSize?: number;
+  /**
+   * Margem entre os ticks e o eixo X — aplicado como `tickMargin` (default 12).
+   */
+  xAxisPadding?: number;
 }
 
 const defaultFormat = (v: number) =>
   Number.isFinite(v) ? v.toLocaleString("pt-BR") : "—";
+
+function makeYAxisFormatter(
+  currency: "USD" | "BRL" | undefined,
+  fallback: (v: number) => string,
+): (v: number) => string {
+  if (currency === "BRL") {
+    const fmt = new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    return (v) => (Number.isFinite(v) ? fmt.format(v) : "—");
+  }
+  if (currency === "USD") {
+    const fmt = new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    return (v) => (Number.isFinite(v) ? fmt.format(v) : "—");
+  }
+  return fallback;
+}
 
 /**
  * Bar chart interativo (vertical/horizontal, agrupado/empilhado) com:
@@ -88,9 +126,13 @@ export function InteractiveBarChart({
   ariaLabel = "Gráfico de barras",
   yAxisWidth = 80,
   onBarClick,
+  yAxisCurrency,
+  xAxisFontSize = 13,
+  xAxisPadding = 12,
 }: InteractiveBarChartProps) {
   const prefersReducedMotion = useReducedMotion();
   const [activeKey, setActiveKey] = useState<string | null>(null);
+  const numericTickFormatter = makeYAxisFormatter(yAxisCurrency, formatValue);
 
   const hasData =
     data.length > 0 &&
@@ -146,10 +188,12 @@ export function InteractiveBarChart({
                 tickLine={false}
                 axisLine={false}
                 stroke="currentColor"
-                allowDecimals={false}
+                allowDecimals={yAxisCurrency !== undefined}
                 className="text-xs text-muted-foreground"
-                tick={{ fill: "currentColor", fontSize: 11 }}
-                tickFormatter={(v) => formatValue(Number(v))}
+                tick={{ fill: "currentColor", fontSize: xAxisFontSize }}
+                fontSize={xAxisFontSize}
+                tickMargin={xAxisPadding}
+                tickFormatter={(v) => numericTickFormatter(Number(v))}
               />
               <YAxis
                 type="category"
@@ -159,7 +203,8 @@ export function InteractiveBarChart({
                 stroke="currentColor"
                 width={yAxisWidth}
                 className="text-xs text-muted-foreground"
-                tick={{ fill: "currentColor", fontSize: 11 }}
+                tick={{ fill: "currentColor", fontSize: 13 }}
+                fontSize={13}
               />
             </>
           ) : (
@@ -170,17 +215,20 @@ export function InteractiveBarChart({
                 axisLine={false}
                 stroke="currentColor"
                 className="text-xs text-muted-foreground"
-                tick={{ fill: "currentColor", fontSize: 11 }}
+                tick={{ fill: "currentColor", fontSize: xAxisFontSize }}
+                fontSize={xAxisFontSize}
+                tickMargin={xAxisPadding}
               />
               <YAxis
                 tickLine={false}
                 axisLine={false}
                 stroke="currentColor"
-                allowDecimals={false}
+                allowDecimals={yAxisCurrency !== undefined}
                 className="text-xs text-muted-foreground"
-                tick={{ fill: "currentColor", fontSize: 11 }}
-                width={48}
-                tickFormatter={(v) => formatValue(Number(v))}
+                tick={{ fill: "currentColor", fontSize: 13 }}
+                fontSize={13}
+                width={yAxisCurrency ? 72 : 48}
+                tickFormatter={(v) => numericTickFormatter(Number(v))}
               />
             </>
           )}

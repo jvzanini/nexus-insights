@@ -43,10 +43,49 @@ export interface InteractiveAreaChartProps {
   formatValue?: (v: number) => string;
   className?: string;
   ariaLabel?: string;
+  /**
+   * Quando definido, sobrescreve o tickFormatter do eixo Y para formato
+   * monetário com 2 casas decimais (locale-aware). Não afeta `formatValue`
+   * usado no Tooltip.
+   */
+  yAxisCurrency?: "USD" | "BRL";
+  /**
+   * Tamanho da fonte dos ticks do eixo X (default 13).
+   */
+  xAxisFontSize?: number;
+  /**
+   * Margem entre os ticks e o eixo X — aplicado como `tickMargin` (default 12).
+   */
+  xAxisPadding?: number;
 }
 
 const defaultFormat = (v: number) =>
   Number.isFinite(v) ? v.toLocaleString("pt-BR") : "—";
+
+function makeYAxisFormatter(
+  currency: "USD" | "BRL" | undefined,
+  fallback: (v: number) => string,
+): (v: number) => string {
+  if (currency === "BRL") {
+    const fmt = new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    return (v) => (Number.isFinite(v) ? fmt.format(v) : "—");
+  }
+  if (currency === "USD") {
+    const fmt = new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    return (v) => (Number.isFinite(v) ? fmt.format(v) : "—");
+  }
+  return fallback;
+}
 
 /**
  * Area chart com gradient fill, animação de entrada e hover.
@@ -69,10 +108,14 @@ export function InteractiveAreaChart({
   formatValue = defaultFormat,
   className,
   ariaLabel = "Gráfico de área",
+  yAxisCurrency,
+  xAxisFontSize = 13,
+  xAxisPadding = 12,
 }: InteractiveAreaChartProps) {
   const prefersReducedMotion = useReducedMotion();
   const gradientId = useId();
   const [activeKey, setActiveKey] = useState<string | null>(null);
+  const yTickFormatter = makeYAxisFormatter(yAxisCurrency, formatValue);
 
   const hasData =
     data.length > 0 &&
@@ -141,17 +184,20 @@ export function InteractiveAreaChart({
             axisLine={false}
             stroke="currentColor"
             className="text-xs text-muted-foreground"
-            tick={{ fill: "currentColor", fontSize: 11 }}
+            tick={{ fill: "currentColor", fontSize: xAxisFontSize }}
+            fontSize={xAxisFontSize}
+            tickMargin={xAxisPadding}
           />
           <YAxis
             tickLine={false}
             axisLine={false}
             stroke="currentColor"
-            allowDecimals={false}
+            allowDecimals={yAxisCurrency !== undefined}
             className="text-xs text-muted-foreground"
-            tick={{ fill: "currentColor", fontSize: 11 }}
-            width={48}
-            tickFormatter={(v) => formatValue(Number(v))}
+            tick={{ fill: "currentColor", fontSize: 13 }}
+            fontSize={13}
+            width={yAxisCurrency ? 72 : 48}
+            tickFormatter={(v) => yTickFormatter(Number(v))}
           />
           <Tooltip
             cursor={{ stroke: "currentColor", strokeOpacity: 0.2 }}
