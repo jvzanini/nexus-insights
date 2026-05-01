@@ -32,6 +32,7 @@ import { getProfileByIdAction } from "@/lib/actions/integrations-power-bi";
 
 import { ProfileDetailActions } from "@/components/integracoes/power-bi/profile-detail-actions";
 import { ProfileSummaryCard } from "@/components/integracoes/power-bi/profile-summary-card";
+import { ProfileWhitelistCard } from "@/components/integracoes/power-bi/profile-whitelist-card";
 import { ProfileCredentialsCard } from "@/components/integracoes/power-bi/profile-credentials-card";
 import { ProfileAuditTimeline } from "@/components/integracoes/power-bi/profile-audit-timeline";
 
@@ -102,6 +103,7 @@ export default async function Page({ params }: Props) {
 
       <div className="space-y-6">
         <ProfileSummaryCard profile={profile} />
+        <ProfileWhitelistCard profile={profile} />
         <ProfileCredentialsCard
           profile={{
             id: profile.id,
