@@ -1,5 +1,72 @@
 # Changelog
 
+## [v0.18.0] 2026-05-01 — Integrações + Power BI (super_admin only)
+
+> Novo menu **Integrações** com primeira integração **Power BI**.
+> Provisioning automático de usuário/views Postgres + RLS opcional + 3 caminhos
+> de conexão + audit completo. Workflow rigoroso (spec v3 + plan v3 com double-check).
+
+### Implementação
+
+- **Sidebar**: novo item "Integrações" (super_admin only) — entre Agente Nex e Usuários.
+- **Hub `/integracoes`**: 5 cards (Power BI ativo + Looker Studio, Tableau, Excel/CSV, Webhooks "Em breve").
+- **Sub-página `/integracoes/power-bi`**:
+  - Lista de perfis em tabela (Status / Tabelas / Filtros / Criado em / Ações).
+  - Wizard 4 passos pra criar/editar perfil: Identificação → Tabelas (5 facts + 5 dims) → Colunas (essential pré-marcadas, PK forçada) → Filtros (RLS opcional por account/team).
+  - Modo edit com optimistic concurrency (`expectedUpdatedAt`).
+  - Soft cap 50 perfis ativos.
+- **Detail page `/integracoes/power-bi/[id]`**: Resumo + Whitelist + Credenciais + Auditoria. Banner amarelo de retry quando provisioning falha.
+- **Connect page `/integracoes/power-bi/[id]/conectar`**: 3 abas — Power BI Desktop (passo a passo + senha mostrar/ocultar), Service/Gateway (recomendação + alternativa direta), Snippet M (accordion 1 bloco por view).
+- **Reveal/rotate password**: rate-limited Redis (5/dia / 10/dia) + audit obrigatório.
+- **Soft-delete** com confirm-by-typing exato do nome.
+
+### Backend
+
+- **Schema `powerbi`** isolada no banco interno: 4 tabelas snapshot (dim_accounts/inboxes/agents/teams) + 9 views passthrough + dim_dates calendar 2024-2030.
+- **Provisioner DDL**: 4 funções (provision/disable/reactivate/deprovision). Idempotente via catch `42710` (CREATE→ALTER fallback). Tx 2 dropa views antigas via prefixo. Tx 3 cria views derivadas com RLS opcional. `pg_terminate_backend` antes de DROP USER. Pool admin dedicado com `statement_timeout=30s`.
+- **SQL builders**: 13 builders via `pg-format` (escapa identifiers + literals). Zero string concat em SQL.
+- **Worker BullMQ**: `integrations.refresh-dim-snapshots` (cron 30 min, UPSERT em transação) + `integrations.reconcile` (cron 6h, drift detection vs `pg_roles`/`pg_views`).
+- **Catálogo declarativo** com `BLOCKED_TABLES_REGEX` (defesa em profundidade — provisioner valida ANTES de qualquer DDL).
+- **Server Actions**: 12 actions (CRUD + reveal/rotate/disable/reactivate/delete + summary + freshness + triggerSync). Todas com `requireSuperAdmin` + `safeAction` + audit (per-profile + global).
+
+### Schema
+
+- 2 enums novos (`IntegrationKind`, `IntegrationProfileStatus`, `IntegrationAuditEvent`).
+- 2 tables (`integration_profiles`, `integration_audit_logs`).
+- 6 valores adicionados à enum `AuditAction`.
+- Migration `20260501_add_integrations_power_bi` (manual deploy via `npx prisma migrate deploy`).
+
+### Operacional
+
+- Runbook completo em `docs/runbooks/integracoes-power-bi.md` (pré-requisitos infra, sequência de deploy, smoke staging 17 etapas, rollback, troubleshooting).
+- Variáveis novas: `INTEGRATION_DB_HOST_PUBLIC`, `INTEGRATION_DB_PORT_PUBLIC`, `INTEGRATION_DB_NAME_PUBLIC`, `INTEGRATION_PROFILE_SOFT_CAP`.
+- Reusa `ENCRYPTION_KEY` existente (AES-256-GCM).
+
+### Segurança
+
+10 camadas de defesa:
+1. Schema isolada (`powerbi.*` único namespace exposto).
+2. `BLOCKED_TABLES_REGEX` (users, audit_logs, llm_*, nex_*, app_settings, integration_*, etc).
+3. Views derivadas por perfil (colunas filtradas).
+4. GRANTs explícitos (USAGE + SELECT específicos).
+5. CONNECTION LIMIT 5 por perfil.
+6. TLS obrigatório (`hostssl` no `pg_hba.conf`).
+7. IP allowlist (operacional, runbook).
+8. Auditoria 100% (`audit_logs` global + `integration_audit_logs`).
+9. AES-256-GCM em senhas at-rest.
+10. Rate limit Redis (reveal 5/dia, rotate 10/dia).
+
+### Tests
+
+- ~140 novos testes (catalog 10, password 9, sql-builders 24, m-snippet 10, provisioner 10, dim-sync 6, reconcile 5, integrations actions 4, integrations-power-bi actions 31, hub-card 3, status-chip 3, wizard-step-identity 6, credentials-reveal 4, profile-list 4, summary-card, whitelist, credentials, audit, dialogs ~12, snippet-block 5, connect-desktop 4, connect-service 2, connect-snippet 3).
+- typecheck 0 erros.
+
+### Versão pulada
+
+v0.17.0 foi tomada pelo agente paralelo Conversas Revamp; Power BI Integrations bumpa pra v0.18.0 (fallback declarado no protocolo multi-agente).
+
+
+
 ## [v0.17.0] 2026-05-01 — Conversas Revamp (export + busca + drill-down + virtualização)
 
 > Revamp completo do `/relatorios/conversas`. Workflow rigoroso (spec v3 com 27+19 achados de pente-fino + plan v3 com 14 tasks granulares TDD + ui-ux-pro-max em todas as tasks de UI).

@@ -1,12 +1,27 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-05-01
-**Versão atual em produção:** v0.17.0
+**Versão atual em produção:** v0.18.0
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.17.0)
+## Em produção (v0.18.0)
+
+### Release v0.18.0 (2026-05-01) — Integrações + Power BI (super_admin only)
+
+Novo menu **Integrações** com primeira integração **Power BI**. Workflow rigoroso (spec v3 + plan v3 com double-check, ~140 testes verde, typecheck 0 erros).
+
+- **Novo menu Integrações** (super_admin only) — sidebar entre Agente Nex e Usuários, hub `/integracoes` com 5 cards (Power BI ativo + Looker Studio, Tableau, Excel/CSV, Webhooks "Em breve").
+- **Power BI integration completa** — `/integracoes/power-bi` com lista de perfis + wizard 4 passos (Identificação → Tabelas 5 facts + 5 dims → Colunas com essential pré-marcadas → Filtros opcionais por account/team), detail page (Resumo / Whitelist / Credenciais / Auditoria) com banner retry, connect page com 3 abas (Desktop passo a passo + Service/Gateway recomendado + Snippet M accordion).
+- **Provisioning automático** — schema isolada `powerbi` no banco interno, 1 user Postgres + senha AES-256-GCM por perfil, views derivadas com RLS opcional, GRANTs explícitos + CONNECTION LIMIT 5, idempotente via catch `42710`, `pg_terminate_backend` antes de DROP USER. Reveal/rotate rate-limited Redis (5/dia / 10/dia), soft-delete com confirm-by-typing.
+- **Worker dim-sync** (cron 30 min, UPSERT em transação) + **reconcile** (cron 6h, drift detection vs `pg_roles`/`pg_views`).
+- **10 camadas de segurança** — schema isolada + `BLOCKED_TABLES_REGEX` + views derivadas + GRANTs explícitos + connection limit + TLS obrigatório + IP allowlist + auditoria 100% + AES-256-GCM + rate limit.
+- **Schema** — 2 tables (`integration_profiles`, `integration_audit_logs`), 3 enums novos, 6 valores adicionados ao `AuditAction`. Migration `20260501_add_integrations_power_bi` (manual deploy).
+
+Runbook: `docs/runbooks/integracoes-power-bi.md` (pré-requisitos infra + sequência deploy + smoke staging 17 etapas + rollback + troubleshooting).
+
+> v0.17.0 foi tomada pelo agente paralelo Conversas Revamp; Power BI Integrations bumpou pra v0.18.0 (fallback declarado no protocolo multi-agente).
 
 ### Release v0.17.0 (2026-05-01) — Conversas Revamp (export + busca + drill-down + virtualização)
 
