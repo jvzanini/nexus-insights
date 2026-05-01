@@ -23,6 +23,8 @@ jest.mock("@/lib/llm/ensure-tables", () => ({
 }));
 
 import {
+  getDistinctModelsInRange,
+  getDistinctProvidersInRange,
   getSystemCreatedAt,
   getUsageDetails,
   getUsageStats,
@@ -127,9 +129,21 @@ describe("getUsageStats", () => {
 
 describe("getUsageDetails", () => {
   it("clamps limit em [1, 200] e offset em [0, ∞)", async () => {
+    // Ordem: rows, count, totals
     mockQuery
       .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [{ total: "0" }] });
+      .mockResolvedValueOnce({ rows: [{ total: "0" }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            sum_cost_usd: 0,
+            sum_cost_brl: 0,
+            sum_tokens_input: 0,
+            sum_tokens_output: 0,
+            sum_duration_ms: 0,
+          },
+        ],
+      });
 
     await getUsageDetails({
       start: new Date(),
@@ -139,8 +153,11 @@ describe("getUsageDetails", () => {
     });
 
     const firstCall = mockQuery.mock.calls[0] as [string, unknown[]];
-    expect(firstCall[1][2]).toBe(200); // limit clamped
-    expect(firstCall[1][3]).toBe(0); // offset clamped
+    // Params: [start, end, provider, model, limit, offset]
+    expect(firstCall[1][4]).toBe(200); // limit clamped
+    expect(firstCall[1][5]).toBe(0); // offset clamped
+    expect(firstCall[1][2]).toBeNull(); // provider default
+    expect(firstCall[1][3]).toBeNull(); // model default
   });
 
   it("mapeia rows com camelCase e converte created_at para ISO string", async () => {
@@ -160,7 +177,18 @@ describe("getUsageDetails", () => {
           },
         ],
       })
-      .mockResolvedValueOnce({ rows: [{ total: "1" }] });
+      .mockResolvedValueOnce({ rows: [{ total: "1" }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            sum_cost_usd: "0.0005",
+            sum_cost_brl: "0.0027",
+            sum_tokens_input: "100",
+            sum_tokens_output: "200",
+            sum_duration_ms: "1234",
+          },
+        ],
+      });
 
     const result = await getUsageDetails({
       start: new Date(),
@@ -178,6 +206,195 @@ describe("getUsageDetails", () => {
       durationMs: 1234,
     });
     expect(result.rows[0].createdAt).toBe(fakeDate.toISOString());
+  });
+
+  it("retorna totals server-side calculados (sem filtro)", async () => {
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "row1",
+            provider: "openai",
+            model: "gpt-5.4",
+            tokens_input: "100",
+            tokens_output: "200",
+            cost_usd: "0.01",
+            cost_brl: "0.055",
+            duration_ms: "500",
+            created_at: new Date("2026-04-15T10:00:00Z"),
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [{ total: "3" }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            sum_cost_usd: "0.05",
+            sum_cost_brl: "0.275",
+            sum_tokens_input: "300",
+            sum_tokens_output: "600",
+            sum_duration_ms: "1500",
+          },
+        ],
+      });
+
+    const result = await getUsageDetails({
+      start: new Date("2026-04-01"),
+      end: new Date("2026-05-01"),
+    });
+
+    expect(result.totals).toEqual({
+      costUsd: 0.05,
+      costBrl: 0.275,
+      tokensInput: 300,
+      tokensOutput: 600,
+      durationMsTotal: 1500,
+      count: 3,
+    });
+  });
+
+  it("filtro provider='openai' aplica filtro em rows + totals", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ total: "0" }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            sum_cost_usd: 0,
+            sum_cost_brl: 0,
+            sum_tokens_input: 0,
+            sum_tokens_output: 0,
+            sum_duration_ms: 0,
+          },
+        ],
+      });
+
+    await getUsageDetails({
+      start: new Date("2026-04-01"),
+      end: new Date("2026-05-01"),
+      provider: "openai",
+    });
+
+    const rowsCall = mockQuery.mock.calls[0] as [string, unknown[]];
+    const countCall = mockQuery.mock.calls[1] as [string, unknown[]];
+    const totalsCall = mockQuery.mock.calls[2] as [string, unknown[]];
+    expect(rowsCall[1][2]).toBe("openai");
+    expect(rowsCall[1][3]).toBeNull();
+    expect(countCall[1][2]).toBe("openai");
+    expect(totalsCall[1][2]).toBe("openai");
+  });
+
+  it("filtro model='gpt-5.4' aplica filtro em rows + totals", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ total: "0" }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            sum_cost_usd: 0,
+            sum_cost_brl: 0,
+            sum_tokens_input: 0,
+            sum_tokens_output: 0,
+            sum_duration_ms: 0,
+          },
+        ],
+      });
+
+    await getUsageDetails({
+      start: new Date("2026-04-01"),
+      end: new Date("2026-05-01"),
+      model: "gpt-5.4",
+    });
+
+    const rowsCall = mockQuery.mock.calls[0] as [string, unknown[]];
+    expect(rowsCall[1][2]).toBeNull();
+    expect(rowsCall[1][3]).toBe("gpt-5.4");
+  });
+
+  it("filtro provider+model combinados aplicam ambos filtros", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ total: "0" }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            sum_cost_usd: 0,
+            sum_cost_brl: 0,
+            sum_tokens_input: 0,
+            sum_tokens_output: 0,
+            sum_duration_ms: 0,
+          },
+        ],
+      });
+
+    await getUsageDetails({
+      start: new Date("2026-04-01"),
+      end: new Date("2026-05-01"),
+      provider: "anthropic",
+      model: "claude-4.7",
+    });
+
+    const rowsCall = mockQuery.mock.calls[0] as [string, unknown[]];
+    const countCall = mockQuery.mock.calls[1] as [string, unknown[]];
+    const totalsCall = mockQuery.mock.calls[2] as [string, unknown[]];
+    expect(rowsCall[1][2]).toBe("anthropic");
+    expect(rowsCall[1][3]).toBe("claude-4.7");
+    expect(countCall[1][2]).toBe("anthropic");
+    expect(countCall[1][3]).toBe("claude-4.7");
+    expect(totalsCall[1][2]).toBe("anthropic");
+    expect(totalsCall[1][3]).toBe("claude-4.7");
+  });
+});
+
+describe("getDistinctProvidersInRange", () => {
+  it("retorna lista distinct sorted de providers no range", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        { provider: "anthropic" },
+        { provider: "openai" },
+        { provider: "google" },
+      ],
+    });
+
+    const result = await getDistinctProvidersInRange({
+      start: new Date("2026-04-01"),
+      end: new Date("2026-05-01"),
+    });
+
+    expect(result).toEqual(["anthropic", "google", "openai"]);
+  });
+});
+
+describe("getDistinctModelsInRange", () => {
+  it("retorna lista distinct de modelos no range (sem filtro provider)", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ model: "claude-4.7" }, { model: "gpt-5.4" }],
+    });
+
+    const result = await getDistinctModelsInRange({
+      start: new Date("2026-04-01"),
+      end: new Date("2026-05-01"),
+    });
+
+    expect(result).toEqual(["claude-4.7", "gpt-5.4"]);
+    const call = mockQuery.mock.calls[0] as [string, unknown[]];
+    expect(call[1][2]).toBeNull();
+  });
+
+  it("com provider retorna apenas modelos do provider (cascade)", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ model: "gpt-5.4" }, { model: "gpt-4o-mini" }],
+    });
+
+    const result = await getDistinctModelsInRange({
+      start: new Date("2026-04-01"),
+      end: new Date("2026-05-01"),
+      provider: "openai",
+    });
+
+    expect(result).toEqual(["gpt-4o-mini", "gpt-5.4"]);
+    const call = mockQuery.mock.calls[0] as [string, unknown[]];
+    expect(call[1][2]).toBe("openai");
   });
 });
 

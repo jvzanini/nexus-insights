@@ -210,25 +210,42 @@ export interface UsageDetailRow {
   createdAt: string;
 }
 
+export interface UsageDetailsTotals {
+  costUsd: number;
+  costBrl: number;
+  tokensInput: number;
+  tokensOutput: number;
+  durationMsTotal: number;
+  count: number;
+}
+
 export interface UsageDetailsResult {
   rows: UsageDetailRow[];
   total: number;
+  totals: UsageDetailsTotals;
 }
 
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 200;
 
 /**
- * Lista paginada de chamadas individuais ao LLM no período.
+ * Lista paginada de chamadas individuais ao LLM no período, com filtros
+ * opcionais de provider/model e totals server-side calculados sobre o
+ * universo filtrado (não apenas a página corrente).
  *
- * `limit` é clamped em [1, 200]; `offset` em [0, ∞). Retorna `total` para
- * permitir paginação UI.
+ * - `limit` clamped em [1, 200]; `offset` em [0, ∞).
+ * - `provider`/`model` aceitam string exata ou são ignorados quando `null`/
+ *   `undefined`. Os filtros são aplicados via predicado `($n::text IS NULL
+ *   OR coluna = $n)` para permitir o mesmo SQL com/sem filtro.
+ * - `totals` reflete TODAS as linhas do período + filtros (não a página).
  */
 export async function getUsageDetails(args: {
   start: Date;
   end: Date;
   limit?: number;
   offset?: number;
+  provider?: string | null;
+  model?: string | null;
 }): Promise<UsageDetailsResult> {
   await ensureLlmTables();
   const { start, end } = args;
@@ -237,8 +254,16 @@ export async function getUsageDetails(args: {
     Math.min(MAX_LIMIT, Number.isFinite(args.limit) ? Number(args.limit) : DEFAULT_LIMIT),
   );
   const offset = Math.max(0, Number.isFinite(args.offset) ? Number(args.offset) : 0);
+  const provider =
+    args.provider != null && args.provider !== "" ? args.provider : null;
+  const model = args.model != null && args.model !== "" ? args.model : null;
 
-  const [rowsRes, countRes] = await Promise.all([
+  // Predicado comum: range temporal + filtros opcionais via IS NULL OR =.
+  const whereClause = `created_at >= $1 AND created_at < $2
+    AND ($3::text IS NULL OR provider = $3)
+    AND ($4::text IS NULL OR model = $4)`;
+
+  const [rowsRes, countRes, totalsRes] = await Promise.all([
     pgPool.query<{
       id: string;
       provider: string;
@@ -254,16 +279,33 @@ export async function getUsageDetails(args: {
       `SELECT id, provider, model, tokens_input, tokens_output, cost_usd,
               cost_brl, usd_to_brl_rate, duration_ms, created_at
          FROM llm_usage
-        WHERE created_at >= $1 AND created_at < $2
+        WHERE ${whereClause}
         ORDER BY created_at DESC
-        LIMIT $3 OFFSET $4`,
-      [start, end, limit, offset],
+        LIMIT $5 OFFSET $6`,
+      [start, end, provider, model, limit, offset],
     ),
     pgPool.query<{ total: string | number }>(
       `SELECT COUNT(*) AS total
          FROM llm_usage
-        WHERE created_at >= $1 AND created_at < $2`,
-      [start, end],
+        WHERE ${whereClause}`,
+      [start, end, provider, model],
+    ),
+    pgPool.query<{
+      sum_cost_usd: string | number | null;
+      sum_cost_brl: string | number | null;
+      sum_tokens_input: string | number | null;
+      sum_tokens_output: string | number | null;
+      sum_duration_ms: string | number | null;
+    }>(
+      `SELECT
+         COALESCE(SUM(cost_usd), 0) AS sum_cost_usd,
+         COALESCE(SUM(cost_brl), 0) AS sum_cost_brl,
+         COALESCE(SUM(tokens_input), 0) AS sum_tokens_input,
+         COALESCE(SUM(tokens_output), 0) AS sum_tokens_output,
+         COALESCE(SUM(duration_ms), 0) AS sum_duration_ms
+       FROM llm_usage
+       WHERE ${whereClause}`,
+      [start, end, provider, model],
     ),
   ]);
 
@@ -290,10 +332,62 @@ export async function getUsageDetails(args: {
         : new Date(r.created_at).toISOString(),
   }));
 
-  return {
-    rows,
-    total: toNumber(countRes.rows[0]?.total ?? 0),
+  const total = toNumber(countRes.rows[0]?.total ?? 0);
+  const totalsRow = totalsRes.rows[0];
+  const totals: UsageDetailsTotals = {
+    costUsd: toNumber(totalsRow?.sum_cost_usd ?? 0),
+    costBrl: toNumber(totalsRow?.sum_cost_brl ?? 0),
+    tokensInput: toNumber(totalsRow?.sum_tokens_input ?? 0),
+    tokensOutput: toNumber(totalsRow?.sum_tokens_output ?? 0),
+    durationMsTotal: toNumber(totalsRow?.sum_duration_ms ?? 0),
+    count: total,
   };
+
+  return { rows, total, totals };
+}
+
+/**
+ * Lista de providers distintos com chamadas no período. Ordenada
+ * alfabeticamente para consumo direto em <select>.
+ */
+export async function getDistinctProvidersInRange(args: {
+  start: Date;
+  end: Date;
+}): Promise<string[]> {
+  await ensureLlmTables();
+  const { start, end } = args;
+  const res = await pgPool.query<{ provider: string }>(
+    `SELECT DISTINCT provider
+       FROM llm_usage
+      WHERE created_at >= $1 AND created_at < $2
+      ORDER BY provider ASC`,
+    [start, end],
+  );
+  return res.rows.map((r) => r.provider).filter((p) => !!p).sort();
+}
+
+/**
+ * Lista de modelos distintos com chamadas no período. Quando `provider` é
+ * informado, filtra apenas modelos daquele provider (cascade UI).
+ */
+export async function getDistinctModelsInRange(args: {
+  start: Date;
+  end: Date;
+  provider?: string | null;
+}): Promise<string[]> {
+  await ensureLlmTables();
+  const { start, end } = args;
+  const provider =
+    args.provider != null && args.provider !== "" ? args.provider : null;
+  const res = await pgPool.query<{ model: string }>(
+    `SELECT DISTINCT model
+       FROM llm_usage
+      WHERE created_at >= $1 AND created_at < $2
+        AND ($3::text IS NULL OR provider = $3)
+      ORDER BY model ASC`,
+    [start, end, provider],
+  );
+  return res.rows.map((r) => r.model).filter((m) => !!m).sort();
 }
 
 /**
