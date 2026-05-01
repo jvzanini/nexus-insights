@@ -16,6 +16,7 @@ import {
   KeyRound,
   BookOpen,
   TrendingUp,
+  Plug,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { PlatformRole } from "@/generated/prisma/client";
@@ -112,6 +113,13 @@ export const NAV_ITEMS: NavItem[] = [
       { label: "Prompt", href: "/agente-nex/prompt", icon: BookOpen, superAdminOnly: true },
       { label: "Consumo", href: "/agente-nex/consumo", icon: TrendingUp, superAdminOnly: true },
     ],
+  },
+  {
+    label: "Integrações",
+    href: "/integracoes",
+    icon: Plug,
+    superAdminOnly: true,
+    section: "admin",
   },
   {
     label: "Usuários",
