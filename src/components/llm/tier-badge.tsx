@@ -1,32 +1,45 @@
 import { cn } from "@/lib/utils";
 
-export type CostTier = "free" | "low" | "medium" | "high";
+import type { CostTier } from "@/lib/llm/types";
 
-const TIER_CONFIG: Record<CostTier, { symbols: string; title: string; className: string }> = {
-  free: {
-    symbols: "FREE",
-    title: "Gratuito",
-    className:
-      "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300",
-  },
+export type { CostTier };
+
+const TIER_CONFIG: Record<
+  CostTier,
+  { symbols: string; title: string; className: string }
+> = {
   low: {
     symbols: "$",
-    title: "Consumo baixo",
-    className: "border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-300",
+    title: "Consumo baixo (< $1 / 1M tokens)",
+    className:
+      "border-blue-500/30 bg-blue-500/15 text-blue-600 dark:text-blue-400",
   },
   medium: {
     symbols: "$$",
-    title: "Consumo médio",
-    className: "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-300",
+    title: "Consumo médio ($1-$10 / 1M tokens)",
+    className:
+      "border-amber-500/30 bg-amber-500/15 text-amber-600 dark:text-amber-400",
   },
   high: {
     symbols: "$$$",
-    title: "Consumo alto",
-    className: "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-300",
+    title: "Consumo alto ($10-$30 / 1M tokens)",
+    className:
+      "border-orange-500/30 bg-orange-500/15 text-orange-600 dark:text-orange-400",
+  },
+  premium: {
+    symbols: "$$$$",
+    title: "Consumo premium (> $30 / 1M tokens)",
+    className: "border-red-500/40 bg-red-500/15 text-red-500",
   },
 };
 
-export function TierBadge({ tier, className }: { tier: CostTier; className?: string }) {
+export function TierBadge({
+  tier,
+  className,
+}: {
+  tier: CostTier;
+  className?: string;
+}) {
   const cfg = TIER_CONFIG[tier];
   return (
     <span

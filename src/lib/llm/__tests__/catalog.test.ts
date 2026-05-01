@@ -22,9 +22,9 @@ describe("PROVIDER_CATALOG", () => {
   );
 
   it.each(providers)(
-    "%s todos os modelos têm id, label e tier válido",
+    "%s todos os modelos têm id, label e tier válido (low|medium|high|premium)",
     (provider) => {
-      const validTiers: CostTier[] = ["free", "low", "medium", "high"];
+      const validTiers: CostTier[] = ["low", "medium", "high", "premium"];
       const c = PROVIDER_CATALOG[provider];
       for (const m of c.models) {
         expect(typeof m.id).toBe("string");
@@ -100,8 +100,67 @@ describe("PROVIDER_CATALOG", () => {
     ).toBe(true);
   });
 
-  it("OpenRouter inclui modelos free, low, medium e high", () => {
+  it("OpenRouter inclui modelos low, medium e high (faixa expandida)", () => {
     const tiers = PROVIDER_CATALOG.openrouter.models.map((m) => m.tier);
-    expect(tiers).toEqual(expect.arrayContaining(["free", "low", "medium", "high"]));
+    expect(tiers).toEqual(expect.arrayContaining(["low", "medium", "high"]));
+  });
+
+  it("OpenRouter foi expandido para >= 100 modelos (catálogo v0.16.0)", () => {
+    expect(PROVIDER_CATALOG.openrouter.models.length).toBeGreaterThanOrEqual(
+      100,
+    );
+  });
+
+  it("OpenRouter modelos `:free` mantêm tier='low' + notes contendo 'free'", () => {
+    const freeIds = PROVIDER_CATALOG.openrouter.models.filter((m) =>
+      m.id.endsWith(":free"),
+    );
+    expect(freeIds.length).toBeGreaterThan(0);
+    for (const m of freeIds) {
+      expect(m.tier).toBe("low");
+      expect(m.notes ?? "").toMatch(/free/i);
+    }
+  });
+
+  it("OpenAI: gpt-5.5-pro, gpt-5.4-pro, o1-pro, o3-pro são tier='premium'", () => {
+    const premiumIds = ["gpt-5.5-pro", "gpt-5.4-pro", "o1-pro", "o3-pro"];
+    for (const id of premiumIds) {
+      const m = PROVIDER_CATALOG.openai.models.find((x) => x.id === id);
+      expect(m).toBeDefined();
+      expect(m?.tier).toBe("premium");
+    }
+  });
+
+  it("OpenAI: gpt-5.5 e gpt-5.4 permanecem tier='high'", () => {
+    const highIds = ["gpt-5.5", "gpt-5.4"];
+    for (const id of highIds) {
+      const m = PROVIDER_CATALOG.openai.models.find((x) => x.id === id);
+      expect(m).toBeDefined();
+      expect(m?.tier).toBe("high");
+    }
+  });
+
+  it("Anthropic: claude-3-opus-20240229 é tier='premium' (legado caro)", () => {
+    const m = PROVIDER_CATALOG.anthropic.models.find(
+      (x) => x.id === "claude-3-opus-20240229",
+    );
+    expect(m).toBeDefined();
+    expect(m?.tier).toBe("premium");
+  });
+
+  it("Anthropic: claude-opus-4-7 mantém tier='high' (output ≤ $30)", () => {
+    const m = PROVIDER_CATALOG.anthropic.models.find(
+      (x) => x.id === "claude-opus-4-7",
+    );
+    expect(m).toBeDefined();
+    expect(m?.tier).toBe("high");
+  });
+
+  it("OpenRouter inclui claude-haiku-4.5 com tier 'low' ou 'medium'", () => {
+    const m = PROVIDER_CATALOG.openrouter.models.find(
+      (x) => x.id === "anthropic/claude-haiku-4.5",
+    );
+    expect(m).toBeDefined();
+    expect(["low", "medium"]).toContain(m?.tier);
   });
 });
