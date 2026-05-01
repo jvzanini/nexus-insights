@@ -1,5 +1,23 @@
 # Changelog
 
+## [v0.14.3] 2026-05-01 — Hotfix dashboard: noResponse filtra activity msgs + ordem chart-noresponse + nav compacto + cache bump
+
+### Fix
+
+- **`noResponse` (card "Conversas sem resposta") mostrava "Tudo respondido" mesmo com conversa real do contato sem resposta**: a CTE `last_msg` pegava a "última mensagem" sem filtrar tipo. Como o Chatwoot grava mensagens de **activity** (atribuição, reabertura, etc.) e **template** na mesma tabela `messages` com `message_type` 2 e 3, a "última msg" frequentemente era um evento de sistema, fazendo o filtro `lm.message_type=0` (incoming) falhar. Agora a CTE filtra `WHERE m.message_type IN (0, 1)` (apenas incoming/outgoing reais), e a "última" passa a ser de fato a do contato ou do agente.
+- **Cache key bump v7→v8** — descarta possíveis stale do v0.14.2 enquanto investigamos o bug de Semana/Mês mostrar 0 em 01/05 (provavelmente cache, mas defensivo).
+
+### Mudou
+
+- **Ordem dos componentes**: chart "Conversas por hora/dia" sobe para **acima** de "Conversas sem resposta" + "Atendentes mais rápidos" (era abaixo). Pedido do João.
+- **`<PeriodNavigator>` ainda mais compacto**: ícones h-5 w-5 (era h-6 w-6), texto `text-[11px]` (era text-xs/sm), padding interno menor. Borda violeta `border-violet-500/50` com shadow violeta sutil. Hover intensifica para `border-violet-500` + shadow maior. Texto branco-violeta puro para destaque.
+
+### Verificação
+
+- 674 testes / 77 suites PASS · typecheck 0 erros · build verde local.
+
+---
+
 ## [v0.14.2] 2026-05-01 — Coorte por atividade (open/pending) + chart Dia full-width + nav compacto
 
 > Bug crítico reportado pelo João: conversa criada em 30/04 e **reaberta** em 01/05 às 5h15 não aparecia em "Abertas (no período)" nem no gráfico do dia 01/05 — tudo zerado. Causa: SQL filtrava por `created_at ∈ período` (decisão da v0.10 "mesma coorte"), perdendo conversas reabertas. Corrigido para usar `last_activity_at` nas séries que falam de **atividade** (open/pending/no-response).

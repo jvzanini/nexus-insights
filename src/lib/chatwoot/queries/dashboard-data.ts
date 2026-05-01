@@ -212,11 +212,11 @@ export async function dashboardData(args: DashboardDataInput) {
     forcedGranularity: args.forcedGranularity ?? null,
   };
 
-  // Cache key v7 — bump v0.14.2 (coorte open/pending/no-response por
-  // last_activity_at em vez de created_at).
+  // Cache key v8 — bump v0.14.3 (noResponse filtra msg_type IN (0,1)
+  // ignorando activity/template, defensivo contra cache stale de v7).
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-data-v7",
+    name: "dashboard-data-v8",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -444,6 +444,11 @@ export async function dashboardData(args: DashboardDataInput) {
           // ---------- 10. noResponse — preview (5) + agg ----------
           // v0.14.2: filtra por last_activity_at no período (capta conversas
           // reabertas com mensagem do contato sem resposta).
+          // v0.14.3: filtro `message_type IN (0,1)` ignora msgs de activity (2)
+          // e template (3) — sem isso, "última msg" frequentemente é uma
+          // notificação de sistema (atribuição, reabertura, template), o que
+          // fazia conversas com mensagem real do contato pendente sumirem do
+          // card "Conversas sem resposta".
           const sqlNoResponse = `
             WITH last_msg AS (
               SELECT DISTINCT ON (m.conversation_id)
@@ -451,6 +456,7 @@ export async function dashboardData(args: DashboardDataInput) {
                 m.created_at,
                 m.message_type
               FROM messages m
+              WHERE m.message_type IN (0, 1)
               ORDER BY m.conversation_id, m.created_at DESC
             )
             SELECT
@@ -484,6 +490,7 @@ export async function dashboardData(args: DashboardDataInput) {
                 m.created_at,
                 m.message_type
               FROM messages m
+              WHERE m.message_type IN (0, 1)
               ORDER BY m.conversation_id, m.created_at DESC
             )
             SELECT

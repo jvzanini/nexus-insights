@@ -419,6 +419,21 @@ export function DashboardContent({
         />
       </motion.div>
 
+      {/* Chart por hora/dia (v0.14.3: trocou de posição com Sem resposta + Atendentes) */}
+      <motion.div variants={itemVariants} data-tour="dashboard-chart">
+        <ConversationsLineChart
+          data={chart}
+          granularity={granularity}
+          tz={data.tz ?? tz}
+          range={data.range}
+          period={period}
+          weekStartsOn={data.settings?.weekStartsOn ?? 1}
+          referenceDate={referenceDate}
+          nextAvailable={data.nextAvailable ?? false}
+          onReferenceDateChange={handleReferenceDateChange}
+        />
+      </motion.div>
+
       {/* Sem resposta (hero) + Atendentes mais rápidos */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         <motion.div variants={itemVariants} className="lg:col-span-2">
@@ -443,21 +458,6 @@ export function DashboardContent({
           />
         </motion.div>
       </div>
-
-      {/* Chart por hora/dia */}
-      <motion.div variants={itemVariants} data-tour="dashboard-chart">
-        <ConversationsLineChart
-          data={chart}
-          granularity={granularity}
-          tz={data.tz ?? tz}
-          range={data.range}
-          period={period}
-          weekStartsOn={data.settings?.weekStartsOn ?? 1}
-          referenceDate={referenceDate}
-          nextAvailable={data.nextAvailable ?? false}
-          onReferenceDateChange={handleReferenceDateChange}
-        />
-      </motion.div>
 
       {/* Distribuições por inbox e departamento */}
       <div
