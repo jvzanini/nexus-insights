@@ -1,5 +1,24 @@
 # Changelog
 
+## [v0.13.4] 2026-05-01 — Mensagem real do provider quando o modelo é rejeitado
+
+> Quando o super_admin tenta usar um modelo que a chave da OpenAI não tem acesso (típico em GPT-5.x para contas Tier 1-3), a UI mostrava genericamente "Modelo X não encontrado neste provedor" — sem dizer **se** era nome errado, falta de acesso ou problema na chave. Esta release captura o body literal da resposta da OpenAI e mostra exatamente o que ela disse.
+
+### O que mudou
+
+- **`deepTestOpenAI`** agora trata 404 **e 400** com extração do body. Quando a OpenAI retorna `{ "error": { "message": "The model 'gpt-5.1-mini' does not exist or you do not have access to it" } }`, o toast no card "Agente Nex" passa a mostrar exatamente essa frase (em vez da mensagem genérica do nosso código).
+- **`describeErrorKind`** preserva o `fallback` (mensagem do provider) quando `errorKind === "model_not_found"` em vez de sobrescrever pela mensagem padrão.
+- O super_admin consegue distinguir três cenários:
+  - `you do not have access to it` → conta precisa subir de tier ou pedir acesso ao modelo na OpenAI.
+  - `does not exist` → nome do modelo está incorreto.
+  - HTTP 400 com outra mensagem → problema no payload (ex.: `temperature` em modelo reasoning) — devolvemos o erro literal pra debug.
+
+### Outras notas
+
+- 77 suites / 670 tests PASS · typecheck 0 erros.
+
+---
+
 ## [v0.13.3] 2026-05-01 — Hotfix dashboard ainda quebrado: rollback de getDashboardPeriod/getDashboardSettings
 
 > Após o v0.13.2 (que simplificou o `ConversationsLineChart`), João reportou que o dashboard **continua mostrando "Erro de conexão com o servidor"** — significa que a Server Action `getDashboardData` está lançando exception, não retornando `{success: false, error: ...}`. A causa NÃO era o ConversationsLineChart (já simplificado em v0.13.2). A causa real está em algum dos novos pipelines do v0.13.0: `getDashboardPeriod` + `getDashboardSettings` + `pgPool.query` em tabela `app_settings` JSONB.

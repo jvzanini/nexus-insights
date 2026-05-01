@@ -167,11 +167,36 @@ export async function deepTestOpenAI(
   if (chatRes.status === 401) {
     return { reachable: false, errorKind: "invalid_key" };
   }
-  if (chatRes.status === 404) {
+  if (chatRes.status === 404 || chatRes.status === 400) {
+    // OpenAI pode retornar 404 OU 400 com mensagem explícita quando a chave
+    // não tem acesso ao modelo (ex.: "The model `gpt-5.1-mini` does not exist
+    // or you do not have access to it"). Capturamos o body literal para o
+    // super_admin entender se é falta de acesso, nome errado, etc.
+    const text = await chatRes.text().catch(() => "");
+    const parsed = parseJsonSafe(text) as
+      | { error?: { message?: string; code?: string; type?: string } }
+      | null;
+    const provMsg = parsed?.error?.message;
+    const isModelError =
+      chatRes.status === 404 ||
+      /model.*does not exist|model.*not.*found|invalid.*model|do not have access/i.test(
+        provMsg ?? text,
+      );
+    if (isModelError) {
+      return {
+        reachable: false,
+        errorKind: "model_not_found",
+        message: provMsg
+          ? `OpenAI: ${provMsg}`
+          : `Modelo "${model}" não encontrado neste provedor (HTTP ${chatRes.status}).`,
+      };
+    }
     return {
       reachable: false,
-      errorKind: "model_not_found",
-      message: `Modelo "${model}" não encontrado neste provedor.`,
+      errorKind: "other",
+      message: provMsg
+        ? `OpenAI ${chatRes.status}: ${provMsg}`
+        : `OpenAI ${chatRes.status}: ${text || chatRes.statusText}`,
     };
   }
   if (chatRes.status === 429) {
@@ -518,6 +543,9 @@ export function describeErrorKind(
     case "invalid_key":
       return "API key inválida ou expirada.";
     case "model_not_found":
+      // Se o provider mandou uma mensagem específica (ex.: "you do not have
+      // access to this model"), preserva — é mais útil que a mensagem padrão.
+      if (fallback && fallback.length > 0) return fallback;
       return model
         ? `Modelo "${model}" não encontrado neste provedor.`
         : "Modelo não encontrado neste provedor.";

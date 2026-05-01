@@ -1,12 +1,24 @@
 # Status — Nexus Insights
 
-**Última atualização:** 2026-04-30
-**Versão atual em produção:** v0.13.1
+**Última atualização:** 2026-05-01
+**Versão atual em produção:** v0.13.4
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.13.1)
+## Em produção (v0.13.4)
+
+### Hotfix v0.13.4 (2026-05-01) — mensagem real do provider no 404
+
+- `deepTestOpenAI`: 404 e 400 capturam o body e exibem a mensagem oficial da OpenAI no toast (ex.: "you do not have access to this model"). `describeErrorKind` preserva fallback. Permite ao super_admin distinguir falta de acesso × nome errado × payload errado.
+
+## Em produção anteriormente (v0.13.3)
+
+### Hotfix v0.13.3 (2026-05-01) — rollback dashboard
+
+- `getDashboardPeriod` + `getDashboardSettings` removidos (causavam ReferenceError em runtime). Dashboard volta à lógica simples (rolling 24h/7d/30d).
+
+## Em produção anteriormente (v0.13.1)
 
 ### Hotfix v0.13.1 (2026-04-30) — backfill BRL no relatório de Consumo
 
