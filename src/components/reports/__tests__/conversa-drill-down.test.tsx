@@ -10,44 +10,84 @@ import type { ConversaRow } from "@/lib/chatwoot/queries/conversas-list";
 
 const baseRow: ConversaRow = {
   id: 1,
-  display_id: 8653,
+  display_id: 1,
   contact: {
     id: 1,
-    name: "Fernando T.",
-    phone_number: "+5531999845112",
+    name: "X",
+    phone_number: "+5511912345678",
     identifier: null,
     additional_attributes: null,
   },
-  inbox: { id: 1, name: "Geral" },
+  inbox: { id: 1, name: "WA" },
   team: { id: null, name: null },
   assignee: { id: null, name: null },
   status: 0,
-  priority: 1,
-  created_at: "2026-04-23T14:32:00Z",
-  last_activity_at: "2026-04-28T09:15:00Z",
-  last_message_type: 0,
+  priority: null,
+  created_at: null,
+  last_activity_at: null,
+  last_message_type: null,
   last_message_at: null,
   last_incoming_at: null,
   last_outgoing_at: null,
-  custom_attributes: { wpp_id: "553199845112", origem: "campanha" },
-  waiting_seconds: 8100,
+  custom_attributes: { cpf: "123", plano: "gold" },
+  waiting_seconds: null,
   open_seconds: null,
-  labels: [{ name: "VIP", color: "" }],
+  labels: [
+    { name: "VIP", color: "" },
+    { name: "matriz", color: "" },
+  ],
 };
 
-describe("ConversaDrillDown (minimal — só WhatsApp + Atributos)", () => {
-  it("renderiza apenas WhatsApp + Atributos sem repetir dados da linha", () => {
-    render(<ConversaDrillDown row={baseRow} accountId={1} />);
-    // WhatsApp visível e completo (não truncado).
-    expect(screen.getByText("WhatsApp")).toBeInTheDocument();
-    // Atributos com chave e valor.
-    expect(screen.getByText(/wpp_id/i)).toBeInTheDocument();
+describe("ConversaDrillDown — 3 seções inline", () => {
+  it("renderiza WhatsApp / Etiquetas / Atributos", () => {
+    render(<ConversaDrillDown row={baseRow} accountId={9} />);
+    expect(screen.getByText(/WhatsApp/i)).toBeInTheDocument();
+    expect(screen.getByText(/Etiquetas/i)).toBeInTheDocument();
     expect(screen.getByText(/Atributos/i)).toBeInTheDocument();
-    expect(screen.getByText(/\(2\)/)).toBeInTheDocument();
-    // Dados que JÁ aparecem na linha não devem ser repetidos no drill-down:
-    // Nome do contato, Etiquetas, Documento, Datas — fora do escopo da v0.9.1.
-    expect(screen.queryByText(/Fernando T/i)).not.toBeInTheDocument();
-    expect(screen.queryByText("VIP")).not.toBeInTheDocument();
-    expect(screen.queryByText(/Criada em/i)).not.toBeInTheDocument();
+  });
+
+  it("contador (N) na MESMA linha do rótulo Atributos", () => {
+    render(<ConversaDrillDown row={baseRow} accountId={9} />);
+    const atrLabel = screen.getByText(/Atributos/i);
+    // o rótulo + (2) estão no mesmo elemento ou irmão imediato
+    expect(atrLabel.textContent || atrLabel.parentElement?.textContent).toMatch(
+      /\(2\)/,
+    );
+  });
+
+  it("etiquetas como chips visíveis", () => {
+    render(<ConversaDrillDown row={baseRow} accountId={9} />);
+    expect(screen.getByText("VIP")).toBeInTheDocument();
+    expect(screen.getByText("matriz")).toBeInTheDocument();
+  });
+
+  it("não renderiza mais botão/link 'Abrir'", () => {
+    render(<ConversaDrillDown row={baseRow} accountId={9} />);
+    expect(
+      screen.queryByRole("link", { name: /abrir/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /abrir/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("sem etiquetas → mostra '—' (empty visual)", () => {
+    render(
+      <ConversaDrillDown row={{ ...baseRow, labels: [] }} accountId={9} />,
+    );
+    // pega o container da seção Etiquetas
+    const labelHeader = screen.getByText(/Etiquetas/i);
+    const section = labelHeader.closest("div");
+    expect(section?.textContent).toMatch(/—/);
+  });
+
+  it("sem atributos → mostra '— sem atributos'", () => {
+    render(
+      <ConversaDrillDown
+        row={{ ...baseRow, custom_attributes: {} }}
+        accountId={9}
+      />,
+    );
+    expect(screen.getByText(/sem atributos/i)).toBeInTheDocument();
   });
 });

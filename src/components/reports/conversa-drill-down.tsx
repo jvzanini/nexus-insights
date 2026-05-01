@@ -1,15 +1,14 @@
 "use client";
 
-// ConversaDrillDown — painel inline minimalista que expande ao clicar na linha.
-// Mostra APENAS WhatsApp formatado completo + atributos chave:valor sem
-// reticências + botão "Abrir no Chatwoot". Dados que já estão na linha
-// (Nome, Status, Atendente, Estado, Departamento, Prioridade, Tempos) NÃO
-// são repetidos — drill-down só serve pra exibir o que não couber na grade.
+// ConversaDrillDown — painel inline com 3 seções (WhatsApp / Etiquetas /
+// Atributos). Cada seção é uma linha com rótulo à esquerda (min-w 100px
+// alinhando colunas) e conteúdo flex-wrap à direita. Sem espaço fantasma.
+// Botão "Abrir no Chatwoot" migrou para a coluna #ID.
 
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { OpenInChatwoot } from "@/components/reports/open-in-chatwoot";
+import { LabelsChips } from "@/components/reports/labels-chips";
 import { formatPhone } from "@/lib/utils/format-phone";
 import type { ConversaRow } from "@/lib/chatwoot/queries/conversas-list";
 
@@ -17,10 +16,11 @@ const ATTRS_PER_PAGE = 24;
 
 interface Props {
   row: ConversaRow;
-  accountId: number;
+  /** Mantido na interface por retro-compat com chamadas existentes; não usado. */
+  accountId?: number;
 }
 
-export function ConversaDrillDown({ row, accountId }: Props) {
+export function ConversaDrillDown({ row }: Props) {
   const phone = row.contact.phone_number
     ? formatPhone(row.contact.phone_number) || row.contact.phone_number
     : null;
@@ -37,11 +37,11 @@ export function ConversaDrillDown({ row, accountId }: Props) {
     <div
       role="region"
       aria-label={`Detalhes da conversa ${row.display_id}`}
-      className="space-y-3 bg-muted/30 p-4 text-[13px]"
+      className="space-y-2 bg-muted/30 px-4 py-3 text-[13px]"
     >
-      {/* WhatsApp completo (estava com reticências antes). */}
-      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+      {/* WhatsApp */}
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className="min-w-[100px] text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           WhatsApp
         </span>
         <span className="font-mono text-[14px] tabular-nums text-foreground">
@@ -49,20 +49,30 @@ export function ConversaDrillDown({ row, accountId }: Props) {
         </span>
       </div>
 
-      {/* Atributos: cada um em chip chave:valor sem truncar. */}
-      <div>
-        <div className="mb-2 flex items-baseline gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Atributos
-          </span>
-          <span className="text-[11px] text-muted-foreground/70 tabular-nums">
+      {/* Etiquetas */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="min-w-[100px] text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Etiquetas
+        </span>
+        {row.labels && row.labels.length > 0 ? (
+          <LabelsChips labels={row.labels} />
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </div>
+
+      {/* Atributos */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="min-w-[100px] text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Atributos{" "}
+          <span className="text-muted-foreground/70 tabular-nums">
             ({entries.length})
           </span>
-        </div>
-        {visible.length === 0 ? (
+        </span>
+        {entries.length === 0 ? (
           <span className="text-muted-foreground">— sem atributos</span>
         ) : (
-          <ul className="grid gap-1.5 md:grid-cols-2 lg:grid-cols-3">
+          <div className="inline-flex flex-wrap items-center gap-1.5">
             {visible.map(([k, v]) => {
               const raw =
                 typeof v === "string" ||
@@ -71,46 +81,41 @@ export function ConversaDrillDown({ row, accountId }: Props) {
                   ? String(v)
                   : JSON.stringify(v);
               return (
-                <li
+                <span
                   key={k}
-                  className="flex flex-wrap items-baseline gap-x-2 break-all rounded-md border border-border/30 bg-card px-2 py-1"
+                  className="inline-flex items-baseline gap-x-1 break-all rounded-md border border-border/30 bg-card px-2 py-0.5"
                 >
                   <span className="text-[11px] font-medium text-muted-foreground/80">
                     {k}:
                   </span>
-                  <span className="text-[13px] text-foreground/90">{raw}</span>
-                </li>
+                  <span className="text-[12px] text-foreground/90">{raw}</span>
+                </span>
               );
             })}
-          </ul>
+            {hidden > 0 ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowAll(true)}
+                className="h-7 text-[11px]"
+              >
+                Ver mais ({hidden})
+              </Button>
+            ) : null}
+            {showAll && entries.length > ATTRS_PER_PAGE ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowAll(false)}
+                className="h-7 text-[11px]"
+              >
+                Recolher
+              </Button>
+            ) : null}
+          </div>
         )}
-        {hidden > 0 ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowAll(true)}
-            className="mt-2 h-8 text-[12px]"
-          >
-            Ver mais ({hidden})
-          </Button>
-        ) : null}
-        {showAll && entries.length > ATTRS_PER_PAGE ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowAll(false)}
-            className="mt-2 h-8 text-[12px]"
-          >
-            Recolher
-          </Button>
-        ) : null}
-      </div>
-
-      {/* Ação rápida. */}
-      <div className="flex justify-end pt-1">
-        <OpenInChatwoot accountId={accountId} displayId={row.display_id} />
       </div>
     </div>
   );
