@@ -9,8 +9,13 @@ import { PlatformSettingsCard } from "@/components/settings/platform-settings-ca
 import { EnabledReportsCard } from "@/components/settings/enabled-reports-card";
 import { MatrixIAToggleCard } from "@/components/settings/matrix-ia-toggle-card";
 import { DashboardSettingsCard } from "@/components/settings/dashboard-settings-card";
+import { ChatwootUrlsCard } from "@/components/settings/chatwoot-urls-card";
 import { getCurrentUser } from "@/lib/auth";
-import { getAllSettings } from "@/lib/actions/settings";
+import {
+  getAllSettings,
+  listChatwootAccountUrlsAction,
+} from "@/lib/actions/settings";
+import { listKnownAccountIds } from "@/lib/chatwoot/accounts";
 import { getDashboardSettings } from "@/lib/dashboard-settings";
 import { getPlatformLocale, getPlatformTz } from "@/lib/datetime";
 import { ALL_REPORT_KEYS } from "@/lib/reports/catalog";
@@ -52,6 +57,8 @@ export default async function Page() {
     reportVisibilityEntries,
     matrixIaVisibility,
     dashboardSettings,
+    knownAccounts,
+    chatwootUrls,
   ] = await Promise.all([
     getPlatformTz(),
     getPlatformLocale(),
@@ -62,6 +69,8 @@ export default async function Page() {
     ),
     getMatrixIAVisibility(),
     getDashboardSettings(),
+    listKnownAccountIds().catch(() => []),
+    listChatwootAccountUrlsAction().then((r) => (r.ok ? r.data ?? [] : [])),
   ]);
 
   const reportVisibilityMap = Object.fromEntries(
@@ -109,6 +118,13 @@ export default async function Page() {
 
         {isSuperAdmin && (
           <MatrixIAToggleCard initialVisibility={matrixIaVisibility} />
+        )}
+
+        {isSuperAdmin && (
+          <ChatwootUrlsCard
+            accounts={knownAccounts}
+            initial={chatwootUrls}
+          />
         )}
 
         <Card className="rounded-2xl border border-border bg-muted/30 p-2">
