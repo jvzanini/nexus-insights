@@ -36,8 +36,9 @@ describe("formatDuration", () => {
   });
 
   it("formata dias", () => {
-    expect(formatDuration(86400)).toBe("1d");
-    expect(formatDuration(172800)).toBe("2d");
-    expect(formatDuration(90000)).toBe("1d");
+    expect(formatDuration(86400)).toBe("1 dia");
+    expect(formatDuration(172800)).toBe("2 dias");
+    expect(formatDuration(90000)).toBe("1 dia");
+    expect(formatDuration(259200)).toBe("3 dias");
   });
 });

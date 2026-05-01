@@ -437,7 +437,8 @@ export function DashboardContent({
         <ConversationsLineChart
           data={chart}
           granularity={granularity}
-          tz={tz}
+          tz={data.tz ?? tz}
+          range={data.range}
         />
       </motion.div>
 

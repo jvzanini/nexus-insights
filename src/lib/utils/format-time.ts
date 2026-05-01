@@ -7,7 +7,8 @@
  *  - 90 → "2min"
  *  - 3600 → "1h"
  *  - 5400 → "1h 30min"
- *  - 90000 → "1d"
+ *  - 86400 → "1 dia"
+ *  - 259200 → "3 dias"
  */
 export function formatDuration(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds <= 0) return "-";
@@ -19,5 +20,5 @@ export function formatDuration(seconds: number): string {
     return m > 0 ? `${h}h ${m}min` : `${h}h`;
   }
   const d = Math.floor(seconds / 86400);
-  return `${d}d`;
+  return d === 1 ? "1 dia" : `${d} dias`;
 }

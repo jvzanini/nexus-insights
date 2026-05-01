@@ -44,6 +44,8 @@ export interface DashboardChartPoint {
   bucket: string; // ISO timestamp (start of bucket)
   received: number;
   resolved: number;
+  open: number;
+  pending: number;
 }
 
 export interface DashboardTopAgent {
@@ -127,6 +129,8 @@ interface RowChart {
   bucket: Date;
   received: string;
   resolved: string;
+  open: string;
+  pending: string;
 }
 interface RowAgent {
   id: number | null;
@@ -204,7 +208,7 @@ export async function dashboardData(args: DashboardDataInput) {
   // sem TZ → timestamptz UTC explícito) e qualquer mudança nas coortes.
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-data-v4",
+    name: "dashboard-data-v5",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -261,14 +265,16 @@ export async function dashboardData(args: DashboardDataInput) {
           const sqlReceivedPrev = sqlReceived;
           const sqlResolvedPrev = sqlResolved;
 
-          // ---------- 5. Chart bucketed ----------
+          // ---------- 5. Chart bucketed (4 séries: received/resolved/open/pending) ----------
           const sqlChart =
             granularity === "hour"
               ? `
               SELECT
                 (date_trunc('hour', c.created_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
                 COUNT(*)::bigint AS received,
-                COUNT(*) FILTER (WHERE c.status = 1)::bigint AS resolved
+                COUNT(*) FILTER (WHERE c.status = 1)::bigint AS resolved,
+                COUNT(*) FILTER (WHERE c.status = 0)::bigint AS open,
+                COUNT(*) FILTER (WHERE c.status = 2)::bigint AS pending
               FROM conversations c
               WHERE c.account_id = $1
                 AND c.created_at >= $2
@@ -281,7 +287,9 @@ export async function dashboardData(args: DashboardDataInput) {
               SELECT
                 (date_trunc('day', c.created_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
                 COUNT(*)::bigint AS received,
-                COUNT(*) FILTER (WHERE c.status = 1)::bigint AS resolved
+                COUNT(*) FILTER (WHERE c.status = 1)::bigint AS resolved,
+                COUNT(*) FILTER (WHERE c.status = 0)::bigint AS open,
+                COUNT(*) FILTER (WHERE c.status = 2)::bigint AS pending
               FROM conversations c
               WHERE c.account_id = $1
                 AND c.created_at >= $2
@@ -535,6 +543,8 @@ export async function dashboardData(args: DashboardDataInput) {
               bucket: new Date(r.bucket).toISOString(),
               received: Number(r.received ?? 0),
               resolved: Number(r.resolved ?? 0),
+              open: Number(r.open ?? 0),
+              pending: Number(r.pending ?? 0),
             })),
             topAgents: topAgentsRes.rows
               .filter((r) => r.avg_seconds !== null)

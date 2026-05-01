@@ -7,68 +7,61 @@ import {
   type DashboardData,
 } from "@/lib/chatwoot/queries/dashboard-data";
 import { shouldExcludeMatrixIA } from "@/lib/reports/exclude-matrix-ia";
+import {
+  getDashboardPeriod,
+  type DashboardPeriod,
+  type DashboardMode,
+  type WeekStartsOn,
+} from "@/lib/dashboard-period";
+import {
+  getDashboardSettings,
+  type DashboardSettings,
+} from "@/lib/dashboard-settings";
+import { getPlatformTz, DEFAULT_TZ } from "@/lib/datetime";
 import type { AuthUser } from "@/lib/auth-helpers";
 
-export type DashboardPeriod = "hoje" | "semana" | "mes";
+export type { DashboardPeriod };
 
 export interface DashboardActionResult {
   success: boolean;
   data?: DashboardData & {
     accounts: Array<{ id: number; name: string }>;
     activeAccountId: number;
+    /** Echo da config aplicada para o frontend usar no eixo X. */
+    settings: DashboardSettings;
+    tz: string;
+    /** ISO string do início e fim do período aplicado. */
+    range: { start: string; end: string };
   };
   error?: string;
 }
 
+const FALLBACK_SETTINGS: DashboardSettings = {
+  weekStartsOn: 1 as WeekStartsOn,
+  weekMode: "current" as DashboardMode,
+  monthMode: "current" as DashboardMode,
+};
+
 /**
- * Calcula intervalo `current` + `prev` baseado no period.
- *
- * v0.13.3 (hotfix): voltou para a lógica simples do pré-v0.13.0
- * (rolling 24h/7d/30d) por defesa — o pipeline de
- * getDashboardPeriod + getDashboardSettings introduzido no v0.13.0
- * causou crash em produção. Ficará isolado e re-aplicado em
- * release futura com testes visuais reais antes do deploy.
+ * Lê settings com try/catch defensivo. Em caso de qualquer falha,
+ * retorna os defaults (segunda + atual + atual). NÃO joga.
  */
-function periodRanges(period: DashboardPeriod): {
-  current: { start: Date; end: Date };
-  prev: { start: Date; end: Date };
-} {
-  const now = new Date();
-  const end = now;
-  let start: Date;
-  let prevStart: Date;
-  let prevEnd: Date;
-
-  switch (period) {
-    case "hoje": {
-      const d = new Date(now);
-      d.setHours(0, 0, 0, 0);
-      start = d;
-      prevEnd = d;
-      const ps = new Date(d);
-      ps.setDate(ps.getDate() - 1);
-      prevStart = ps;
-      break;
-    }
-    case "semana": {
-      start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      prevEnd = start;
-      prevStart = new Date(start.getTime() - 7 * 24 * 60 * 60 * 1000);
-      break;
-    }
-    case "mes":
-    default: {
-      start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      prevEnd = start;
-      prevStart = new Date(start.getTime() - 30 * 24 * 60 * 60 * 1000);
-      break;
-    }
+async function safeGetDashboardSettings(): Promise<DashboardSettings> {
+  try {
+    return await getDashboardSettings();
+  } catch (err) {
+    console.error("[getDashboardSettings] erro — usando defaults:", err);
+    return FALLBACK_SETTINGS;
   }
+}
 
-  return {
-    current: { start, end },
-    prev: { start: prevStart, end: prevEnd },
-  };
+async function safeGetPlatformTz(): Promise<string> {
+  try {
+    return await getPlatformTz();
+  } catch (err) {
+    console.error("[getPlatformTz] erro — usando default:", err);
+    return DEFAULT_TZ;
+  }
 }
 
 export async function getDashboardData(args: {
@@ -102,9 +95,27 @@ export async function getDashboardData(args: {
     const allAccounts = await getKnownAccounts();
     const accounts = allAccounts.filter((a) => accessibleIds.includes(a.id));
 
-    const { current, prev } = periodRanges(args.period);
+    // Settings + tz + matrix com fallbacks defensivos
+    const [tz, settings, excludeMatrixIA] = await Promise.all([
+      safeGetPlatformTz(),
+      safeGetDashboardSettings(),
+      shouldExcludeMatrixIA(),
+    ]);
 
-    const excludeMatrixIA = await shouldExcludeMatrixIA();
+    // Calcula período conforme config (current/rolling + weekStartsOn)
+    const mode =
+      args.period === "semana"
+        ? settings.weekMode
+        : args.period === "mes"
+          ? settings.monthMode
+          : "current";
+
+    const { current, prev } = getDashboardPeriod({
+      period: args.period,
+      mode,
+      weekStartsOn: settings.weekStartsOn,
+      tz,
+    });
 
     const result = await dashboardData({
       accountId: args.accountId,
@@ -119,6 +130,12 @@ export async function getDashboardData(args: {
         ...result.data,
         accounts,
         activeAccountId: args.accountId,
+        settings,
+        tz,
+        range: {
+          start: current.start.toISOString(),
+          end: current.end.toISOString(),
+        },
       },
     };
   } catch (err) {

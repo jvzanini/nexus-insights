@@ -1,5 +1,41 @@
 # Changelog
 
+## [v0.13.7] 2026-05-01 — Dashboard chart redesenhado: 4 séries multi-cor + checkboxes + eixo cheio respeitando configs
+
+> Resolve 4 problemas reportados pelo João após o v0.13.3:
+> 1. Tempo de resposta mostrava "1d", "3d" — usuário queria "1 dia", "3 dias".
+> 2. Filtro "Semana" mostrava rolling 7d (esquerda do hoje) em vez de **semana atual** configurada (segunda → domingo).
+> 3. Filtro "Mês" idem — mostrava rolling 30d em vez de **mês atual** (dia 1 → fim).
+> 4. Gráfico tinha apenas 2 séries (Recebidas, Resolvidas), fontes pequenas e sem opção de selecionar séries.
+
+### Mudou
+
+- **`formatDuration` em `src/lib/utils/format-time.ts`** passa a usar `"1 dia"` / `"3 dias"` em vez de `"1d"` / `"3d"`. Mantém formatos de horas/minutos/segundos.
+- **`actions/dashboard.ts` e `actions/dashboard-drill-down.ts` voltam a usar `getDashboardPeriod` + `getDashboardSettings`** (rolledback indevidamente no v0.13.3). Agora com **try/catch defensivo** em volta de cada read de settings — se algo falha, usa `FALLBACK_SETTINGS` (segunda + atual + atual) e o dashboard continua abrindo.
+- **`getDashboardData` retorna `settings`, `tz` e `range`** no payload — frontend usa para preencher o eixo X corretamente.
+
+### Adicionado
+
+- **`ConversationsLineChart` redesenhado**:
+  - **4 séries** com cores conforme feedback: Recebidas → verde (`#22c55e`), Abertas → amarelo (`#f59e0b`), Resolvidas → azul (`#3b82f6`), Pendentes → roxo (`#8b5cf6`).
+  - **Checkboxes** para mostrar/ocultar séries (preferência persistida em `localStorage`).
+  - **Eixo X cobre todo o período configurado**: 24 horas em "Hoje" (com rolagem horizontal centrando na hora atual), todos os dias da semana atual em "Semana", todos os dias do mês em "Mês". Buckets vazios renderizam como 0 — antes só apareciam dias com dados.
+  - **Fontes maiores**: eixo X 13px (era 11px), eixo Y 13px (era 11px), `tickMargin=14` (era 12).
+  - Tooltip enriquecido com bullet colorido + tabular-nums.
+  - Cache key bumped → `dashboard-data-v5` (chart agora retorna 4 séries).
+
+### Cuidado tomado para evitar repetir o crash do v0.13.0
+
+- Componente usa `<ResponsiveContainer width="100%" height="100%">` dentro de `<div style={{ width: <number>, height: 350 }}>` — pai com **dimensões fixas explícitas**, não dinâmicas.
+- `useEffect` para centrar scroll com guards (`!scrollRef.current` retorna early).
+- Sem `expandFullDay` recursivo nem cálculo de offset com TZ do navegador.
+
+### Verificação
+
+- `npm test` 671 testes / 77 suites PASS · typecheck 0 erros · build verde.
+
+---
+
 ## [v0.13.6] 2026-05-01 — Mensagens dos providers em PT-BR + probe com orçamento de tokens compatível com reasoning
 
 > Dois ajustes em cima do v0.13.5: (1) probe de Testar conexão batia em "max_tokens or model output limit was reached" em modelos reasoning (gastam tokens internos no thinking) — `max_completion_tokens` subiu de 1 para 256. Aproveitamos para tratar essa mensagem específica como **conexão OK**. (2) Toda mensagem em inglês vinda dos providers (OpenAI/Anthropic/Gemini/OpenRouter) agora passa por um tradutor que cobre os padrões mais comuns.

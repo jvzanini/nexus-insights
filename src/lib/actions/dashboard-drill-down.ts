@@ -20,8 +20,16 @@ import {
   type NoResponseDrillDownData,
   type ByTeamDrillDownData,
 } from "@/lib/chatwoot/queries/dashboard-drill-down";
+import {
+  getDashboardPeriod,
+  type DashboardPeriod,
+  type DashboardMode,
+  type WeekStartsOn,
+} from "@/lib/dashboard-period";
+import { getDashboardSettings } from "@/lib/dashboard-settings";
+import { getPlatformTz, DEFAULT_TZ } from "@/lib/datetime";
 
-export type DashboardPeriod = "hoje" | "semana" | "mes";
+export type { DashboardPeriod };
 
 export interface DrillDownActionResult<T> {
   success: boolean;
@@ -29,42 +37,39 @@ export interface DrillDownActionResult<T> {
   error?: string;
 }
 
+const FALLBACK_SETTINGS = {
+  weekStartsOn: 1 as WeekStartsOn,
+  weekMode: "current" as DashboardMode,
+  monthMode: "current" as DashboardMode,
+};
+
 /**
- * v0.13.3 (hotfix): voltou para lógica simples (rolling 24h/7d/30d).
- * O pipeline de getDashboardPeriod + getDashboardSettings introduzido
- * no v0.13.0 causou crash em produção.
+ * Calcula período conforme configurações do dashboard, com fallback
+ * defensivo para defaults se algo falhar.
  */
 async function resolvePeriodRanges(period: DashboardPeriod): Promise<{
   current: { start: Date; end: Date };
   prev: { start: Date; end: Date };
 }> {
-  const now = new Date();
-  let start: Date;
-  let prevStart: Date;
-  let prevEnd: Date;
-
-  if (period === "hoje") {
-    const d = new Date(now);
-    d.setHours(0, 0, 0, 0);
-    start = d;
-    prevEnd = d;
-    const ps = new Date(d);
-    ps.setDate(ps.getDate() - 1);
-    prevStart = ps;
-  } else if (period === "semana") {
-    start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    prevEnd = start;
-    prevStart = new Date(start.getTime() - 7 * 24 * 60 * 60 * 1000);
-  } else {
-    start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    prevEnd = start;
-    prevStart = new Date(start.getTime() - 30 * 24 * 60 * 60 * 1000);
+  let tz = DEFAULT_TZ;
+  let settings = FALLBACK_SETTINGS;
+  try {
+    [tz, settings] = await Promise.all([getPlatformTz(), getDashboardSettings()]);
+  } catch (err) {
+    console.error("[drill-down resolvePeriodRanges] usando defaults:", err);
   }
-
-  return {
-    current: { start, end: now },
-    prev: { start: prevStart, end: prevEnd },
-  };
+  const mode =
+    period === "semana"
+      ? settings.weekMode
+      : period === "mes"
+        ? settings.monthMode
+        : "current";
+  return getDashboardPeriod({
+    period,
+    mode,
+    weekStartsOn: settings.weekStartsOn,
+    tz,
+  });
 }
 
 async function authorize(accountId: number): Promise<{
