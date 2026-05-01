@@ -1,5 +1,42 @@
 # Changelog
 
+## [v0.14.1] 2026-05-01 — Hotfix Agente Nex × Matrix IA: cast PG + role explícito
+
+> Dois bugs descobertos pelo super_admin testando o Nex em todas as configurações de visibility do Matrix IA:
+>
+> 1. **`could not determine data type of parameter $2`** quando visibility = "Todos". A tautologia que eu introduzi no v0.13.9 (`($2 IS NOT NULL)`) não passa no planner do Postgres sem cast — o param só aparecia em `IS NOT NULL`, sem comparação que dê pista de tipo, e o pg falhava no prepare statement.
+> 2. **Visibility `super_admin_only` excluía Matrix IA mesmo logado como super_admin.** `auth()` chamada **dentro** de outra Server Action (Nex action → `runNexAgent` → `shouldExcludeMatrixIA`) podia retornar `null` no Next.js 16, levando a função a tratar como "sem role" e excluir por segurança.
+
+### Fix 1: cast `::integer` na tautologia
+
+`src/lib/llm/tools/executor.ts → matrixIAClause()`:
+```ts
+return excludeMatrixIA
+  ? `c.inbox_id <> $${paramIdx}::integer`
+  : `($${paramIdx}::integer IS NOT NULL)`;
+```
+Cast explícito força o tipo do parâmetro durante o `prepare`, antes do planner tentar inferir do contexto. Resolve o erro tanto no caminho exclude quanto no não-exclude.
+
+### Fix 2: role explícito em vez de `auth()` reentrante
+
+- Nova função `shouldExcludeMatrixIAForRole(role)` em `src/lib/reports/exclude-matrix-ia.ts` que aceita o role como parâmetro (não consulta `auth()`).
+- `runNexAgent` ganha campo opcional `platformRole` em `RunNexInput`.
+- `sendNexMessage` (action) extrai `platformRole` da session que **já resolveu** e passa direto pro `runNexAgent`. Mesma fonte de verdade, sem reentrância.
+- `shouldExcludeMatrixIA()` (assinatura sem argumentos) continua existindo como wrapper para chamadores que não têm role à mão (queries de relatórios).
+
+### Resultado esperado
+
+- visibility = `Todos` → Nex inclui Matrix IA, conta funciona sem erro de PG.
+- visibility = `super_admin_only` + super_admin logado → Nex inclui Matrix IA.
+- visibility = `super_admin_only` + viewer/manager → Nex exclui Matrix IA.
+- visibility = `Ninguém` → Nex exclui para todos.
+
+### Outras notas
+
+- 77 suites / 674 tests PASS · typecheck 0 erros.
+
+---
+
 ## [v0.14.0] 2026-05-01 — Dashboard chart polish: navegação por período + eixo cheio + sem dots/legenda
 
 ### Mudou

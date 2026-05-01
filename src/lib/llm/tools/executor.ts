@@ -34,11 +34,15 @@ export interface ToolExecutionResult {
  * Constrói a cláusula SQL que filtra a inbox Matrix IA. Quando NÃO devemos
  * excluir, retorna uma tautologia que referencia `$<paramIdx>` para preservar
  * o índice de parâmetros sem alterar o resto do código.
+ *
+ * Cast `::integer` é essencial: sem ele, o planner do Postgres devolve
+ * `could not determine data type of parameter $N` quando o param só aparece
+ * em `IS NOT NULL` (sem comparação que dê pista do tipo). Bug do v0.13.9.
  */
 function matrixIAClause(excludeMatrixIA: boolean, paramIdx: number = 2): string {
   return excludeMatrixIA
-    ? `c.inbox_id <> $${paramIdx}`
-    : `($${paramIdx} IS NOT NULL)`;
+    ? `c.inbox_id <> $${paramIdx}::integer`
+    : `($${paramIdx}::integer IS NOT NULL)`;
 }
 
 export async function executeTool(

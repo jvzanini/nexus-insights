@@ -13,7 +13,7 @@ import "server-only";
  * registrados via `logUsage`.
  */
 
-import { shouldExcludeMatrixIA } from "@/lib/reports/exclude-matrix-ia";
+import { shouldExcludeMatrixIAForRole } from "@/lib/reports/exclude-matrix-ia";
 
 import { getActiveLlmClient } from "../get-client";
 import { NEX_TOOLS } from "../tools/definitions";
@@ -45,6 +45,8 @@ export interface RunNexInput {
   messages: ChatMessage[];
   accountId: number;
   userId?: string;
+  /** Role do usuário corrente — propagado para `shouldExcludeMatrixIAForRole`. */
+  platformRole?: string | null;
   /** Injeção opcional para testes — quando ausente, usa `getActiveLlmClient()`. */
   clientOverride?: ProviderClient | null;
 }
@@ -80,14 +82,15 @@ export async function runNexAgent(args: RunNexInput): Promise<RunNexResult> {
   const start = Date.now();
 
   // Resolve a regra de visibility do Matrix IA UMA VEZ pra essa conversa.
-  // shouldExcludeMatrixIA() consulta a session do user atual + a config
-  // global (3-níveis: all / super_admin_only / none). v0.13.7 alinhou o Nex
-  // com o resto do app — antes ele sempre excluía hardcoded.
+  // Usa o role explícito vindo do caller (já resolvido pelo `auth()` da
+  // Server Action) em vez de chamar `auth()` reentrante — fix do bug
+  // v0.13.9 onde super_admin com visibility=super_admin_only era tratado
+  // como sem role (excluía Matrix IA indevidamente).
   let excludeMatrixIA = false;
   try {
-    excludeMatrixIA = await shouldExcludeMatrixIA();
+    excludeMatrixIA = await shouldExcludeMatrixIAForRole(args.platformRole);
   } catch (err) {
-    console.warn("[runNexAgent] shouldExcludeMatrixIA falhou:", err);
+    console.warn("[runNexAgent] shouldExcludeMatrixIAForRole falhou:", err);
   }
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {

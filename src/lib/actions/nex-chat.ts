@@ -34,11 +34,13 @@ export async function sendNexMessage(
 
   const accountId = await getActiveAccountId();
   const userId = (session.user as { id?: string }).id;
+  const platformRole = (session.user as { platformRole?: string }).platformRole;
 
   const result = await runNexAgent({
     messages: filtered,
     accountId,
     userId,
+    platformRole,
   });
 
   if (!result.ok) {

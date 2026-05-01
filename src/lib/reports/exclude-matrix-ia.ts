@@ -18,6 +18,20 @@ export async function shouldExcludeMatrixIA(): Promise<boolean> {
   const session = await auth();
   const role = (session?.user as { platformRole?: string } | undefined)
     ?.platformRole;
+  return shouldExcludeMatrixIAForRole(role);
+}
+
+/**
+ * Variante que recebe o role explicitamente. Útil em Server Actions onde o
+ * caller já resolveu a session — evita reentrância de `auth()` (que no
+ * Next.js 16 pode retornar `null` quando chamada dentro de outra Server
+ * Action sem cookies forwarded). Bug observado no v0.13.9: Nex tratava
+ * super_admin como sem role e excluía Matrix IA mesmo com visibility
+ * `super_admin_only`.
+ */
+export async function shouldExcludeMatrixIAForRole(
+  role: string | null | undefined,
+): Promise<boolean> {
   if (!role) return true;
   const v = await getMatrixIAVisibility();
   if (v === "none") return true;
