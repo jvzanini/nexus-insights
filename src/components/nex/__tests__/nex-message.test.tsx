@@ -7,6 +7,13 @@ import { render, screen } from "@testing-library/react";
 
 import { NexMessage } from "@/components/nex/nex-message";
 
+// jsdom não implementa play/pause/load — stubs no-op evitam "Not implemented".
+beforeAll(() => {
+  window.HTMLMediaElement.prototype.play = jest.fn(async () => {});
+  window.HTMLMediaElement.prototype.pause = jest.fn(() => {});
+  window.HTMLMediaElement.prototype.load = jest.fn(() => {});
+});
+
 describe("NexMessage", () => {
   it("copy button visível em user e assistant", () => {
     const { rerender } = render(<NexMessage role="user" content="hello" />);
@@ -29,8 +36,8 @@ describe("NexMessage", () => {
     expect(screen.getByText(/oi mundo/i)).toBeInTheDocument();
   });
 
-  it("kind='audio' com audioBlobUrl renderiza player", () => {
-    const { container } = render(
+  it("kind='audio' com audioBlobUrl renderiza AudioPlayer (botão Tocar)", () => {
+    render(
       <NexMessage
         role="user"
         kind="audio"
@@ -39,7 +46,8 @@ describe("NexMessage", () => {
         durationSeconds={5}
       />,
     );
-    expect(container.querySelector("audio")).toBeInTheDocument();
+    expect(screen.getByLabelText("Tocar")).toBeInTheDocument();
+    expect(screen.getByLabelText("Velocidade")).toBeInTheDocument();
   });
 
   it("aria-label diz 'Copiar mensagem' (genérico, não 'resposta')", () => {

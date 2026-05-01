@@ -15,6 +15,7 @@
 import { Check, Copy, Database } from "lucide-react";
 import * as React from "react";
 
+import { AudioPlayer } from "@/components/nex/audio-player";
 import { cn } from "@/lib/utils";
 
 export type NexMessageRole = "user" | "assistant" | "tool" | "loading";
@@ -41,7 +42,7 @@ export function NexMessage({
   toolName,
   kind = "text",
   audioBlobUrl,
-  durationSeconds: _durationSeconds,
+  durationSeconds,
 }: NexMessageProps) {
   if (role === "loading") return <NexLoadingBubble />;
   if (role === "tool") return <NexToolBubble name={toolName ?? "tool"} />;
@@ -56,13 +57,9 @@ export function NexMessage({
       <div className="group flex w-full justify-end">
         <div className="relative flex max-w-[85%] flex-col gap-1.5">
           {audioBlobUrl ? (
-            // Placeholder até T19 implementar AudioPlayer customizado.
-            // Quando AudioPlayer existir, trocar por:
-            //   <AudioPlayer src={audioBlobUrl} durationSeconds={durationSeconds} />
-            <audio
+            <AudioPlayer
               src={audioBlobUrl}
-              controls
-              className="h-8 w-full max-w-[280px]"
+              durationSeconds={durationSeconds}
             />
           ) : (
             <div className="rounded-2xl bg-muted px-3 py-2 text-xs text-muted-foreground">
