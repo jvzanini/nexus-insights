@@ -1,5 +1,78 @@
 # Changelog
 
+## [v0.16.0] 2026-05-01 — Suite Agente Nex · Refinement
+
+> Pacote consolidado de polish da Suite Agente Nex (lançada em v0.15.x). Spec v3 com 51 achados de pente-fino + plan v3 com 50 tasks granulares (TDD, ui-ux-pro-max em UI). 982 testes verde.
+
+### A. Tela "Chaves de API"
+
+- Header de provedor padronizado (ícone + label + atalho "Criar API key" + botão "Nova chave" gradient).
+- AlertDialog substituiu `window.confirm` na exclusão.
+- Card vazio com 2 CTAs amigáveis.
+
+### B. Tela "Configuração do Agente Nex"
+
+- Mais respiro (`space-y-8` + sections com border-t).
+- Modelo customizado **inline** (SearchableSelect com `customMode` — input editable no próprio trigger).
+- 4 tiers de classificação (azul `low` / amarelo `medium` / laranja `high` / vermelho `premium`) — adiciona tier `premium` para modelos > $30/M output (gpt-5.5-pro, o1-pro, o3-pro, etc).
+- Catálogo OpenRouter expandido para **118 modelos** (DeepSeek V3/V4/R1/R1-0528/Coder, Qwen 2.5/3/3.5/3.6, Llama 3.1/3.3/4, Mistral Codestral/Pixtral, Cohere R/R+/R7B/A, xAI Grok 2/3/4/4.20/4.3, Microsoft Phi-3.5/Phi-4, Nous Hermes 3, Liquid LFM, Reka, Perplexity Sonar família, Inflection, etc).
+
+### C. Tela "Prompt do Agente Nex"
+
+- **PromptPreviewCard** novo no topo: preview client-side de `composeSystemPrompt` (puro/isomórfico) atualizando em tempo real, com Copiar/Maximizar e identidade fixa colapsável.
+- "Modo override avançado" → **"Modo prompt manual"** com tooltip explicativo + AlertDialog de ativação (warning) + bloqueio de Salvar quando texto vazio + disabled state com texto auxiliar laranja em Personality/Tone/Guardrails.
+- **PlaygroundSheet** lateral substitui Playground inline: `<Sheet side="right" w=480px>` acionado pelo botão "Abrir playground" no header da página, max 20 mensagens FIFO efêmero (não persiste).
+- IDENTITY_BASE atualizada: blindada contra "ChatGPT/GPT/Claude/Gemini/OpenAI/Anthropic/Google" como identidade. Menciona exclusivamente "Nexus Insights" e "Nexus Chat". Define formato de deep-links via mapeamento de URLs públicas configuradas em /configuracoes.
+- Guardrails default seedados via flag `seeded_defaults_at` (idempotente — não ressuscita se super_admin apaga depois).
+- KB aceita **URL** além de PDF/TXT: SSRF guard (`assertPublicUrl` bloqueia ranges privados RFC1918 + loopback + link-local + cloud metadata) + fetcher (10s timeout, 5MB cap, html-to-text via node-html-parser) + erros enumerados (URL inválida, timeout, 4xx/5xx, mime, body grande, etc).
+- Atalho "Adicionar API Chatwoot (sugerida)" pré-preenche aba URL.
+
+### D. Tela "Consumo do Agente Nex"
+
+- PeriodPills compartilhada com /relatorios/conversas (mesmo componente).
+- KPIs uniformes 4 casas decimais (round half-up via `formatBrl4`/`formatUsd4`) + `min-h-[128px]` em todos os 4 cards.
+- Ícone "Total de chamadas": `PhoneCall` → `Activity`.
+- Gráficos custo por dia / custo por modelo: eixo Y com `R$` + 2 casas + fonte 13px (era 12) + xAxisPadding 12 (era 8) + datas formatadas `30/ABR` (uppercase month-short pt-BR).
+- Donut "Distribuição por provider": tooltip em `position={top-right}` (não cobre mais o donut nem o valor central) + content em 2 linhas (nome + valor + %) com max-w-[180px] + centro do donut com 4 casas.
+- Tabela "Chamadas detalhadas" → **"Histórico de chamadas"** (com ícone History).
+- Filtros server-side cascateados (Provider → Modelo) via `<UsageTableFilters>`.
+- Linha de total no topo (sticky) com totals server-side via `getUsageDetails` retornando `{ rows, total, totals }`.
+- Drill-down por linha em `<UsageDetailSheet>`: 5 seções (Identificação, Tokens, Duração, Custo, Erro) com cotação USD/BRL aplicada (com spread embutido) + spread atual informativo + cotação base estimada + Whisper "—" em tokens (com nota explicativa) + Copiar JSON.
+- Colunas renomeadas: "Tokens in" → "Tokens de entrada", "Tokens out" → "Tokens de saída".
+- Paginação 3-zonas no footer: "Mostrando X-Y de N" / "Página X de Y + setas" / "{n} por página" dropdown (25/50/100).
+- USD/BRL bruto na tabela (sem round adicional).
+
+### E. Calendar global
+
+- `weekStartsOn=1` (segunda-feira) e `showOutsideDays=false` por default em todos os usages. Dias de outros meses não aparecem mais no grid (resolve bug visual reportado: maio 1-2 não aparece em abril).
+
+### F. URLs Públicas Chatwoot
+
+- Card novo em `/configuracoes` "URLs Públicas Chatwoot" (super_admin only): lista accounts via `listKnownAccountIds()` (DISTINCT account_id de chatwoot_facts_daily_by_account) + input editável de URL + botão Salvar explícito por linha (UPSERT; URL vazia → DELETE; audit logado).
+- Schema novo `model ChatwootAccountUrl` (account_id PK, public_url, label?, updatedAt, updatedById).
+- Agente Nex injeta seção "## URLs públicas das contas" no system prompt (apenas com override desligado e ≥ 1 account configurada).
+
+### G. Schema, Audit, Deploy
+
+- Migration aditiva `20260501_v0_16_kb_url_chatwoot_urls_audit`:
+  - `nex_kb_documents`: + `kind TEXT DEFAULT 'PDF'` + `source_url TEXT NULL`.
+  - `nex_settings`: + `seeded_defaults_at TIMESTAMPTZ NULL`.
+  - `chatwoot_account_urls`: tabela nova.
+  - Backfill condicional de 5 guardrails default (somente se nunca tocado).
+- Novo enum `NexKbKind { PDF | TXT | URL }`.
+- Audit log universal: toda mutação de prompt config, KB doc, ChatwootAccountUrl loga `setting_updated` com `previous`/`next`.
+- Workflow: spec v1→v2→v3 (51 achados de pente-fino) + plan v1→v2→v3 (50 tasks TDD) → subagent-driven-development com `ui-ux-pro-max:ui-ux-pro-max` em UI → 982 testes verde / typecheck 0 erros / build verde.
+
+### Notas técnicas
+
+- `composeSystemPrompt` agora isomórfico (núcleo puro extraído para `prompt-compose.ts` sem `server-only`); permite preview client-side em `<PromptPreviewCard>`.
+- `addKbUrlAction` + `refreshKbUrlAction` (Server Actions) usam `assertPublicUrl` + `fetchKbUrl` em `src/lib/nex/kb-url.ts`. Refresh em URL falha mantém `extractedText` antigo (UPDATE só roda em sucesso).
+- `getUsageDetails` retorna `{ rows, total, totals }` com filtros provider/model aplicados via SQL `($n::text IS NULL OR coluna = $n)`.
+- `<SearchableSelect>` ganhou prop `customMode` (input editable no trigger quando sentinel selecionado).
+- Calendar global mantém override via prop (back-compat).
+
+---
+
 ## [v0.15.4] 2026-05-01 — UX bubble audio refinements
 
 > Super_admin reportou (com screenshots): (1) speed button do AudioPlayer com container preto vazando do balão violeta, (2) input bar com layout mudando entre idle e gravando, (3) áudio só aparece DEPOIS da transcrição, (4) áudios somem ao recarregar a página.

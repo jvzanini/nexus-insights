@@ -1,55 +1,44 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-05-01
-**Versão atual em produção:** v0.15.4
+**Versão atual em produção:** v0.16.0
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.15.4)
+## Em produção (v0.16.0)
 
-### Hotfix v0.15.4 (2026-05-01) — refinements UX bubble Agente Nex
+### Release v0.16.0 (2026-05-01) — Suite Agente Nex · Refinement
 
-- **AudioPlayer speed**: botão cíclico (1×→1.25×→1.5×→1.75×→2×→1×) sem ícone Gauge — texto puro com border-violet-500/30 + hover scale-105 dentro do balão violet 600/15.
-- **Input bar layout estável**: container `flex items-end gap-2` idêntico em idle e gravando; inner area `flex-1 rounded-xl border border-input bg-background min-h-9` sempre igual; Mic externo só em idle; Send externo (gradient violet) sempre no mesmo lugar com handler dinâmico.
-- **Player aparece imediatamente** ao enviar áudio (audioMsg + loadingMsg simultâneos antes do Whisper); transcrição é injetada quando Whisper responde.
-- **Persistência IndexedDB** para áudios na bolha: `src/lib/nex/audio-storage.ts` (saveAudio/getAudio/deleteAudio/clearAllAudios + no-op SSR); `useEffect` re-hidrata `audioBlobUrl` no mount; `clearAllAudios` chamado pelo `handleClear`; `NexMessage` ganha `hasStoredAudio` + skeleton "carregando áudio…". `AudioRecorder` ganha `mode="standalone" | "embedded"` + `forwardRef` + `useImperativeHandle`.
+Pacote consolidado de polish da Suite Agente Nex (lançada em v0.15.x). Workflow rigoroso (spec v1→v2→v3 com 51 achados de pente-fino + plan v1→v2→v3 com 50 tasks granulares TDD + ui-ux-pro-max em todas as tasks de UI). 982 testes verde · typecheck 0 erros · build verde.
 
-769/769 tests PASS · typecheck 0 erros.
+**A. Tela "Chaves de API"** — header padronizado (ícone + label + atalho "Criar API key" + botão "Nova chave" gradient), AlertDialog substituiu `window.confirm` na exclusão, card vazio com 2 CTAs amigáveis.
 
-### Hotfix v0.15.3 (2026-05-01) — AudioRecorder unmount loop
+**B. Tela "Configuração do Agente Nex"** — `space-y-8` com sections `border-t`, modelo customizado **inline** (`<SearchableSelect customMode>`), 4 tiers (low / medium / high / **premium** novo para >$30/M output), catálogo OpenRouter expandido para **118 modelos** (DeepSeek V3/V4/R1, Qwen 2.5/3/3.6, Llama 3.1/3.3/4, Mistral, Cohere R/R+, xAI Grok 2/3/4/4.20/4.3, Phi-4, Hermes 3, Liquid LFM, Reka, Perplexity Sonar, Inflection, etc).
 
-- Bug v0.15.2: dois `<AudioRecorder>` em branches condicionais (`isRecording=true`/`false`). Ao mudar de estado, React desmontava/remontava perdendo MediaRecorder interno → controles sumiam.
-- Fix: instância **única** sempre montada; só siblings (textarea + Send) renderizam condicional.
+**C. Tela "Prompt do Agente Nex"** — **PromptPreviewCard** novo (preview client-side em tempo real via `composeSystemPrompt` isomórfico), "Modo override avançado" → **"Modo prompt manual"** com AlertDialog warning, **PlaygroundSheet** lateral substitui playground inline (max 20 msgs FIFO efêmero), IDENTITY_BASE blindada contra "ChatGPT/GPT/Claude/Gemini/OpenAI/Anthropic/Google" como identidade, guardrails default seedados via `seeded_defaults_at` (idempotente), KB aceita **URL** com SSRF guard (`assertPublicUrl` bloqueia RFC1918 + loopback + link-local + cloud metadata) + fetcher 10s/5MB/html-to-text.
 
-### Hotfix v0.15.2 (2026-05-01) — UX bubble audio (3 bugs)
+**D. Tela "Consumo do Agente Nex"** — PeriodPills compartilhada com /relatorios/conversas, KPIs uniformes 4 casas decimais (`formatBrl4`/`formatUsd4`) + `min-h-[128px]`, ícone `Activity` (era `PhoneCall`), gráficos com eixo Y `R$` 2 casas + fonte 13px + datas `30/ABR`, donut tooltip top-right (não cobre mais o donut/centro), tabela renomeada **"Histórico de chamadas"**, filtros server-side cascateados Provider→Modelo, linha total sticky no topo, drill-down `<UsageDetailSheet>` com 5 seções (Identificação/Tokens/Duração/Custo/Erro) + spread embutido + Whisper "—" tokens, paginação 3-zonas (25/50/100), USD/BRL bruto na tabela.
 
-- Input bar reorganizado (textarea + ➤ enviar texto somem quando gravando, AudioRecorder full-width).
-- Timer respeita pause via `recordedMsRef` + `segmentStartedAtRef`.
-- AudioPlayer speed dropdown vira botão cíclico Gauge.
+**E. Calendar global** — `weekStartsOn=1` (segunda-feira) + `showOutsideDays=false` por default em todos os usages (resolve bug visual maio 1-2 não aparecendo em abril).
 
-### Hotfix v0.15.1 (2026-05-01) — microphone permissions
+**F. URLs Públicas Chatwoot** — card novo em `/configuracoes` (super_admin only): lista accounts via `listKnownAccountIds()` (DISTINCT em `chatwoot_facts_daily_by_account`) + input URL + Salvar explícito por linha (UPSERT; URL vazia → DELETE; audit). Schema novo `model ChatwootAccountUrl`. Agente Nex injeta seção "## URLs públicas das contas" no system prompt (apenas com override desligado e ≥ 1 account configurada). Deep-links formato `{publicUrl}/app/accounts/{accountId}/conversations/{conversationId}`.
 
-- `next.config.ts`: `Permissions-Policy: microphone=()` → `microphone=(self)`. Empty list bloqueava `getUserMedia` mesmo com permissão do navegador. Fix permite a origem.
+**G. Schema, Audit, Deploy** — migration aditiva `20260501_v0_16_kb_url_chatwoot_urls_audit`: `nex_kb_documents` ganha `kind` + `source_url`; `nex_settings` ganha `seeded_defaults_at`; tabela `chatwoot_account_urls` nova; backfill condicional dos 5 guardrails default. Audit log universal em toda mutação (prompt config, KB doc, ChatwootAccountUrl).
 
-### Release v0.15.0 (2026-05-01) — Suite Agente Nex (sidebar dedicado + áudio + prompt config)
-
-- **Menu lateral "Agente Nex"** com 4 sub-páginas (`/agente-nex/configuracao`, `/agente-nex/chaves`, `/agente-nex/prompt`, `/agente-nex/consumo`). Item antigo "Consumo IA" standalone removido.
-- **Gravação de áudio na bolha** (record/pause/cancel/send) com cap de 5 min — Whisper API transcreve, IA responde texto.
-- **Player de áudio** customizado no balão do user com 5 níveis de velocidade + seek.
-- **Copy button universal** em mensagens do user E assistant.
-- **System prompt configurável** — personalidade + tom + guardrails (até 20 × 300 chars) + override avançado (até 50k chars), persistidos em `nex_settings` (singleton).
-- **Base de conhecimento (KB)** — upload de PDFs/TXT (≤ 5 MB), extração via `pdf-parse`, cap 30k chars no prompt total.
-- **Playground inline** — testa prompt sem persistir; link "ver prompt usado".
-- **Toggles** (audio + KB) no card "Recursos" com gating dinâmico de provider (mic só com OpenAI ativo).
-- **Redirect 308** de `/configuracoes/consumo` → `/agente-nex/consumo` (URL antiga preservada).
-- **Schema runtime**: `nex_settings` (singleton) + `nex_kb_documents`. `MODEL_PRICING` ganha `whisper-1`.
-
-760/89 testes/suítes PASS · typecheck 0 · workflow rigoroso (spec v1→v2→v3 com 22+26 achados; plan v1→v2→v3 com 25+29 achados; 28 tasks via subagent-driven-development).
+Runbooks: `docs/runbooks/agente-nex-prompt-v0.16.md`, `docs/runbooks/consumo-drill-down-v0.16.md`, `docs/runbooks/chatwoot-account-urls.md`.
 
 ---
 
 ## Releases recentes
+
+### v0.15.x — Suite Agente Nex (sidebar dedicado + áudio + prompt config)
+
+- **v0.15.0** (2026-05-01) — Menu lateral `/agente-nex` (4 sub-páginas: Configuração / Chaves / Prompt / Consumo). Gravação de áudio na bolha (Whisper, cap 5 min), AudioPlayer custom (5 velocidades + seek), copy button universal, system prompt configurável (personalidade/tom/guardrails/override), KB PDF/TXT (`pdf-parse`, cap 30k chars), playground inline, toggles audio+KB, redirect 308 `/configuracoes/consumo` → `/agente-nex/consumo`.
+- **v0.15.1** — Hotfix microfone bloqueado por `Permissions-Policy: microphone=()` → `microphone=(self)`.
+- **v0.15.2** — Hotfix UX bubble audio (3 bugs): input bar reorganizado, timer respeita pause via `recordedMsRef + segmentStartedAtRef`, AudioPlayer speed dropdown vira botão cíclico Gauge.
+- **v0.15.3** — Hotfix AudioRecorder unmount loop: instância única sempre montada; só siblings (textarea + Send) renderizam condicional.
+- **v0.15.4** — Hotfix UX bubble audio refinements (4 ajustes): AudioPlayer speed sem ícone Gauge (texto puro + border-violet); input bar layout estável (`flex items-end gap-2` idêntico em idle e gravando); player aparece imediatamente ao enviar (audioMsg + loadingMsg antes do Whisper); persistência IndexedDB para áudios (`src/lib/nex/audio-storage.ts` saveAudio/getAudio/deleteAudio/clearAllAudios + skeleton "carregando áudio…").
 
 ### v0.14.x — Dashboard polish
 
