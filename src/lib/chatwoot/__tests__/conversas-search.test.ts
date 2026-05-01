@@ -32,7 +32,7 @@ describe("buildConversasSearchClause", () => {
     expect(r.sql).toMatch(/c\.display_id::text\s+ILIKE/);
     expect(r.sql).toMatch(/c\.custom_attributes::text\s+ILIKE/);
     expect(r.sql).toMatch(/EXISTS \(/); // tags subquery
-    expect(r.sql).toContain("ESCAPE '\\\\'");
+    expect(r.sql).toContain("ESCAPE E'\\\\\\\\\'");
     expect(r.params).toEqual(["%joão%"]);
     // todos os ILIKEs referenciam o mesmo placeholder $6 (offset 5 + 1)
     expect(r.sql).toMatch(/\$6/);

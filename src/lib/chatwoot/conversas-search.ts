@@ -69,23 +69,23 @@ export function buildConversasSearchClause(
     .join(" ")} ELSE '' END`;
 
   const sql = `(
-    ct.name ILIKE $${idx} ESCAPE '\\\\'
-    OR ct.phone_number ILIKE $${idx} ESCAPE '\\\\'
-    OR ct.identifier ILIKE $${idx} ESCAPE '\\\\'
-    OR ix.name ILIKE $${idx} ESCAPE '\\\\'
-    OR tm.name ILIKE $${idx} ESCAPE '\\\\'
-    OR u.name ILIKE $${idx} ESCAPE '\\\\'
-    OR c.display_id::text ILIKE $${idx} ESCAPE '\\\\'
-    OR c.custom_attributes::text ILIKE $${idx} ESCAPE '\\\\'
+    ct.name ILIKE $${idx} ESCAPE E'\\\\\\\\'
+    OR ct.phone_number ILIKE $${idx} ESCAPE E'\\\\\\\\'
+    OR ct.identifier ILIKE $${idx} ESCAPE E'\\\\\\\\'
+    OR ix.name ILIKE $${idx} ESCAPE E'\\\\\\\\'
+    OR tm.name ILIKE $${idx} ESCAPE E'\\\\\\\\'
+    OR u.name ILIKE $${idx} ESCAPE E'\\\\\\\\'
+    OR c.display_id::text ILIKE $${idx} ESCAPE E'\\\\\\\\'
+    OR c.custom_attributes::text ILIKE $${idx} ESCAPE E'\\\\\\\\'
     OR EXISTS (
       SELECT 1 FROM taggings tg
       JOIN tags t ON t.id = tg.tag_id
       WHERE tg.taggable_id = c.id
         AND tg.taggable_type = 'Conversation'
-        AND t.name ILIKE $${idx} ESCAPE '\\\\'
+        AND t.name ILIKE $${idx} ESCAPE E'\\\\\\\\'
     )
-    OR (${statusCase}) ILIKE $${idx} ESCAPE '\\\\'
-    OR (${priorityCase}) ILIKE $${idx} ESCAPE '\\\\'
+    OR (${statusCase}) ILIKE $${idx} ESCAPE E'\\\\\\\\'
+    OR (${priorityCase}) ILIKE $${idx} ESCAPE E'\\\\\\\\'
   )`;
 
   return { sql, params: [value] };
