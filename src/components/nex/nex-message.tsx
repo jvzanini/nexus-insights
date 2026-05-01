@@ -24,18 +24,68 @@ export interface NexMessageProps {
   content: string;
   /** Para mensagens "tool", nome da função executada (collapsed por padrão). */
   toolName?: string;
+  /** Tipo de mensagem (default "text"). "audio" mostra player + transcrição. */
+  kind?: "text" | "audio";
+  /**
+   * URL do blob do áudio gravado (apenas em sessão; expira ao recarregar a página).
+   * Quando ausente em mensagem `kind="audio"`, exibe fallback "(áudio expirado)".
+   */
+  audioBlobUrl?: string | null;
+  /** Duração em segundos (informativa; usada pelo player customizado em T19). */
+  durationSeconds?: number;
 }
 
-export function NexMessage({ role, content, toolName }: NexMessageProps) {
+export function NexMessage({
+  role,
+  content,
+  toolName,
+  kind = "text",
+  audioBlobUrl,
+  durationSeconds: _durationSeconds,
+}: NexMessageProps) {
   if (role === "loading") return <NexLoadingBubble />;
   if (role === "tool") return <NexToolBubble name={toolName ?? "tool"} />;
 
   const isUser = role === "user";
 
+  // ------------------------------------------------------------------
+  // Mensagens de áudio (sempre do usuário): player + transcrição abaixo.
+  // ------------------------------------------------------------------
+  if (kind === "audio") {
+    return (
+      <div className="group flex w-full justify-end">
+        <div className="relative flex max-w-[85%] flex-col gap-1.5">
+          {audioBlobUrl ? (
+            // Placeholder até T19 implementar AudioPlayer customizado.
+            // Quando AudioPlayer existir, trocar por:
+            //   <AudioPlayer src={audioBlobUrl} durationSeconds={durationSeconds} />
+            <audio
+              src={audioBlobUrl}
+              controls
+              className="h-8 w-full max-w-[280px]"
+            />
+          ) : (
+            <div className="rounded-2xl bg-muted px-3 py-2 text-xs text-muted-foreground">
+              (áudio expirado, escute na sessão original)
+            </div>
+          )}
+          <div className="rounded-2xl bg-violet-600/15 px-3 py-1.5 text-xs text-muted-foreground">
+            <span aria-hidden="true">📝 </span>
+            {content}
+          </div>
+          <CopyButton text={content} />
+        </div>
+      </div>
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // Mensagens de texto (user + assistant). Copy disponível em ambas.
+  // ------------------------------------------------------------------
   return (
     <div
       className={cn(
-        "flex w-full",
+        "group flex w-full",
         isUser ? "justify-end" : "justify-start",
       )}
     >
@@ -48,7 +98,7 @@ export function NexMessage({ role, content, toolName }: NexMessageProps) {
         )}
       >
         <MarkdownLite content={content} />
-        {!isUser ? <CopyButton text={content} /> : null}
+        <CopyButton text={content} />
       </div>
     </div>
   );
@@ -110,7 +160,7 @@ function CopyButton({ text }: { text: string }) {
     <button
       type="button"
       onClick={onCopy}
-      aria-label={copied ? "Copiado" : "Copiar resposta"}
+      aria-label={copied ? "Copiado" : "Copiar mensagem"}
       className={cn(
         "absolute -top-2 -right-2 flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border border-border bg-background text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100",
         "shadow-sm",
