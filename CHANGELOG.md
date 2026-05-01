@@ -1,5 +1,28 @@
 # Changelog
 
+## [v0.13.2] 2026-05-01 — Hotfix dashboard quebrado: ConversationsLineChart simplificado
+
+> Imediatamente após o deploy do v0.13.0, João reportou que o dashboard `/dashboard` não abria — "tem uma mensagem de erro e não aparece nada". A causa foi a reescrita agressiva do `ConversationsLineChart` no v0.13.0 (Pacote H/T11) que combinou: scroll horizontal com largura dinâmica calculada por JS + `<ResponsiveContainer>` aninhado num `<div style={{ width: number }}>` + função `expandFullDay` chamando `Intl.DateTimeFormat` em loop com locale-aware parsing — interação frágil entre recharts ResizeObserver, container scrollable e Tailwind, gerando layout instável ou crash de hidratação dependendo do browser/cache.
+
+### Correção
+
+- **`ConversationsLineChart` voltou a uma versão minimalista**: `<ResponsiveContainer width="100%" height={320}>` em pai sem largura dinâmica, sem scroll horizontal, sem `expandFullDay`, sem `fromZonedTime` no client. Mantém:
+  - Sem toggle linha/barra (mantida a remoção do v0.13.0).
+  - `tickMargin={12}` no eixo X (mantido o respiro do v0.13.0).
+  - Ícone violeta no header (mantido).
+- **TZ explícita no SQL bucket continua aplicada** (essa fix do v0.13.0 era segura — só queries server-side).
+- **Tudo o resto do v0.13.0 continua intacto**: configurações de dashboard (semana/mês configuráveis), comparison.open, variação relativa em rate, paginação 50/pg, drill-down de status genérico, formatRelativeShort, etc.
+
+### Roadmap
+
+- O scroll horizontal centralizado na hora atual + eixo cheio 0–24h continua sendo um nice-to-have — vamos reaplicar em release futura **com testes visuais reais antes do deploy**, em vez de combinar 4 mudanças complexas no mesmo componente.
+
+### Verificação
+
+- `npm test` 670 testes / 77 suites PASS · typecheck 0 erros · build verde.
+
+---
+
 ## [v0.13.1] 2026-04-30 — Backfill BRL no relatório de Consumo do Agente Nex
 
 > Estende o backfill do v0.12.3 para também popular `cost_brl` e `usd_to_brl_rate` em chamadas antigas que estavam com BRL = NULL. Antes desta release, todas as chamadas anteriores ao v0.12.0 mostravam "—" na coluna Custo BRL e contribuíam com R$ 0 nos totais — porque a tabela `llm_usage` não tinha as colunas BRL na época. Agora todos os relatórios de Consumo (KPIs, charts e tabela detalhada) mostram valores em reais para todas as chamadas registradas.
