@@ -34,6 +34,12 @@ async function createTables(): Promise<void> {
       CONSTRAINT "nex_kb_documents_pkey" PRIMARY KEY ("id")
     );
   `);
+  // v0.16.0: KB URL — `kind` (PDF/TXT/URL) + `source_url` aditivos.
+  await pgPool.query(`
+    ALTER TABLE "nex_kb_documents"
+      ADD COLUMN IF NOT EXISTS "kind" TEXT NOT NULL DEFAULT 'PDF',
+      ADD COLUMN IF NOT EXISTS "source_url" TEXT NULL;
+  `);
   await pgPool.query(
     `CREATE INDEX IF NOT EXISTS "nex_kb_documents_created_at_idx" ON "nex_kb_documents"("created_at" DESC);`,
   );

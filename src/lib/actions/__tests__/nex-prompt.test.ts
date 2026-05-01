@@ -10,13 +10,20 @@ jest.mock("@/lib/nex/kb", () => ({
   createKbDocument: jest.fn(),
   deleteKbDocument: jest.fn(),
   getKbDocsForPrompt: jest.fn(),
+  getKbDocumentById: jest.fn(),
+  updateKbDocumentContent: jest.fn(),
   MAX_DOC_FILE_BYTES: 5 * 1024 * 1024,
+}));
+jest.mock("@/lib/nex/kb-url", () => ({
+  assertPublicUrl: jest.fn(),
+  fetchKbUrl: jest.fn(),
 }));
 
 import { auth } from "@/auth";
 import { logAudit } from "@/lib/audit";
 import * as promptLib from "@/lib/nex/prompt";
 import * as kbLib from "@/lib/nex/kb";
+import * as kbUrlLib from "@/lib/nex/kb-url";
 import {
   getNexPromptConfigAction,
   saveNexPromptConfigAction,
@@ -24,6 +31,8 @@ import {
   listKbDocumentsAction,
   uploadKbDocumentAction,
   deleteKbDocumentAction,
+  addKbUrlAction,
+  refreshKbUrlAction,
 } from "../nex-prompt";
 
 const mockedAuth = auth as jest.MockedFunction<typeof auth>;
@@ -290,5 +299,161 @@ describe("deleteKbDocumentAction", () => {
     expect(audit.targetType).toBe("nex_kb_document");
     expect(audit.targetId).toBe("doc-id-x");
     expect(audit.userId).toBe("u-1");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T4a — addKbUrlAction + refreshKbUrlAction
+// ---------------------------------------------------------------------------
+
+describe("addKbUrlAction", () => {
+  beforeEach(() => {
+    (kbUrlLib.assertPublicUrl as jest.Mock).mockResolvedValue(
+      new URL("https://example.com/article"),
+    );
+    (kbUrlLib.fetchKbUrl as jest.Mock).mockResolvedValue({
+      text: "conteudo extraido",
+      mimeType: "text/html",
+      truncated: false,
+    });
+    (kbLib.createKbDocument as jest.Mock).mockResolvedValue(
+      "22222222-2222-2222-2222-222222222222",
+    );
+  });
+
+  it("rejeita sem super_admin (401)", async () => {
+    mockedAuth.mockResolvedValueOnce({
+      user: { id: "u-9", platformRole: "viewer" },
+    } as never);
+    const r = await addKbUrlAction({
+      name: "doc",
+      url: "https://example.com/article",
+    });
+    expect(r.ok).toBe(false);
+    expect(kbUrlLib.assertPublicUrl).not.toHaveBeenCalled();
+    expect(kbLib.createKbDocument).not.toHaveBeenCalled();
+  });
+
+  it("rejeita URL inválida (assertPublicUrl rejeita não-HTTPS)", async () => {
+    (kbUrlLib.assertPublicUrl as jest.Mock).mockRejectedValueOnce(
+      new Error("URL inválida — use HTTPS."),
+    );
+    const r = await addKbUrlAction({
+      name: "doc",
+      url: "http://example.com",
+    });
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/HTTPS/);
+    expect(kbLib.createKbDocument).not.toHaveBeenCalled();
+  });
+
+  it("rejeita SSRF (assertPublicUrl rejeita endereço privado)", async () => {
+    (kbUrlLib.assertPublicUrl as jest.Mock).mockRejectedValueOnce(
+      new Error("URL aponta para endereço privado/local — não permitida."),
+    );
+    const r = await addKbUrlAction({
+      name: "doc",
+      url: "https://localhost-fake.example",
+    });
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/privado|local/i);
+    expect(kbLib.createKbDocument).not.toHaveBeenCalled();
+  });
+
+  it("OK insere com kind=URL + sourceUrl + texto extraído", async () => {
+    const r = await addKbUrlAction({
+      name: "Artigo X",
+      url: "https://example.com/article",
+    });
+    expect(r.ok).toBe(true);
+    expect(r.data?.id).toBe("22222222-2222-2222-2222-222222222222");
+    expect(r.data?.charCount).toBe("conteudo extraido".length);
+    expect(kbLib.createKbDocument).toHaveBeenCalledTimes(1);
+    const call = (kbLib.createKbDocument as jest.Mock).mock.calls[0][0];
+    expect(call.name).toBe("Artigo X");
+    expect(call.kind).toBe("URL");
+    expect(call.sourceUrl).toBe("https://example.com/article");
+    expect(call.mimeType).toBe("text/html");
+    expect(call.extractedText).toBe("conteudo extraido");
+    expect(call.uploadedById).toBe("u-1");
+  });
+
+  it("loga audit com action=setting_updated e targetType=nex_kb_document", async () => {
+    const r = await addKbUrlAction({
+      name: "Artigo X",
+      url: "https://example.com/article",
+    });
+    expect(r.ok).toBe(true);
+    expect(mockedLogAudit).toHaveBeenCalledTimes(1);
+    const audit = mockedLogAudit.mock.calls[0][0];
+    expect(audit.action).toBe("setting_updated");
+    expect(audit.targetType).toBe("nex_kb_document");
+    expect(audit.targetId).toBe("22222222-2222-2222-2222-222222222222");
+    expect(audit.userId).toBe("u-1");
+    expect(audit.details).toMatchObject({
+      kind: "URL",
+      sourceUrl: "https://example.com/article",
+      charCount: "conteudo extraido".length,
+    });
+  });
+});
+
+describe("refreshKbUrlAction", () => {
+  beforeEach(() => {
+    (kbLib.getKbDocumentById as jest.Mock).mockResolvedValue({
+      id: "doc-url-1",
+      name: "Artigo X",
+      kind: "URL",
+      sourceUrl: "https://example.com/article",
+      extractedText: "texto antigo",
+    });
+    (kbUrlLib.assertPublicUrl as jest.Mock).mockResolvedValue(
+      new URL("https://example.com/article"),
+    );
+    (kbUrlLib.fetchKbUrl as jest.Mock).mockResolvedValue({
+      text: "texto novo",
+      mimeType: "text/html",
+      truncated: false,
+    });
+    (kbLib.updateKbDocumentContent as jest.Mock).mockResolvedValue({
+      charCount: "texto novo".length,
+    });
+  });
+
+  it("OK refaz fetch e atualiza extractedText", async () => {
+    const r = await refreshKbUrlAction("doc-url-1");
+    expect(r.ok).toBe(true);
+    expect(r.data?.charCount).toBe("texto novo".length);
+    expect(r.data?.truncated).toBe(false);
+    expect(kbLib.updateKbDocumentContent).toHaveBeenCalledWith(
+      "doc-url-1",
+      "texto novo",
+    );
+  });
+
+  it("falha de fetch mantém texto antigo (nunca chama UPDATE)", async () => {
+    (kbUrlLib.fetchKbUrl as jest.Mock).mockRejectedValueOnce(
+      new Error("A página demorou demais para responder. Tente outra fonte ou tente mais tarde."),
+    );
+    const r = await refreshKbUrlAction("doc-url-1");
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/demor|demais|responder/i);
+    expect(kbLib.updateKbDocumentContent).not.toHaveBeenCalled();
+  });
+
+  it("loga audit com action=setting_updated e details.action=refresh", async () => {
+    const r = await refreshKbUrlAction("doc-url-1");
+    expect(r.ok).toBe(true);
+    expect(mockedLogAudit).toHaveBeenCalledTimes(1);
+    const audit = mockedLogAudit.mock.calls[0][0];
+    expect(audit.action).toBe("setting_updated");
+    expect(audit.targetType).toBe("nex_kb_document");
+    expect(audit.targetId).toBe("doc-url-1");
+    expect(audit.userId).toBe("u-1");
+    expect(audit.details).toMatchObject({
+      action: "refresh",
+      charCount: "texto novo".length,
+      truncated: false,
+    });
   });
 });

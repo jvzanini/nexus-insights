@@ -28,10 +28,13 @@ import {
   createKbDocument,
   deleteKbDocument,
   getKbDocsForPrompt,
+  getKbDocumentById,
   listKbDocuments,
+  updateKbDocumentContent,
   MAX_DOC_FILE_BYTES,
   type KbSummary,
 } from "@/lib/nex/kb";
+import { assertPublicUrl, fetchKbUrl } from "@/lib/nex/kb-url";
 
 export interface ActionResult<T = undefined> {
   ok: boolean;
@@ -283,4 +286,181 @@ export async function deleteKbDocumentAction(
     });
     return { ok: true };
   }, "delete-kb");
+}
+
+// ---------------------------------------------------------------------------
+// v0.16.0 — KB URL: addKbUrl + refreshKbUrl (T4a)
+// ---------------------------------------------------------------------------
+
+const MAX_KB_URL_NAME = 200;
+const MAX_KB_URL_LEN = 2048;
+
+/**
+ * Adiciona um documento de KB do tipo URL.
+ *
+ * Pipeline: super_admin guard → validação tamanho do nome/URL →
+ * `assertPublicUrl` (HTTPS + SSRF block via DNS) → `fetchKbUrl`
+ * (timeout 10s, cap 5MB, html-to-text) → `createKbDocument(kind="URL",
+ * sourceUrl=...)` → audit log.
+ *
+ * Erros amigáveis em PT-BR vindos de `assertPublicUrl`/`fetchKbUrl`
+ * são propagados para a UI via `safeAction`.
+ */
+export async function addKbUrlAction(input: {
+  name: string;
+  url: string;
+}): Promise<ActionResult<{ id: string; charCount: number }>> {
+  return safeAction(async () => {
+    const guard = await requireSuperAdmin();
+    if (!guard.ok) return { ok: false, error: guard.error };
+
+    const name = (input?.name ?? "").trim();
+    const rawUrl = (input?.url ?? "").trim();
+    if (!name || name.length > MAX_KB_URL_NAME) {
+      return { ok: false, error: "Nome inválido (1-200 caracteres)." };
+    }
+    if (!rawUrl || rawUrl.length > MAX_KB_URL_LEN) {
+      return { ok: false, error: "URL inválida — use HTTPS." };
+    }
+
+    let parsed: URL;
+    try {
+      parsed = await assertPublicUrl(rawUrl);
+    } catch (err) {
+      return {
+        ok: false,
+        error:
+          err instanceof Error ? err.message : "URL inválida — use HTTPS.",
+      };
+    }
+
+    let fetched: { text: string; mimeType: string; truncated: boolean };
+    try {
+      fetched = await fetchKbUrl(parsed);
+    } catch (err) {
+      return {
+        ok: false,
+        error:
+          err instanceof Error
+            ? err.message
+            : "Não foi possível baixar o conteúdo da URL.",
+      };
+    }
+
+    let createdId: string;
+    try {
+      createdId = await createKbDocument({
+        name,
+        kind: "URL",
+        sourceUrl: rawUrl,
+        mimeType: fetched.mimeType,
+        fileSize: Buffer.byteLength(fetched.text, "utf8"),
+        extractedText: fetched.text,
+        uploadedById: guard.userId,
+      });
+    } catch (err) {
+      return {
+        ok: false,
+        error:
+          err instanceof Error
+            ? err.message
+            : "Erro ao salvar documento de KB.",
+      };
+    }
+
+    await logAudit({
+      userId: guard.userId,
+      action: "setting_updated",
+      targetType: "nex_kb_document",
+      targetId: createdId,
+      details: {
+        kind: "URL",
+        sourceUrl: rawUrl,
+        charCount: fetched.text.length,
+        truncated: fetched.truncated,
+      },
+    });
+
+    return { ok: true, data: { id: createdId, charCount: fetched.text.length } };
+  }, "add-kb-url");
+}
+
+/**
+ * Re-baixa o conteúdo de um KB doc do tipo URL e atualiza
+ * `extracted_text`/`char_count`/`file_size`. Em caso de falha (timeout,
+ * 5xx, content-type bloqueado, SSRF) o texto antigo é mantido — o UPDATE
+ * só ocorre em sucesso.
+ */
+export async function refreshKbUrlAction(
+  docId: string,
+): Promise<ActionResult<{ charCount: number; truncated: boolean }>> {
+  return safeAction(async () => {
+    const guard = await requireSuperAdmin();
+    if (!guard.ok) return { ok: false, error: guard.error };
+    if (!docId || typeof docId !== "string") {
+      return { ok: false, error: "ID inválido" };
+    }
+
+    const doc = await getKbDocumentById(docId);
+    if (!doc) {
+      return { ok: false, error: "Documento não encontrado." };
+    }
+    if (doc.kind !== "URL" || !doc.sourceUrl) {
+      return { ok: false, error: "Documento não é do tipo URL." };
+    }
+
+    let parsed: URL;
+    try {
+      parsed = await assertPublicUrl(doc.sourceUrl);
+    } catch (err) {
+      return {
+        ok: false,
+        error:
+          err instanceof Error ? err.message : "URL inválida — use HTTPS.",
+      };
+    }
+
+    let fetched: { text: string; mimeType: string; truncated: boolean };
+    try {
+      fetched = await fetchKbUrl(parsed);
+    } catch (err) {
+      // Falha mantém texto antigo — não chamamos UPDATE.
+      return {
+        ok: false,
+        error:
+          err instanceof Error
+            ? err.message
+            : "Não foi possível baixar o conteúdo da URL.",
+      };
+    }
+
+    try {
+      await updateKbDocumentContent(docId, fetched.text);
+    } catch (err) {
+      return {
+        ok: false,
+        error:
+          err instanceof Error
+            ? err.message
+            : "Erro ao atualizar documento de KB.",
+      };
+    }
+
+    await logAudit({
+      userId: guard.userId,
+      action: "setting_updated",
+      targetType: "nex_kb_document",
+      targetId: docId,
+      details: {
+        action: "refresh",
+        charCount: fetched.text.length,
+        truncated: fetched.truncated,
+      },
+    });
+
+    return {
+      ok: true,
+      data: { charCount: fetched.text.length, truncated: fetched.truncated },
+    };
+  }, "refresh-kb-url");
 }
