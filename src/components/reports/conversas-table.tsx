@@ -78,6 +78,14 @@ interface ConversasTableProps {
    * `ReportFilters` para não vazar contrato server-side.
    */
   conditionGroup?: ConditionGroup;
+  /**
+   * Notifica parent quando rows.length muda — usado pelo `<ExportButton>`
+   * no toolbar pra desabilitar quando a tabela está vazia. Implementado
+   * no body da tabela em T9 (refator). Por ora a interface aceita a prop
+   * mas o callback nunca dispara — `tableRowCount` fica fixo no
+   * `initialRows.length`.
+   */
+  onRowCountChange?: (n: number) => void;
 }
 
 type SortDirection = "asc" | "desc";

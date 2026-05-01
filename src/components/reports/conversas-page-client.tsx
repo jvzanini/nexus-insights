@@ -118,6 +118,11 @@ export function ConversasPageClient({
   const presetsApi = useFilterPresets();
   const [presetsDialogOpen, setPresetsDialogOpen] = useState(false);
 
+  // ---- Row count atual da tabela (pra disable do <ExportButton>) -----
+  // T7: inicializa com initialRows.length. T9 sobrepõe via callback
+  // bidirecional `onRowCountChange` quando filtros client-side reduzirem.
+  const [tableRowCount, setTableRowCount] = useState(initialRows.length);
+
   const handleApplyPreset = useCallback(
     (preset: FilterPreset) => {
       setSortStack(preset.sortStack);
@@ -144,6 +149,8 @@ export function ConversasPageClient({
           presetsApi={presetsApi}
           onApplyPreset={handleApplyPreset}
           onOpenPresetsManager={() => setPresetsDialogOpen(true)}
+          appliedReportFilters={reportFilters}
+          tableRowCount={tableRowCount}
         />
       </div>
 
@@ -157,6 +164,7 @@ export function ConversasPageClient({
             sortStack={sortStack}
             onSortStackChange={setSortStack}
             conditionGroup={composedConditionGroup}
+            onRowCountChange={setTableRowCount}
           />
         </div>
       </ContentLoadingWrapper>

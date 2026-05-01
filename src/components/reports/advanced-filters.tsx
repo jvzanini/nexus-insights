@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ExportButton } from "@/components/reports/export-button";
 import { PeriodPills } from "@/components/reports/period-pills";
 import { useFilterTransition } from "@/components/reports/filter-transition";
 import { AppliedFiltersChips } from "@/components/reports/applied-filters-chips";
@@ -46,6 +47,7 @@ import {
   serializeFilterState,
   type FilterState,
 } from "@/lib/reports/filter-state";
+import type { ReportFilters } from "@/lib/chatwoot/filters";
 import type { PeriodKey as CanonicalPeriodKey } from "@/lib/datetime-core";
 import {
   isPeriodKey,
@@ -106,6 +108,10 @@ export interface AdvancedFiltersProps {
   onApplyPreset: (preset: FilterPreset) => void;
   /** Abrir o `<PresetsDialog>` de gerenciamento. */
   onOpenPresetsManager: () => void;
+  /** Filters aplicados (incluindo search), passados ao `<ExportButton>`. */
+  appliedReportFilters: ReportFilters;
+  /** Quantidade de linhas atualmente mostradas — disable do export quando 0. */
+  tableRowCount: number;
 }
 
 export function AdvancedFilters({
@@ -124,6 +130,8 @@ export function AdvancedFilters({
   presetsApi,
   onApplyPreset,
   onOpenPresetsManager,
+  appliedReportFilters,
+  tableRowCount,
 }: AdvancedFiltersProps) {
   const router = useRouter();
   const { startTransition } = useFilterTransition();
@@ -411,6 +419,12 @@ export function AdvancedFilters({
             </Badge>
           ) : null}
         </Button>
+
+        <ExportButton
+          filters={appliedReportFilters}
+          accountId={accountId ?? 9}
+          rowCount={tableRowCount}
+        />
       </div>
 
       {/* Linha 3 — Chips aplicados (filtros + ordenação + atalhos, condicional) */}
