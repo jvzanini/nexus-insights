@@ -28,12 +28,21 @@ export interface NexMessageProps {
   /** Tipo de mensagem (default "text"). "audio" mostra player + transcrição. */
   kind?: "text" | "audio";
   /**
-   * URL do blob do áudio gravado (apenas em sessão; expira ao recarregar a página).
-   * Quando ausente em mensagem `kind="audio"`, exibe fallback "(áudio expirado)".
+   * URL do blob do áudio gravado. Recriado por sessão (URL.createObjectURL).
+   * Em msgs persistidas: ausente no mount, re-hidratado pelo panel a partir
+   * do IndexedDB (v0.15.4). Quando `hasStoredAudio=true` mas blob ainda não
+   * chegou, mostramos um skeleton; quando ambos ausentes, fallback "(áudio
+   * expirado)" para casos legados (pré-IDB).
    */
   audioBlobUrl?: string | null;
-  /** Duração em segundos (informativa; usada pelo player customizado em T19). */
+  /** Duração em segundos (informativa; usada pelo player customizado). */
   durationSeconds?: number;
+  /**
+   * v0.15.4: indica que o binário do áudio foi salvo em IndexedDB e PODE
+   * ser re-hidratado pelo painel. Só serve pra distinguir skeleton (carregando)
+   * de fallback (expirado/legacy). Não é usado pra fetch dentro deste componente.
+   */
+  hasStoredAudio?: boolean;
 }
 
 export function NexMessage({
@@ -43,6 +52,7 @@ export function NexMessage({
   kind = "text",
   audioBlobUrl,
   durationSeconds,
+  hasStoredAudio,
 }: NexMessageProps) {
   if (role === "loading") return <NexLoadingBubble />;
   if (role === "tool") return <NexToolBubble name={toolName ?? "tool"} />;
@@ -53,6 +63,10 @@ export function NexMessage({
   // Mensagens de áudio (sempre do usuário): player + transcrição abaixo.
   // ------------------------------------------------------------------
   if (kind === "audio") {
+    // 3 estados visuais (v0.15.4):
+    //  - audioBlobUrl presente: player normal.
+    //  - sem blob mas hasStoredAudio: skeleton "carregando áudio…" (IDB hidratando).
+    //  - sem blob e sem hasStoredAudio: fallback "(áudio expirado)" — legacy.
     return (
       <div className="group flex w-full justify-end">
         <div className="relative flex max-w-[85%] flex-col gap-1.5">
@@ -61,16 +75,27 @@ export function NexMessage({
               src={audioBlobUrl}
               durationSeconds={durationSeconds}
             />
+          ) : hasStoredAudio ? (
+            <div
+              role="status"
+              aria-label="Carregando áudio"
+              className="flex items-center gap-2 rounded-2xl bg-violet-600/10 px-3 py-2 text-xs text-muted-foreground"
+            >
+              <span className="inline-block h-3 w-3 animate-pulse rounded-full bg-violet-500/50 motion-reduce:animate-none" />
+              carregando áudio…
+            </div>
           ) : (
             <div className="rounded-2xl bg-muted px-3 py-2 text-xs text-muted-foreground">
               (áudio expirado, escute na sessão original)
             </div>
           )}
-          <div className="rounded-2xl bg-violet-600/15 px-3 py-1.5 text-xs text-muted-foreground">
-            <span aria-hidden="true">📝 </span>
-            {content}
-          </div>
-          <CopyButton text={content} />
+          {content ? (
+            <div className="rounded-2xl bg-violet-600/15 px-3 py-1.5 text-xs text-muted-foreground">
+              <span aria-hidden="true">📝 </span>
+              {content}
+            </div>
+          ) : null}
+          {content ? <CopyButton text={content} /> : null}
         </div>
       </div>
     );

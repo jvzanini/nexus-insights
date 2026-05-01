@@ -58,4 +58,36 @@ describe("NexMessage", () => {
     render(<NexMessage role="user" content="x" />);
     expect(screen.getByLabelText("Copiar mensagem")).toBeInTheDocument();
   });
+
+  it("kind='audio' sem blob mas com hasStoredAudio mostra skeleton 'carregando áudio…' (v0.15.4)", () => {
+    render(
+      <NexMessage
+        role="user"
+        kind="audio"
+        content="transcricao salva"
+        audioBlobUrl={null}
+        hasStoredAudio
+      />,
+    );
+    expect(screen.getByLabelText("Carregando áudio")).toBeInTheDocument();
+    expect(screen.getByText(/carregando áudio/i)).toBeInTheDocument();
+    // Não mostra fallback "expirado" enquanto está carregando.
+    expect(screen.queryByText(/áudio expirado/i)).not.toBeInTheDocument();
+  });
+
+  it("kind='audio' com content vazio (player imediato pré-transcrição) não mostra a bubble de transcrição (v0.15.4)", () => {
+    render(
+      <NexMessage
+        role="user"
+        kind="audio"
+        content=""
+        audioBlobUrl="blob:fake"
+        durationSeconds={3}
+      />,
+    );
+    // Player presente.
+    expect(screen.getByLabelText("Tocar")).toBeInTheDocument();
+    // Não há bubble com 📝 enquanto não há transcrição.
+    expect(screen.queryByText(/📝/)).not.toBeInTheDocument();
+  });
 });

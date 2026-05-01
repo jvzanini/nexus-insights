@@ -1,5 +1,30 @@
 # Changelog
 
+## [v0.15.4] 2026-05-01 — UX bubble audio refinements
+
+> Super_admin reportou (com screenshots): (1) speed button do AudioPlayer com container preto vazando do balão violeta, (2) input bar com layout mudando entre idle e gravando, (3) áudio só aparece DEPOIS da transcrição, (4) áudios somem ao recarregar a página.
+
+### Fix
+
+- **AudioPlayer speed button**: removido ícone Gauge + container preto/borda dura. Agora é texto puro (`1×`/`1.25×`/`1.5×`/`1.75×`/`2×`) com border violet sutil (`border-violet-500/30`) + hover animado (`scale-105` + `bg-violet-500/20` em 150ms) — coerente com o balão violeta do player. Cícla na mesma sequência (`Velocidade Nx (clique para próxima)`).
+- **Input bar layout estável**: container `flex items-end gap-2` IDÊNTICO entre idle e gravando. "Inner area" (`flex-1 rounded-xl border border-input bg-background min-h-9`) sempre no mesmo lugar — só o conteúdo interno alterna entre `<textarea>` (idle) e `<AudioRecorder mode="embedded">` (recording/paused). Mic externo (à esquerda) só aparece em idle. Send externo (gradient violet) SEMPRE no mesmo lugar/tamanho/estilo, com comportamento dinâmico: idle → `handleSend(input)`; recording → `recorderRef.current?.sendNow()`.
+- **Áudio aparece imediatamente ao enviar**: player visível ANTES da transcrição (com loading "Nex pensando" abaixo). Quando Whisper responde, transcrição é injetada na própria msg de áudio (`content: text`); resposta da IA SUBSTITUI a loadingMsg pelo `id` (preserva ordem). Em caso de erro de transcrição, remove loading mas mantém o player do áudio (UX: usuário vê que gravou).
+- **Áudios persistem entre sessões via IndexedDB**: nova lib `src/lib/nex/audio-storage.ts` com `saveAudio/getAudio/deleteAudio/clearAllAudios` (IDBDatabase wrappers, no-op em SSR). `localStorage` continua persistindo metadados das mensagens; o blob binário fica em IDB. No mount, `useEffect` re-hidrata `audioBlobUrl` para mensagens com `hasStoredAudio=true` e blob no IDB. "Limpar conversa" agora chama `clearAllAudios()` também. Skeleton "carregando áudio…" aparece enquanto IDB hidrata; fallback "(áudio expirado)" só em casos legados (pré-v0.15.4).
+
+### Implementação
+
+- `AudioRecorder` ganha prop `mode?: "standalone" | "embedded"` + `forwardRef` + `useImperativeHandle` expondo `start/pauseOrResume/cancel/sendNow`. No modo "embedded": idle retorna `null` (pai mostra textarea); recording/paused renderiza só pulse + texto + timer + pause/cancel — sem container próprio nem Send (Send é externo, no panel).
+- `NexChatPanel` mantém UMA instância de `<AudioRecorder ref mode="embedded">` dentro da inner area; alterna `<textarea>` ↔ recorder via `isRecording` (controlado pelo `onRecordingStateChange` callback). `handleSendClick` decide texto vs `recorder.sendNow()` baseado em `isRecording`.
+- `NexMessage` ganha prop `hasStoredAudio?: boolean` para distinguir 3 estados visuais: player (com blob), skeleton (carregando IDB), fallback (legacy).
+- 5 novos tests: `audio-recorder` modo embedded (idle null + recording sem Send + ref imperativa), `nex-message` skeleton + content vazio, `audio-storage` no-op SSR (4 funções).
+
+### Compat
+
+- localStorage key `nex-history-v1` mantida; mensagens v0.15.3 sem `hasStoredAudio` viram fallback "(áudio expirado)" (esperado — não há blob salvo no IDB para mensagens antigas).
+- API do `AudioRecorder` em modo "standalone" inalterada — caller existente (qualquer outro consumidor futuro) continua funcionando sem mudança.
+
+---
+
 ## [v0.15.3] 2026-05-01 — Hotfix gravação não aparece (regressão da v0.15.2)
 
 > Super_admin reportou: clica no mic, browser mostra ícone de gravação ativa no tab, mas a UI volta ao botão Mic — barra de gravação nunca aparece.

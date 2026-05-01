@@ -16,10 +16,27 @@
  *  - Esc fecha
  *  - Foco vai pro input ao abrir
  *  - Respeita prefers-reduced-motion
+ *
+ * v0.15.4 — UX bubble audio refinements:
+ *  1. Input bar com layout ESTÁVEL: container externo (`flex items-end gap-2`)
+ *     idêntico em idle e gravando. Inner area (a "caixa" com `flex-1`,
+ *     `rounded-xl`, `border border-input`, `bg-background`, `min-h-9`) sempre
+ *     no mesmo lugar — só o conteúdo interno alterna entre textarea e
+ *     `<AudioRecorder mode="embedded">`. Mic externo aparece à esquerda do
+ *     Send só em idle. Send externo SEMPRE no mesmo lugar/tamanho/estilo.
+ *  2. Send dispara dinamicamente: idle → handleSend(input); recording → recorder.sendNow().
+ *  3. Áudio aparece IMEDIATAMENTE ao enviar (player visível antes do Whisper
+ *     responder). Loading "Nex pensando" abaixo. Transcrição é injetada na
+ *     msg de áudio quando Whisper completa. Resposta da IA substitui loading.
+ *  4. Áudios persistem em IndexedDB (saveAudio/getAudio/clearAllAudios) e são
+ *     re-hidratados no reload via useEffect que cria URL.createObjectURL para
+ *     mensagens kind=audio com hasStoredAudio=true. "Limpar conversa" zera
+ *     IDB também.
  */
 
 import { motion, useReducedMotion } from "framer-motion";
 import {
+  Mic,
   MoreVertical,
   Send,
   Sparkles,
@@ -31,9 +48,14 @@ import { toast } from "sonner";
 
 import { sendNexMessage } from "@/lib/actions/nex-chat";
 import type { ChatMessage } from "@/lib/llm/types";
+import {
+  clearAllAudios,
+  getAudio,
+  saveAudio,
+} from "@/lib/nex/audio-storage";
 import { cn } from "@/lib/utils";
 
-import { AudioRecorder } from "./audio-recorder";
+import { AudioRecorder, type AudioRecorderHandle } from "./audio-recorder";
 import { NexMessage, type NexMessageRole } from "./nex-message";
 
 interface NexChatPanelProps {
@@ -50,10 +72,16 @@ interface UiMessage {
   toolName?: string;
   /** Tipo de mensagem; default "text". "audio" renderiza player + transcrição. */
   kind?: "text" | "audio";
-  /** Blob URL da gravação — válido apenas na sessão atual; expira ao recarregar. */
+  /** Blob URL da gravação — recriado por sessão a partir do IDB. */
   audioBlobUrl?: string | null;
   /** Duração em segundos da gravação original. */
   durationSeconds?: number;
+  /**
+   * v0.15.4: sinaliza que o blob original foi salvo em IndexedDB e pode ser
+   * re-hidratado no reload. Persiste no localStorage; o `audioBlobUrl` é
+   * recriado em runtime via `getAudio(id)` → `URL.createObjectURL(blob)`.
+   */
+  hasStoredAudio?: boolean;
 }
 
 const STORAGE_KEY = "nex-history-v1";
@@ -76,14 +104,15 @@ export function NexChatPanel({
   const [pending, setPending] = React.useState(false);
   const [audioFlight, setAudioFlight] = React.useState(false);
   const [menuOpen, setMenuOpen] = React.useState(false);
-  // True enquanto o AudioRecorder está em `recording` ou `paused`. Quando true,
-  // o input bar troca de modo: textarea + label + botão enviar texto somem e
-  // a barra de gravação ocupa toda a largura (fix v0.15.2 BUG 1).
+  // True enquanto o AudioRecorder (embedded) está em recording/paused.
+  // Em vez de remover o textarea/Send, alternamos só o conteúdo da inner area
+  // — o layout do input bar permanece idêntico (v0.15.4 BUG #2).
   const [isRecording, setIsRecording] = React.useState(false);
 
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
   const inputRef = React.useRef<HTMLTextAreaElement | null>(null);
   const audioControllerRef = React.useRef<AbortController | null>(null);
+  const recorderRef = React.useRef<AudioRecorderHandle | null>(null);
 
   // -------- Persistência em localStorage --------
   React.useEffect(() => {
@@ -98,11 +127,64 @@ export function NexChatPanel({
     }
   }, []);
 
+  // v0.15.4: re-hidrata blobs do IndexedDB quando a lista carrega do localStorage.
+  // Cada msg `kind="audio"` com `hasStoredAudio=true` mas sem `audioBlobUrl`
+  // ganha um novo Blob URL criado a partir do binário salvo.
+  React.useEffect(() => {
+    let cancelled = false;
+    const idsToHydrate = messages
+      .filter(
+        (m) => m.kind === "audio" && m.hasStoredAudio && !m.audioBlobUrl,
+      )
+      .map((m) => m.id);
+    if (idsToHydrate.length === 0) return;
+
+    void Promise.all(
+      idsToHydrate.map(async (id) => {
+        const blob = await getAudio(id);
+        return blob ? { id, url: URL.createObjectURL(blob) } : null;
+      }),
+    ).then((results) => {
+      if (cancelled) {
+        // Se desmontamos no meio, revoga URLs criadas pra não vazar.
+        for (const r of results) {
+          if (r) URL.revokeObjectURL(r.url);
+        }
+        return;
+      }
+      const map = new Map<string, string>();
+      for (const r of results) {
+        if (r) map.set(r.id, r.url);
+      }
+      if (map.size === 0) return;
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.kind === "audio" && map.has(m.id)
+            ? { ...m, audioBlobUrl: map.get(m.id) ?? null }
+            : m,
+        ),
+      );
+    });
+
+    return () => {
+      cancelled = true;
+    };
+    // Roda quando o conjunto de IDs com áudio "stored mas sem url" muda —
+    // como são strings, JSON.stringify funciona como key estável o suficiente.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    messages
+      .filter((m) => m.kind === "audio" && m.hasStoredAudio && !m.audioBlobUrl)
+      .map((m) => m.id)
+      .join(","),
+  ]);
+
   React.useEffect(() => {
     try {
       // audioBlobUrl é uma URL de objeto (blob:) que vive só na sessão atual
       // — persistir o valor cria um link quebrado depois do reload. Mantemos
-      // a transcrição (`content`) e marcamos o áudio como expirado.
+      // a transcrição (`content`), o `hasStoredAudio` (que diz se há binário
+      // no IDB) e o `durationSeconds`. O blobUrl é re-hidratado no mount.
       const stripped = messages.map((m) =>
         m.kind === "audio" ? { ...m, audioBlobUrl: null } : m,
       );
@@ -133,7 +215,6 @@ export function NexChatPanel({
   React.useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    // Scroll suave pro fim quando chega mensagem nova ou loading.
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages, pending]);
 
@@ -151,7 +232,6 @@ export function NexChatPanel({
       setInput("");
       setPending(true);
 
-      // Monta histórico para a server action — apenas user/assistant relevantes.
       const history: ChatMessage[] = [
         ...messages
           .filter((m) => m.role === "user" || m.role === "assistant")
@@ -201,22 +281,48 @@ export function NexChatPanel({
     [messages, pending],
   );
 
+  /**
+   * v0.15.4 — fluxo "player imediato":
+   *  1. Cria audioMsg (player visível, sem transcrição) + loadingMsg ("Nex
+   *     pensando") imediatamente. Salva blob em IndexedDB em paralelo.
+   *  2. Faz POST /api/nex/transcribe.
+   *  3. Sucesso: injeta `content: text` na audioMsg e despacha o agente.
+   *     A loadingMsg permanece visível até a IA responder; quando responde,
+   *     SUBSTITUI a loadingMsg pela resposta (não cria outra).
+   *  4. Falha: remove loadingMsg + toast erro. Mantém o player do áudio
+   *     (UX: o usuário vê que gravou, mesmo que o serviço falhou).
+   */
   const handleSendAudio = React.useCallback(
     async (blob: Blob, durationSeconds: number) => {
       if (audioFlight) return;
 
-      // Aborta qualquer transcrição em voo antes de iniciar outra (defensivo).
       audioControllerRef.current?.abort();
       const controller = new AbortController();
       audioControllerRef.current = controller;
 
       const blobUrl = URL.createObjectURL(blob);
-      const loadingId = `al_${Date.now()}`;
+      const ts = Date.now();
+      const audioMsgId = `ua_${ts}`;
+      const loadingMsgId = `al_${ts}`;
+
       setAudioFlight(true);
+      // Player aparece IMEDIATAMENTE (audioMsg) + loading abaixo.
       setMessages((prev) => [
         ...prev,
-        { id: loadingId, role: "loading", content: "" },
+        {
+          id: audioMsgId,
+          role: "user",
+          content: "",
+          kind: "audio",
+          audioBlobUrl: blobUrl,
+          durationSeconds,
+          hasStoredAudio: true,
+        },
+        { id: loadingMsgId, role: "loading", content: "" },
       ]);
+
+      // Salva binário em IDB pra sobreviver ao reload (não bloqueia o fluxo).
+      void saveAudio(audioMsgId, blob);
 
       try {
         const fd = new FormData();
@@ -237,8 +343,8 @@ export function NexChatPanel({
           } catch {
             /* noop — resposta sem JSON */
           }
-          URL.revokeObjectURL(blobUrl);
-          setMessages((prev) => prev.filter((m) => m.id !== loadingId));
+          // Remove só o loading; mantém o player do áudio (gravação preservada).
+          setMessages((prev) => prev.filter((m) => m.id !== loadingMsgId));
           toast.error(`Falha ao transcrever áudio: ${detail}`);
           return;
         }
@@ -246,31 +352,20 @@ export function NexChatPanel({
         const data = (await res.json()) as { text?: string };
         const text = (data?.text ?? "").trim();
         if (!text) {
-          URL.revokeObjectURL(blobUrl);
-          setMessages((prev) => prev.filter((m) => m.id !== loadingId));
+          setMessages((prev) => prev.filter((m) => m.id !== loadingMsgId));
           toast.error("Não conseguimos entender o áudio. Tente de novo.");
           return;
         }
 
-        // Substitui o loading por uma mensagem de áudio do usuário com a
-        // transcrição como `content`. Em paralelo, monta o histórico (texto)
-        // pra mandar pro agente.
-        const audioId = `ua_${Date.now()}`;
-        const audioMsg: UiMessage = {
-          id: audioId,
-          role: "user",
-          content: text,
-          kind: "audio",
-          audioBlobUrl: blobUrl,
-          durationSeconds,
-        };
-
-        // Snapshot ANTES da atualização: serve de base para o histórico.
+        // Snapshot ANTES da transcrição: serve de base do histórico
+        // (não inclui audio/loading novos, evita duplicar).
         const snapshot = messages;
-        setMessages((prev) => [
-          ...prev.filter((m) => m.id !== loadingId),
-          audioMsg,
-        ]);
+        // Injeta content (transcrição) na audioMsg, mantém loading visível.
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === audioMsgId ? { ...m, content: text } : m,
+          ),
+        );
 
         const history: ChatMessage[] = [
           ...snapshot
@@ -282,52 +377,55 @@ export function NexChatPanel({
           { role: "user", content: text },
         ];
 
-        // Chama o agente (mesmo fluxo do envio de texto).
-        setPending(true);
         try {
           const agentRes = await sendNexMessage(history);
           if (agentRes.ok) {
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: `a_${Date.now()}`,
-                role: "assistant",
-                content: agentRes.message,
-              },
-            ]);
+            // Substitui o loadingMsg pela resposta — preserva ordem.
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === loadingMsgId
+                  ? {
+                      id: `a_${Date.now()}`,
+                      role: "assistant",
+                      content: agentRes.message,
+                    }
+                  : m,
+              ),
+            );
           } else {
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: `e_${Date.now()}`,
-                role: "assistant",
-                content: `**Erro:** ${agentRes.error}`,
-              },
-            ]);
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === loadingMsgId
+                  ? {
+                      id: `e_${Date.now()}`,
+                      role: "assistant",
+                      content: `**Erro:** ${agentRes.error}`,
+                    }
+                  : m,
+              ),
+            );
           }
         } catch (err) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: `e_${Date.now()}`,
-              role: "assistant",
-              content: `**Erro inesperado:** ${
-                err instanceof Error ? err.message : String(err)
-              }`,
-            },
-          ]);
-        } finally {
-          setPending(false);
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === loadingMsgId
+                ? {
+                    id: `e_${Date.now()}`,
+                    role: "assistant",
+                    content: `**Erro inesperado:** ${
+                      err instanceof Error ? err.message : String(err)
+                    }`,
+                  }
+                : m,
+            ),
+          );
         }
       } catch (err) {
-        // Aborto silencioso (cancelamento intencional).
         if (err instanceof DOMException && err.name === "AbortError") {
-          URL.revokeObjectURL(blobUrl);
-          setMessages((prev) => prev.filter((m) => m.id !== loadingId));
+          setMessages((prev) => prev.filter((m) => m.id !== loadingMsgId));
           return;
         }
-        URL.revokeObjectURL(blobUrl);
-        setMessages((prev) => prev.filter((m) => m.id !== loadingId));
+        setMessages((prev) => prev.filter((m) => m.id !== loadingMsgId));
         toast.error(
           `Falha ao transcrever áudio: ${
             err instanceof Error ? err.message : String(err)
@@ -341,7 +439,7 @@ export function NexChatPanel({
     [audioFlight, messages],
   );
 
-  // Aborta transcrição em voo e revoga blob URLs no unmount.
+  // Aborta transcrição em voo no unmount.
   React.useEffect(() => {
     return () => {
       audioControllerRef.current?.abort();
@@ -350,7 +448,6 @@ export function NexChatPanel({
   }, []);
 
   const handleClear = React.useCallback(() => {
-    // Revoga blob URLs ainda vivas pra não vazar memória da sessão.
     setMessages((prev) => {
       for (const m of prev) {
         if (m.kind === "audio" && m.audioBlobUrl) {
@@ -369,7 +466,18 @@ export function NexChatPanel({
     } catch {
       /* noop */
     }
+    // v0.15.4: zera IDB de áudios também — "Limpar conversa" deve apagar tudo.
+    void clearAllAudios();
   }, []);
+
+  // Send button click handler (dynamic): idle → texto, recording → recorder.sendNow.
+  const handleSendClick = React.useCallback(() => {
+    if (isRecording) {
+      recorderRef.current?.sendNow();
+      return;
+    }
+    void handleSend(input);
+  }, [handleSend, input, isRecording]);
 
   // -------- Animação de entrada/saída --------
   const transition = reduceMotion
@@ -381,6 +489,12 @@ export function NexChatPanel({
       };
 
   const showSuggestions = messages.length === 0;
+
+  // Send fica habilitado quando: gravando (sempre) OU há texto OU há áudio em voo.
+  // Em idle sem texto e sem voo: disabled.
+  const sendDisabled = isRecording
+    ? false
+    : pending || audioFlight || input.trim().length === 0;
 
   return (
     <>
@@ -422,9 +536,7 @@ export function NexChatPanel({
         style={{ transformOrigin: "bottom right" }}
         className={cn(
           "fixed z-50 flex flex-col overflow-hidden bg-card text-foreground shadow-2xl shadow-black/30",
-          // Mobile: full-screen
           "inset-0 rounded-none border-0",
-          // Desktop: card flutuante bottom-right
           "sm:inset-auto sm:right-6 sm:bottom-24 sm:h-[70vh] sm:max-h-[640px] sm:w-[420px] sm:rounded-2xl sm:border sm:border-border",
         )}
       >
@@ -506,6 +618,7 @@ export function NexChatPanel({
                   kind={m.kind}
                   audioBlobUrl={m.audioBlobUrl}
                   durationSeconds={m.durationSeconds}
+                  hasStoredAudio={m.hasStoredAudio}
                 />
               ))}
               {pending ? (
@@ -515,78 +628,108 @@ export function NexChatPanel({
           )}
         </div>
 
-        {/* Input */}
+        {/* Input bar — layout estável v0.15.4. */}
         <footer className="border-t border-border bg-background/60 px-3 pt-3 pb-3 sm:pb-3">
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              if (isRecording) return;
-              void handleSend(input);
+              handleSendClick();
             }}
             className="flex items-end gap-2"
           >
             {/*
-              Fix v0.15.3: UMA ÚNICA instância do AudioRecorder sempre montada
-              quando audio está habilitado. Antes (v0.15.2) tínhamos duas
-              instâncias condicionadas a `isRecording` — o React desmontava
-              uma e remontava outra ao mudar o flag, perdendo o estado interno
-              (status="recording") e os refs do MediaRecorder. Resultado: ao
-              clicar mic, o stream começava (browser mostrava ícone de
-              gravação) mas a UI voltava ao estado idle com botão mic de novo.
-
-              Agora o AudioRecorder fica montado fora do branch condicional;
-              só os siblings (textarea + send button) somem quando gravando.
-              `flex-1` na barra de gravação faz ela ocupar todo o espaço
-              disponível.
+              Mic externo: aparece SÓ em idle (à esquerda da inner area).
+              Some quando gravando — pra liberar espaço pro embedded recorder
+              e evitar UX confuso (botão Mic ativo durante gravação).
             */}
-            {!isRecording ? (
-              <textarea
-                ref={inputRef}
-                value={input}
-                disabled={pending}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    void handleSend(input);
-                  }
-                }}
-                rows={1}
-                placeholder="Pergunte algo sobre o atendimento…"
-                aria-label="Mensagem para o Agente Nex"
-                className={cn(
-                  "flex-1 resize-none rounded-xl border border-input bg-background px-3 py-2 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground",
-                  "max-h-28 min-h-9 outline-none transition-colors field-sizing-content",
-                  "focus-visible:border-violet-500/60 focus-visible:ring-3 focus-visible:ring-violet-400/30",
-                  "disabled:cursor-not-allowed disabled:opacity-50",
-                )}
-              />
-            ) : null}
-            {audioInputEnabled && !audioFlight ? (
-              <AudioRecorder
-                onSend={(blob, durationSeconds) => {
-                  void handleSendAudio(blob, durationSeconds);
-                }}
-                onRecordingStateChange={setIsRecording}
-                className={isRecording ? "flex-1" : ""}
-              />
-            ) : null}
-            {!isRecording ? (
+            {audioInputEnabled && !isRecording && !audioFlight ? (
               <button
-                type="submit"
-                aria-label="Enviar pergunta"
-                disabled={pending || audioFlight || input.trim().length === 0}
+                type="button"
+                onClick={() => {
+                  void recorderRef.current?.start();
+                }}
+                aria-label="Gravar áudio"
                 className={cn(
-                  "flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-xl",
-                  "bg-gradient-to-br from-violet-600 to-violet-500 text-white shadow-md shadow-violet-600/30",
-                  "transition-all hover:from-violet-500 hover:to-violet-400 hover:shadow-lg",
-                  "focus-visible:ring-3 focus-visible:ring-violet-400/50 focus-visible:outline-none",
-                  "disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none",
+                  "flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors",
+                  "hover:bg-muted hover:text-foreground",
+                  "focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none",
                 )}
               >
-                <Send className="h-4 w-4" strokeWidth={2.25} />
+                <Mic className="h-4 w-4" />
               </button>
             ) : null}
+
+            {/*
+              Inner area: container com mesmas classes em idle e recording.
+              `flex-1` + `rounded-xl border border-input bg-background min-h-9`
+              garantem altura/borda/cor consistentes. Trocamos só o conteúdo
+              dentro: textarea OU AudioRecorder embedded (pulse + timer + pause/cancel).
+            */}
+            <div
+              className={cn(
+                "flex min-h-9 flex-1 items-center rounded-xl border border-input bg-background px-3 py-1 transition-colors",
+                "focus-within:border-violet-500/60 focus-within:ring-3 focus-within:ring-violet-400/30",
+              )}
+            >
+              {!isRecording ? (
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  disabled={pending}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      void handleSend(input);
+                    }
+                  }}
+                  rows={1}
+                  placeholder="Pergunte algo sobre o atendimento…"
+                  aria-label="Mensagem para o Agente Nex"
+                  className={cn(
+                    "flex-1 resize-none bg-transparent py-1 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground",
+                    "max-h-28 outline-none field-sizing-content",
+                    "disabled:cursor-not-allowed disabled:opacity-50",
+                  )}
+                />
+              ) : null}
+              {/*
+                AudioRecorder embedded: controlado via ref do panel.
+                Em idle não renderiza nada (return null). Em recording/paused,
+                renderiza só o conteúdo interno (pulse + texto + timer + pause/cancel).
+                Send é externo (Send do panel chama recorder.sendNow()).
+              */}
+              {audioInputEnabled ? (
+                <AudioRecorder
+                  ref={recorderRef}
+                  mode="embedded"
+                  onSend={(blob, durationSeconds) => {
+                    void handleSendAudio(blob, durationSeconds);
+                  }}
+                  onRecordingStateChange={setIsRecording}
+                />
+              ) : null}
+            </div>
+
+            {/*
+              Send externo: SEMPRE no mesmo lugar/tamanho/estilo. Comportamento
+              dinâmico via handleSendClick: idle dispara texto, recording
+              dispara recorder.sendNow().
+            */}
+            <button
+              type="submit"
+              aria-label={isRecording ? "Enviar áudio" : "Enviar pergunta"}
+              disabled={sendDisabled}
+              className={cn(
+                "flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-xl",
+                "bg-gradient-to-br from-violet-600 to-violet-500 text-white shadow-md shadow-violet-600/30",
+                "transition-all hover:from-violet-500 hover:to-violet-400 hover:shadow-lg",
+                "focus-visible:ring-3 focus-visible:ring-violet-400/50 focus-visible:outline-none",
+                "disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none",
+              )}
+            >
+              <Send className="h-4 w-4" strokeWidth={2.25} />
+            </button>
           </form>
           {!isRecording ? (
             <p className="mt-1.5 px-1 text-[11px] text-muted-foreground">

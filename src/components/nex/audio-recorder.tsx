@@ -3,12 +3,18 @@
 /**
  * AudioRecorder — UI de gravação de áudio para o chat do Nex.
  *
- * Estados:
- *  - `idle`: render apenas botão `<Mic>` (lucide). Click → start.
- *  - `recording` | `paused`: barra completa com indicador pulse, timer mm:ss
- *    (aria-live="polite"), botões pausar/retomar, cancelar e enviar.
+ * Modos (v0.15.4):
+ *  - `standalone` (default): comportamento clássico — botão Mic em idle e
+ *    barra completa (pulse + timer + pause/cancel/send) em recording/paused.
+ *    O componente gerencia o seu próprio container.
+ *  - `embedded`: o pai (NexChatPanel) controla o layout do input bar e o
+ *    container externo. O componente expõe via `useImperativeHandle` os
+ *    métodos `start/pauseOrResume/cancel/sendNow`. Em idle não renderiza
+ *    nada (o pai mostra textarea); em recording/paused renderiza apenas
+ *    o conteúdo interno (pulse + texto + timer + pause/cancel) — sem Send
+ *    interno (o Send fica externo, no pai, gerido pelo `sendNow`).
  *
- * Integração com MediaRecorder API:
+ * MediaRecorder API:
  *  - `navigator.mediaDevices.getUserMedia({ audio: true })` para o stream.
  *  - Mime preferido `audio/webm;codecs=opus`, fallback `audio/webm`,
  *    fallback `audio/mp4` (Safari).
@@ -19,8 +25,6 @@
  * Erros:
  *  - `NotAllowedError` → toast "Acesso ao microfone negado".
  *  - Outros → toast "Não foi possível acessar o microfone".
- *  - `MediaRecorder` undefined → botão mic em estado disabled (caller normal-
- *    mente já filtra via prop `audioInputEnabled`, mas defendemos aqui também).
  *
  * Acessibilidade:
  *  - aria-label nos botões (Gravar/Pausar/Retomar/Cancelar/Enviar).
@@ -36,16 +40,32 @@ import { cn } from "@/lib/utils";
 
 /* -------------------------------------------------------------------------- */
 
+export type AudioRecorderMode = "standalone" | "embedded";
+
+export interface AudioRecorderHandle {
+  start: () => Promise<void>;
+  pauseOrResume: () => void;
+  cancel: () => void;
+  sendNow: () => void;
+}
+
 export interface AudioRecorderProps {
   onSend: (blob: Blob, durationSeconds: number) => void;
   onCancel?: () => void;
   /**
    * Disparado sempre que o recorder entra/sai do estado ativo
-   * (`recording` ou `paused`). Usado pelo NexChatPanel para esconder
-   * o textarea + botão enviar texto enquanto a gravação está em curso,
-   * dando o input bar inteiro pra barra de gravação.
+   * (`recording` ou `paused`). Usado pelo NexChatPanel para alternar o
+   * conteúdo da inner area do input bar.
    */
   onRecordingStateChange?: (active: boolean) => void;
+  /**
+   * v0.15.4: "standalone" (default) renderiza container próprio + botão Mic
+   * em idle + barra com Send interno em recording/paused. "embedded" expõe
+   * controle imperativo (start/pauseOrResume/cancel/sendNow) e renderiza
+   * apenas o conteúdo interno (pulse + texto + timer + pause/cancel) sem
+   * container nem Send — o Send fica no input bar externo (Send do panel).
+   */
+  mode?: AudioRecorderMode;
   className?: string;
 }
 
@@ -62,12 +82,16 @@ const PREFERRED_MIMES = [
 
 /* -------------------------------------------------------------------------- */
 
-export function AudioRecorder({
-  onSend,
-  onCancel,
-  onRecordingStateChange,
-  className,
-}: AudioRecorderProps) {
+function AudioRecorderImpl(
+  {
+    onSend,
+    onCancel,
+    onRecordingStateChange,
+    mode = "standalone",
+    className,
+  }: AudioRecorderProps,
+  ref: React.Ref<AudioRecorderHandle>,
+) {
   const [status, setStatus] = React.useState<Status>("idle");
   const [elapsed, setElapsed] = React.useState(0); // segundos.
 
@@ -88,7 +112,6 @@ export function AudioRecorder({
   const sendingRef = React.useRef(false);
 
   // Notifica o pai quando o recorder fica ativo (recording/paused) ou volta a idle.
-  // O callback é estável o suficiente; se mudar entre renders, reage normalmente.
   React.useEffect(() => {
     onRecordingStateChange?.(status !== "idle");
   }, [status, onRecordingStateChange]);
@@ -156,10 +179,6 @@ export function AudioRecorder({
     return undefined;
   }, []);
 
-  // ----------------------------------------------------------------------
-  // Auto-send quando atinge MAX_DURATION_SEC.
-  // ----------------------------------------------------------------------
-
   // ref-fwd dos callbacks para o tick acessar sem refresh do interval.
   const sendNowRef = React.useRef<() => void>(() => {});
 
@@ -167,9 +186,6 @@ export function AudioRecorder({
   // start / pause / resume / cancel / sendNow
   // ----------------------------------------------------------------------
 
-  // Helper interno — (re)inicia o tick que atualiza o elapsed visível.
-  // Usa a fórmula `recordedMsRef + (now - segmentStartedAtRef)` para que
-  // pausas suspendam a contagem. O tick é destruído em pause/cancel/send.
   const startTick = React.useCallback(() => {
     if (tickRef.current !== null) {
       clearInterval(tickRef.current);
@@ -180,7 +196,6 @@ export function AudioRecorder({
       const seconds = Math.floor(totalMs / 1000);
       setElapsed(seconds);
       if (seconds >= MAX_DURATION_SEC) {
-        // Toast aviso 1x, depois auto-send.
         toast.message("Limite de 5 min — enviando…");
         sendNowRef.current();
       }
@@ -234,8 +249,6 @@ export function AudioRecorder({
     if (status === "recording") {
       try {
         rec.pause();
-        // Acumula o tempo do segmento atual em recordedMsRef e para o tick —
-        // assim o timer mostrado congela no valor exato em que pausou.
         recordedMsRef.current += Date.now() - segmentStartedAtRef.current;
         if (tickRef.current !== null) {
           clearInterval(tickRef.current);
@@ -248,8 +261,6 @@ export function AudioRecorder({
     } else if (status === "paused") {
       try {
         rec.resume();
-        // Inicia novo segmento: tempo passa a ser medido a partir de agora;
-        // o que ficou acumulado em recordedMsRef permanece intacto.
         segmentStartedAtRef.current = Date.now();
         startTick();
         setStatus("recording");
@@ -262,7 +273,7 @@ export function AudioRecorder({
   const cancel = React.useCallback(() => {
     const rec = recorderRef.current;
     if (rec && rec.state !== "inactive") {
-      rec.onstop = null; // não queremos pegar os dados.
+      rec.onstop = null;
       try {
         rec.stop();
       } catch {
@@ -281,9 +292,6 @@ export function AudioRecorder({
     if (!rec) return;
     sendingRef.current = true;
 
-    // Trava o duration ANTES do stop assíncrono — onstop dispara depois.
-    // Se estiver pausado, recordedMsRef já contém o tempo total congelado;
-    // se estiver gravando, soma o segmento atual em curso.
     const totalMs =
       recordedMsRef.current +
       (rec.state === "recording"
@@ -305,7 +313,6 @@ export function AudioRecorder({
       try {
         rec.stop();
       } catch {
-        // Caso stop falhe, libera flag e cleanup.
         sendingRef.current = false;
         cleanup();
         setStatus("idle");
@@ -321,10 +328,98 @@ export function AudioRecorder({
   }, [sendNow]);
 
   // ----------------------------------------------------------------------
+  // Imperative handle — usado pelo NexChatPanel no modo "embedded".
+  // ----------------------------------------------------------------------
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      start,
+      pauseOrResume,
+      cancel,
+      sendNow,
+    }),
+    [start, pauseOrResume, cancel, sendNow],
+  );
+
+  // ----------------------------------------------------------------------
   // Render.
   // ----------------------------------------------------------------------
 
-  // Estado idle → apenas o botão mic.
+  const isRecording = status === "recording";
+
+  // ============================================================
+  // Modo "embedded": pai controla container e Send. Renderizamos
+  // só o conteúdo interno, sem padding/borda própria, sem Mic em
+  // idle (pai mostra textarea), sem Send (pai tem um Send externo).
+  // ============================================================
+  if (mode === "embedded") {
+    if (status === "idle") return null;
+    return (
+      <div
+        role="group"
+        aria-label="Gravação de áudio"
+        className={cn("flex w-full items-center gap-2", className)}
+      >
+        <span
+          aria-hidden="true"
+          className={cn(
+            "inline-block h-2 w-2 shrink-0 rounded-full",
+            isRecording
+              ? "animate-pulse bg-rose-500 motion-reduce:animate-none"
+              : "bg-muted-foreground/50",
+          )}
+        />
+
+        <span className="text-xs font-medium text-foreground">
+          {isRecording ? "Gravando" : "Pausado"}
+        </span>
+
+        <span
+          aria-live="polite"
+          aria-atomic="true"
+          className="font-mono text-xs tabular-nums text-muted-foreground"
+        >
+          {formatTime(elapsed)}
+        </span>
+
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            onClick={pauseOrResume}
+            aria-label={isRecording ? "Pausar gravação" : "Retomar gravação"}
+            className={cn(
+              "flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors",
+              "hover:bg-muted hover:text-foreground",
+              "focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none",
+            )}
+          >
+            {isRecording ? (
+              <Pause className="h-3.5 w-3.5" />
+            ) : (
+              <Play className="ml-0.5 h-3.5 w-3.5" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={cancel}
+            aria-label="Cancelar gravação"
+            className={cn(
+              "flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors",
+              "hover:bg-rose-500/10 hover:text-rose-500",
+              "focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:outline-none",
+            )}
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ============================================================
+  // Modo "standalone" (default): comportamento clássico.
+  // ============================================================
   if (status === "idle") {
     return (
       <button
@@ -348,9 +443,6 @@ export function AudioRecorder({
     );
   }
 
-  // Recording / paused → barra completa.
-  const isRecording = status === "recording";
-
   return (
     <div
       role="group"
@@ -360,7 +452,6 @@ export function AudioRecorder({
         className,
       )}
     >
-      {/* Indicador pulse — vermelho quando recording, cinza quando paused. */}
       <span
         aria-hidden="true"
         className={cn(
@@ -384,7 +475,6 @@ export function AudioRecorder({
       </span>
 
       <div className="ml-auto flex items-center gap-1">
-        {/* Pause / Resume */}
         <button
           type="button"
           onClick={pauseOrResume}
@@ -402,7 +492,6 @@ export function AudioRecorder({
           )}
         </button>
 
-        {/* Cancel */}
         <button
           type="button"
           onClick={cancel}
@@ -416,7 +505,6 @@ export function AudioRecorder({
           <X className="h-3.5 w-3.5" />
         </button>
 
-        {/* Send */}
         <button
           type="button"
           onClick={sendNow}
@@ -433,6 +521,13 @@ export function AudioRecorder({
     </div>
   );
 }
+
+export const AudioRecorder = React.forwardRef<
+  AudioRecorderHandle,
+  AudioRecorderProps
+>(AudioRecorderImpl);
+
+AudioRecorder.displayName = "AudioRecorder";
 
 /* -------------------------------------------------------------------------- */
 

@@ -7,15 +7,17 @@
  *  - Play / Pause.
  *  - Barra de progresso (input range bound em audio.currentTime).
  *  - Tempo `mm:ss / mm:ss` em fonte tabular (sem layout shift).
- *  - Botão cíclico de velocidade (1× → 1.25× → 1.5× → 1.75× → 2× → 1×) com
- *    ícone Gauge — substituiu o `<select>` (v0.15.2: super_admin reportou
- *    que dropdown tinha UX ruim em mobile e parecia "deslocado" do design).
+ *  - Botão cíclico de velocidade (1× → 1.25× → 1.5× → 1.75× → 2× → 1×).
+ *
+ * v0.15.4: speed button removeu o ícone Gauge e o container preto/borda
+ * dura — agora é texto puro com border violet sutil + hover animado
+ * (scale 1.05 + bg violet 20%) coerente com o balão violeta do player.
  *
  * Speed memorizada por instância (não persiste entre mensagens).
  * Sem dependência de WebAudio — usa apenas API HTMLMediaElement.
  */
 
-import { Gauge, Pause, Play } from "lucide-react";
+import { Pause, Play } from "lucide-react";
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
@@ -162,13 +164,14 @@ export function AudioPlayer({
         aria-label={`Velocidade ${formatSpeed(speed)} (clique para próxima)`}
         title={`Velocidade ${formatSpeed(speed)} — clique para próxima`}
         className={cn(
-          "flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded-md border border-violet-300/50 bg-background/60 px-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-background",
+          // v0.15.4: sem ícone, sem container preto. Texto puro com border
+          // violeta sutil que combina com o balão. Hover animado (scale + bg).
+          "flex h-6 shrink-0 cursor-pointer items-center justify-center rounded-md border border-violet-500/30 bg-transparent px-1.5 font-mono text-[11px] font-medium tabular-nums text-violet-700 dark:text-violet-300",
+          "transition-all duration-150 hover:scale-105 hover:border-violet-500/60 hover:bg-violet-500/20",
           "focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none",
-          "dark:border-violet-700/40",
         )}
       >
-        <Gauge className="h-3 w-3" aria-hidden="true" />
-        <span className="font-mono tabular-nums">{formatSpeed(speed)}</span>
+        {formatSpeed(speed)}
       </button>
     </div>
   );

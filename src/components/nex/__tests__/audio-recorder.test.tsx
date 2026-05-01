@@ -4,6 +4,7 @@
 import "@testing-library/jest-dom";
 
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import * as React from "react";
 
 import { installMediaRecorderMock } from "@/test-utils/media-recorder-mock";
 
@@ -76,6 +77,33 @@ describe("AudioRecorder", () => {
     // Cancelar volta a idle → false.
     fireEvent.click(screen.getByLabelText(/cancelar gravação/i));
     expect(onRecordingStateChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("modo 'embedded': em idle não renderiza nada; expõe controle imperativo via ref (v0.15.4)", async () => {
+    const ref = React.createRef<
+      import("@/components/nex/audio-recorder").AudioRecorderHandle
+    >();
+    const onSend = jest.fn();
+    const { container, rerender } = render(
+      <AudioRecorder ref={ref} mode="embedded" onSend={onSend} />,
+    );
+
+    // Em idle, não renderiza nada (return null).
+    expect(container.firstChild).toBeNull();
+    expect(screen.queryByLabelText(/gravar áudio/i)).not.toBeInTheDocument();
+
+    // Inicia via ref imperativa.
+    await act(async () => {
+      await ref.current?.start();
+    });
+
+    rerender(<AudioRecorder ref={ref} mode="embedded" onSend={onSend} />);
+
+    // Recording: renderiza pulse + Gravando + timer + pause/cancel — sem Send.
+    expect(screen.getByText("Gravando")).toBeInTheDocument();
+    expect(screen.getByLabelText(/pausar gravação/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/cancelar gravação/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/enviar áudio/i)).not.toBeInTheDocument();
   });
 
   it("timer congela ao pausar e retoma de onde parou (v0.15.2 BUG 2)", async () => {
