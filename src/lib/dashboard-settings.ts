@@ -1,7 +1,14 @@
-import "server-only";
+// Server-side helper que lê 3 chaves de `app_settings` para configuração
+// do dashboard (week_starts_on / week_mode / month_mode).
+//
+// NOTA (v0.13.8): removido `import "server-only"` por suspeita de causar
+// erro de Server Components render quando importado de Server Actions.
+// A função continua server-only de fato — `pgPool` import é server-only.
 
 import { pgPool } from "@/lib/pg-pool";
-import type { DashboardMode, WeekStartsOn } from "@/lib/dashboard-period";
+
+export type WeekStartsOn = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+export type DashboardMode = "current" | "rolling";
 
 export interface DashboardSettings {
   weekStartsOn: WeekStartsOn;
@@ -9,7 +16,7 @@ export interface DashboardSettings {
   monthMode: DashboardMode;
 }
 
-const DEFAULTS: DashboardSettings = {
+export const DASHBOARD_DEFAULTS: DashboardSettings = {
   weekStartsOn: 1,
   weekMode: "current",
   monthMode: "current",
@@ -19,27 +26,20 @@ const KEYS = [
   "dashboard.week_starts_on",
   "dashboard.week_mode",
   "dashboard.month_mode",
-] as const;
+];
 
-const CACHE_TTL_MS = 60_000;
-let cache: { value: DashboardSettings; expiresAt: number } | null = null;
-
-export function invalidateDashboardSettings(): void {
-  cache = null;
-}
-
+/**
+ * Lê settings do banco. SEMPRE retorna objeto válido — em caso de erro,
+ * retorna defaults. Nunca joga.
+ */
 export async function getDashboardSettings(): Promise<DashboardSettings> {
-  const now = Date.now();
-  if (cache && cache.expiresAt > now) return cache.value;
-
-  let weekStartsOn: WeekStartsOn = DEFAULTS.weekStartsOn;
-  let weekMode: DashboardMode = DEFAULTS.weekMode;
-  let monthMode: DashboardMode = DEFAULTS.monthMode;
+  let weekStartsOn: WeekStartsOn = DASHBOARD_DEFAULTS.weekStartsOn;
+  let weekMode: DashboardMode = DASHBOARD_DEFAULTS.weekMode;
+  let monthMode: DashboardMode = DASHBOARD_DEFAULTS.monthMode;
 
   try {
     const res = await pgPool.query<{ key: string; value: unknown }>(
-      "SELECT key, value FROM app_settings WHERE key = ANY($1::text[])",
-      [KEYS as unknown as string[]],
+      `SELECT key, value FROM app_settings WHERE key IN ('dashboard.week_starts_on', 'dashboard.week_mode', 'dashboard.month_mode')`,
     );
     for (const row of res.rows ?? []) {
       const raw =
@@ -62,10 +62,16 @@ export async function getDashboardSettings(): Promise<DashboardSettings> {
       }
     }
   } catch (err) {
-    console.warn("[dashboard-settings] falha ao ler:", (err as Error).message);
+    console.warn(
+      "[dashboard-settings] erro ao ler — usando defaults:",
+      (err as Error).message,
+    );
   }
 
-  const value: DashboardSettings = { weekStartsOn, weekMode, monthMode };
-  cache = { value, expiresAt: now + CACHE_TTL_MS };
-  return value;
+  return { weekStartsOn, weekMode, monthMode };
+}
+
+/** Mantido para compat — agora no-op porque não há cache. */
+export function invalidateDashboardSettings(): void {
+  // no-op
 }

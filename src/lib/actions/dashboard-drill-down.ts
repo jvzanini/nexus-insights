@@ -20,28 +20,20 @@ import {
   type NoResponseDrillDownData,
   type ByTeamDrillDownData,
 } from "@/lib/chatwoot/queries/dashboard-drill-down";
+import { getDashboardPeriod } from "@/lib/dashboard-period";
 import {
-  getDashboardPeriod,
-  type DashboardPeriod,
-  type DashboardMode,
-  type WeekStartsOn,
-} from "@/lib/dashboard-period";
-import { getDashboardSettings } from "@/lib/dashboard-settings";
+  getDashboardSettings,
+  DASHBOARD_DEFAULTS,
+} from "@/lib/dashboard-settings";
 import { getPlatformTz, DEFAULT_TZ } from "@/lib/datetime";
 
-export type { DashboardPeriod };
+export type DashboardPeriod = "hoje" | "semana" | "mes";
 
 export interface DrillDownActionResult<T> {
   success: boolean;
   data?: T;
   error?: string;
 }
-
-const FALLBACK_SETTINGS = {
-  weekStartsOn: 1 as WeekStartsOn,
-  weekMode: "current" as DashboardMode,
-  monthMode: "current" as DashboardMode,
-};
 
 /**
  * Calcula período conforme configurações do dashboard, com fallback
@@ -52,11 +44,16 @@ async function resolvePeriodRanges(period: DashboardPeriod): Promise<{
   prev: { start: Date; end: Date };
 }> {
   let tz = DEFAULT_TZ;
-  let settings = FALLBACK_SETTINGS;
+  let settings = DASHBOARD_DEFAULTS;
   try {
-    [tz, settings] = await Promise.all([getPlatformTz(), getDashboardSettings()]);
+    tz = await getPlatformTz();
   } catch (err) {
-    console.error("[drill-down resolvePeriodRanges] usando defaults:", err);
+    console.error("[drill-down] getPlatformTz falhou:", err);
+  }
+  try {
+    settings = await getDashboardSettings();
+  } catch (err) {
+    console.error("[drill-down] getDashboardSettings falhou:", err);
   }
   const mode =
     period === "semana"

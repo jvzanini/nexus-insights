@@ -7,20 +7,15 @@ import {
   type DashboardData,
 } from "@/lib/chatwoot/queries/dashboard-data";
 import { shouldExcludeMatrixIA } from "@/lib/reports/exclude-matrix-ia";
-import {
-  getDashboardPeriod,
-  type DashboardPeriod,
-  type DashboardMode,
-  type WeekStartsOn,
-} from "@/lib/dashboard-period";
+import { getDashboardPeriod } from "@/lib/dashboard-period";
 import {
   getDashboardSettings,
-  type DashboardSettings,
+  DASHBOARD_DEFAULTS,
 } from "@/lib/dashboard-settings";
 import { getPlatformTz, DEFAULT_TZ } from "@/lib/datetime";
 import type { AuthUser } from "@/lib/auth-helpers";
 
-export type { DashboardPeriod };
+export type DashboardPeriod = "hoje" | "semana" | "mes";
 
 export interface DashboardActionResult {
   success: boolean;
@@ -28,40 +23,16 @@ export interface DashboardActionResult {
     accounts: Array<{ id: number; name: string }>;
     activeAccountId: number;
     /** Echo da config aplicada para o frontend usar no eixo X. */
-    settings: DashboardSettings;
+    settings: {
+      weekStartsOn: number;
+      weekMode: "current" | "rolling";
+      monthMode: "current" | "rolling";
+    };
     tz: string;
     /** ISO string do início e fim do período aplicado. */
     range: { start: string; end: string };
   };
   error?: string;
-}
-
-const FALLBACK_SETTINGS: DashboardSettings = {
-  weekStartsOn: 1 as WeekStartsOn,
-  weekMode: "current" as DashboardMode,
-  monthMode: "current" as DashboardMode,
-};
-
-/**
- * Lê settings com try/catch defensivo. Em caso de qualquer falha,
- * retorna os defaults (segunda + atual + atual). NÃO joga.
- */
-async function safeGetDashboardSettings(): Promise<DashboardSettings> {
-  try {
-    return await getDashboardSettings();
-  } catch (err) {
-    console.error("[getDashboardSettings] erro — usando defaults:", err);
-    return FALLBACK_SETTINGS;
-  }
-}
-
-async function safeGetPlatformTz(): Promise<string> {
-  try {
-    return await getPlatformTz();
-  } catch (err) {
-    console.error("[getPlatformTz] erro — usando default:", err);
-    return DEFAULT_TZ;
-  }
 }
 
 export async function getDashboardData(args: {
@@ -95,14 +66,22 @@ export async function getDashboardData(args: {
     const allAccounts = await getKnownAccounts();
     const accounts = allAccounts.filter((a) => accessibleIds.includes(a.id));
 
-    // Settings + tz + matrix com fallbacks defensivos
-    const [tz, settings, excludeMatrixIA] = await Promise.all([
-      safeGetPlatformTz(),
-      safeGetDashboardSettings(),
-      shouldExcludeMatrixIA(),
-    ]);
+    // Settings + tz com fallbacks defensivos individuais
+    let tz = DEFAULT_TZ;
+    let settings = DASHBOARD_DEFAULTS;
+    try {
+      tz = await getPlatformTz();
+    } catch (err) {
+      console.error("[getDashboardData] getPlatformTz falhou:", err);
+    }
+    try {
+      settings = await getDashboardSettings();
+    } catch (err) {
+      console.error("[getDashboardData] getDashboardSettings falhou:", err);
+    }
 
-    // Calcula período conforme config (current/rolling + weekStartsOn)
+    const excludeMatrixIA = await shouldExcludeMatrixIA();
+
     const mode =
       args.period === "semana"
         ? settings.weekMode
@@ -130,7 +109,11 @@ export async function getDashboardData(args: {
         ...result.data,
         accounts,
         activeAccountId: args.accountId,
-        settings,
+        settings: {
+          weekStartsOn: settings.weekStartsOn,
+          weekMode: settings.weekMode,
+          monthMode: settings.monthMode,
+        },
         tz,
         range: {
           start: current.start.toISOString(),

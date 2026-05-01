@@ -43,18 +43,22 @@ describe("getDashboardSettings", () => {
     expect(s.weekStartsOn).toBe(1);
   });
 
-  it("cache: 2ª chamada não consulta banco", async () => {
+  it("não cacheia (lê DB sempre) — cache module-level removido em v0.13.8", async () => {
     mockQuery.mockResolvedValue({ rowCount: 0, rows: [] });
     await getDashboardSettings();
-    await getDashboardSettings();
-    expect(mockQuery).toHaveBeenCalledTimes(1);
-  });
-
-  it("invalidate força nova leitura", async () => {
-    mockQuery.mockResolvedValue({ rowCount: 0, rows: [] });
-    await getDashboardSettings();
-    invalidateDashboardSettings();
     await getDashboardSettings();
     expect(mockQuery).toHaveBeenCalledTimes(2);
+  });
+
+  it("invalidateDashboardSettings é no-op (mantido por compat)", () => {
+    expect(() => invalidateDashboardSettings()).not.toThrow();
+  });
+
+  it("query falha → retorna defaults sem jogar", async () => {
+    mockQuery.mockRejectedValue(new Error("DB down"));
+    const s = await getDashboardSettings();
+    expect(s.weekStartsOn).toBe(1);
+    expect(s.weekMode).toBe("current");
+    expect(s.monthMode).toBe("current");
   });
 });

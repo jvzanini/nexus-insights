@@ -1,5 +1,30 @@
 # Changelog
 
+## [v0.13.8] 2026-05-01 — Hotfix RSC error: simplifica dashboard-settings
+
+> O v0.13.7 trazia o pipeline `getDashboardPeriod + getDashboardSettings` de volta, mas o dashboard mostrou "An error occurred in the Server Components render. The specific message is omitted in production builds...". A combinação `import "server-only"` + `let cache` module-level + import via Server Action files (`actions/dashboard.ts` e `actions/dashboard-drill-down.ts`) parece causar bundling/RSC issue no Next.js 16.
+
+### Mudou
+
+- **`src/lib/dashboard-settings.ts` simplificado**:
+  - Removido `import "server-only"` (a função continua server-only de fato — `pgPool` é server-only).
+  - Removido `let cache` module-level. Lê DB toda vez (chamada raríssima — settings change manual via super_admin).
+  - `invalidateDashboardSettings()` virou no-op (mantido por compat).
+  - SQL muda de `WHERE key = ANY($1::text[])` para `WHERE key IN ('...', '...', '...')` (sem parâmetros, mais resiliente).
+  - `WeekStartsOn` e `DashboardMode` re-exportados daqui (centralização).
+  - `DASHBOARD_DEFAULTS` exportado para uso pelos Server Actions.
+
+- **`src/lib/actions/dashboard.ts` e `dashboard-drill-down.ts` simplificados**:
+  - Imports cleaner — só o que é usado em runtime.
+  - Try/catch defensivo individual em volta de cada `await getPlatformTz()` e `await getDashboardSettings()`.
+  - Uso direto de `DASHBOARD_DEFAULTS` em vez de declarar `FALLBACK_SETTINGS` local.
+
+### Verificação
+
+- `npm test` 668 testes / 76 suites PASS (1 suite alheia falha pré-existente sem relação) · typecheck 0 erros · build verde.
+
+---
+
 ## [v0.13.7] 2026-05-01 — Dashboard chart redesenhado: 4 séries multi-cor + checkboxes + eixo cheio respeitando configs
 
 > Resolve 4 problemas reportados pelo João após o v0.13.3:
