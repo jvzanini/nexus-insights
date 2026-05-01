@@ -1,7 +1,7 @@
 import type { TourConfig } from "@/components/tour/tour-provider";
 
 export const conversasTour: TourConfig = {
-  id: "conversas",
+  id: "conversas-v2", // bump pra forçar re-onboarding após revamp v0.17
   title: "Tour do relatório de Conversas",
   steps: [
     {
@@ -17,7 +17,7 @@ export const conversasTour: TourConfig = {
       targetSelector: "[data-tour='search']",
       title: "Busca rápida",
       description:
-        "Pesquise por nome, telefone ou documento. Pressione Enter para aplicar a busca aos resultados.",
+        "Digite e pressione Enter para buscar em nome, WhatsApp, documento, departamento, atendente, status, prioridade, etiquetas e atributos.",
       placement: "bottom",
     },
     {
@@ -25,15 +25,22 @@ export const conversasTour: TourConfig = {
       targetSelector: "[data-tour='filters-chip']",
       title: "Filtros avançados",
       description:
-        "Refine por caixa de entrada, departamento, atendente, status e prioridade. Abre painel centralizado com modos Simples e Avançado (E/OU).",
+        "Refine por caixa de entrada, departamento, atendente, status, prioridade e etiquetas. Modos Simples e Avançado (E/OU).",
       placement: "bottom",
     },
     {
       id: "sorting-chip",
       targetSelector: "[data-tour='sorting-chip']",
       title: "Ordenação",
+      description: "Combine múltiplos critérios de ordenação em sequência.",
+      placement: "bottom",
+    },
+    {
+      id: "export",
+      targetSelector: "[data-tour='export']",
+      title: "Exportar",
       description:
-        "Combine múltiplos critérios de ordenação em sequência.",
+        "Gera planilha XLSX com todos os resultados (até 50.000), respeitando filtros, ordenação e busca.",
       placement: "bottom",
     },
     {
@@ -53,14 +60,6 @@ export const conversasTour: TourConfig = {
       placement: "top",
     },
     {
-      id: "page-size",
-      targetSelector: "[data-tour='page-size']",
-      title: "Tamanho da página",
-      description:
-        "Escolha 50 ou 100 conversas por página, ou 'Todos' para carregar tudo (até o limite máximo).",
-      placement: "top",
-    },
-    {
       id: "table",
       targetSelector: "[data-tour='table']",
       title: "Lista de conversas",
@@ -73,7 +72,7 @@ export const conversasTour: TourConfig = {
       targetSelector: "[data-tour='drill-down']",
       title: "Drill-down inline",
       description:
-        "Clique na linha para expandir e ver WhatsApp, etiquetas e atributos completos sem sair do relatório.",
+        "Clique em qualquer parte da linha (exceto o número) para expandir e ver WhatsApp, etiquetas e atributos.",
       placement: "right",
     },
     {
@@ -81,8 +80,8 @@ export const conversasTour: TourConfig = {
       targetSelector: "[data-tour='open-action']",
       title: "Abrir no Chatwoot",
       description:
-        "Clique em Abrir para ir direto à conversa no Chatwoot, em uma nova aba.",
-      placement: "left",
+        "Clique no número da conversa (#) para abrir direto no Chatwoot, em uma nova aba.",
+      placement: "right",
     },
     {
       id: "refresh",
