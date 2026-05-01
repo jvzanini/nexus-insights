@@ -11,9 +11,16 @@ import "server-only";
  *
  * Limite de iterações (5) impede runaway. Custo/tempo são acumulados e
  * registrados via `logUsage`.
+ *
+ * v0.15.0 (T8): system prompt é composto dinamicamente a partir de
+ * `nex_settings` + KB (via `composeSystemPrompt`). Caller pode passar
+ * `promptOverride` (usado pelo Playground) e `isPlayground=true` para
+ * pular `logUsage` (testes não devem inflar consumo real).
  */
 
 import { shouldExcludeMatrixIAForRole } from "@/lib/reports/exclude-matrix-ia";
+import { composeSystemPrompt, getNexPromptConfig } from "@/lib/nex/prompt";
+import { getKbDocsForPrompt } from "@/lib/nex/kb";
 
 import { getActiveLlmClient } from "../get-client";
 import { NEX_TOOLS } from "../tools/definitions";
@@ -22,24 +29,35 @@ import type { ChatMessage, ChatUsage, ProviderClient } from "../types";
 
 import { logUsage } from "./usage-logger";
 
-const SYSTEM_PROMPT = `Você é o Agente Nex, assistente da plataforma Nexus Insights que analisa dados de atendimento do Chatwoot.
-
-CAPACIDADES:
-- Consultar conversas, mensagens, contatos e atendentes via tools.
-- Agregar e cruzar dados (contagens, médias, top N).
-- Responder em português brasileiro de forma direta e útil.
-
-DIRETRIZES:
-- Sempre use tools para obter dados — nunca invente números.
-- Se o período for ambíguo, pergunte (ex.: "Você quer dados de hoje ou de outro período?").
-- Apresente números formatados em pt-BR (ex.: 1.234, 12,5%).
-- Para listas longas, mostre os 5-10 primeiros e ofereça expandir.
-- Se a tool retornar erro, explique brevemente e sugira reformular.
-- Use markdown para listas, **negrito** para destacar, tabelas quando útil.
-
-TIMEZONE PADRÃO: America/Sao_Paulo (BRT). "Hoje" = das 00:00 às 23:59:59 BRT.`;
-
 const MAX_ITERATIONS = 5;
+
+/** Cap defensivo para `promptOverride` (Playground). */
+const MAX_PROMPT_OVERRIDE_LEN = 50_000;
+
+/** Fallback usado se a leitura de `nex_settings` ou da KB falhar. */
+const FALLBACK_SYSTEM_PROMPT = "Você é o Agente Nex.";
+
+/**
+ * Resolve o system prompt:
+ *  - Se `promptOverride` for fornecido (Playground): usa direto, com cap.
+ *  - Senão: lê config + KB e compõe via `composeSystemPrompt`.
+ *  - Em caso de falha (DB indisponível), devolve fallback mínimo.
+ */
+async function resolveSystemPrompt(
+  promptOverride?: string,
+): Promise<string> {
+  if (typeof promptOverride === "string" && promptOverride.length > 0) {
+    return promptOverride.slice(0, MAX_PROMPT_OVERRIDE_LEN);
+  }
+  try {
+    const cfg = await getNexPromptConfig();
+    const kbDocs = cfg.kbEnabled ? await getKbDocsForPrompt() : [];
+    return composeSystemPrompt(cfg, kbDocs);
+  } catch (err) {
+    console.warn("[runNexAgent] resolveSystemPrompt falhou:", err);
+    return FALLBACK_SYSTEM_PROMPT;
+  }
+}
 
 export interface RunNexInput {
   messages: ChatMessage[];
@@ -49,6 +67,10 @@ export interface RunNexInput {
   platformRole?: string | null;
   /** Injeção opcional para testes — quando ausente, usa `getActiveLlmClient()`. */
   clientOverride?: ProviderClient | null;
+  /** Override completo do system prompt (Playground). */
+  promptOverride?: string;
+  /** Quando true, pula TODOS os `logUsage` calls (Playground). */
+  isPlayground?: boolean;
 }
 
 export type RunNexResult =
@@ -69,8 +91,9 @@ export async function runNexAgent(args: RunNexInput): Promise<RunNexResult> {
     };
   }
 
+  const systemPrompt = await resolveSystemPrompt(args.promptOverride);
   const conversation: ChatMessage[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: systemPrompt },
     ...args.messages,
   ];
 
@@ -108,21 +131,25 @@ export async function runNexAgent(args: RunNexInput): Promise<RunNexResult> {
     // provider (cada `client.chat()` é cobrado/contado separadamente). v0.12.2
     // agregava em 1 row no fim, mascarando chamadas intermediárias de
     // tool-calling.
-    void logUsage({
-      provider: client.provider,
-      model: client.model,
-      tokensInput: result.usage.tokensInput,
-      tokensOutput: result.usage.tokensOutput,
-      costUsd: result.usage.costUsd,
-      promptChars: i === 0 ? JSON.stringify(args.messages).length : 0,
-      responseChars: result.message.length,
-      userId: args.userId,
-      durationMs: Date.now() - iterStart,
-      errorMessage:
-        i === MAX_ITERATIONS - 1 && result.toolCalls?.length
-          ? "max_iterations_exceeded"
-          : undefined,
-    });
+    //
+    // T8: quando `isPlayground === true`, NUNCA logamos — é só teste manual.
+    if (!args.isPlayground) {
+      void logUsage({
+        provider: client.provider,
+        model: client.model,
+        tokensInput: result.usage.tokensInput,
+        tokensOutput: result.usage.tokensOutput,
+        costUsd: result.usage.costUsd,
+        promptChars: i === 0 ? JSON.stringify(args.messages).length : 0,
+        responseChars: result.message.length,
+        userId: args.userId,
+        durationMs: Date.now() - iterStart,
+        errorMessage:
+          i === MAX_ITERATIONS - 1 && result.toolCalls?.length
+            ? "max_iterations_exceeded"
+            : undefined,
+      });
+    }
 
     if (!result.toolCalls?.length) {
       // Resposta final.

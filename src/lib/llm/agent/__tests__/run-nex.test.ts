@@ -20,10 +20,30 @@ jest.mock("@/lib/llm/agent/usage-logger", () => ({
 // jest. v0.13.7: mockamos para isolar o orquestrador.
 jest.mock("@/lib/reports/exclude-matrix-ia", () => ({
   shouldExcludeMatrixIA: jest.fn(async () => false),
+  shouldExcludeMatrixIAForRole: jest.fn(async () => false),
+}));
+
+// T8: runNexAgent compõe o system prompt dinamicamente via @/lib/nex/prompt +
+// @/lib/nex/kb. Mockamos para isolar o orquestrador dos efeitos de DB/server-only.
+jest.mock("@/lib/nex/prompt", () => ({
+  getNexPromptConfig: jest.fn(async () => ({
+    personality: "",
+    tone: "",
+    guardrails: [],
+    advancedOverride: null,
+    audioInputEnabled: false,
+    kbEnabled: false,
+  })),
+  composeSystemPrompt: jest.fn(() => "BASE"),
+}));
+
+jest.mock("@/lib/nex/kb", () => ({
+  getKbDocsForPrompt: jest.fn(async () => []),
 }));
 
 import { runNexAgent } from "@/lib/llm/agent/run-nex";
 import { executeTool } from "@/lib/llm/tools/executor";
+import { logUsage } from "@/lib/llm/agent/usage-logger";
 import type { ChatRequest, ChatResult, ProviderClient } from "@/lib/llm/types";
 
 function makeFakeClient(handlers: Array<(req: ChatRequest) => ChatResult>): ProviderClient {
@@ -141,5 +161,51 @@ describe("runNexAgent", () => {
     if (!result.ok) {
       expect(result.error).toMatch(/loop/i);
     }
+  });
+
+  it("não chama logUsage quando isPlayground=true", async () => {
+    const fake = makeFakeClient([
+      () => ({
+        message: "Resposta playground.",
+        usage: { tokensInput: 12, tokensOutput: 6, costUsd: 0.0001 },
+      }),
+    ]);
+
+    const result = await runNexAgent({
+      messages: [{ role: "user", content: "Teste" }],
+      accountId: 9,
+      clientOverride: fake,
+      isPlayground: true,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(logUsage).not.toHaveBeenCalled();
+  });
+
+  it("usa promptOverride como system prompt quando fornecido", async () => {
+    let capturedSystem: string | null = null;
+    const fake: ProviderClient = {
+      provider: "openai",
+      model: "gpt-4o-mini",
+      async chat(req: ChatRequest): Promise<ChatResult> {
+        const sys = req.messages.find((m) => m.role === "system");
+        capturedSystem =
+          (sys && typeof sys.content === "string" ? sys.content : null) ?? null;
+        return {
+          message: "ok",
+          usage: { tokensInput: 1, tokensOutput: 1, costUsd: 0 },
+        };
+      },
+    };
+
+    const result = await runNexAgent({
+      messages: [{ role: "user", content: "oi" }],
+      accountId: 9,
+      clientOverride: fake,
+      promptOverride: "CUSTOM",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(capturedSystem).toBe("CUSTOM");
   });
 });
