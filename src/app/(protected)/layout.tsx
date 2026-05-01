@@ -9,6 +9,8 @@ import { getKnownAccounts } from "@/lib/tenant";
 import { prisma } from "@/lib/prisma";
 import { getVisibleReportKeys } from "@/lib/reports/visibility";
 import { isNexBubbleEnabled } from "@/lib/llm/get-nex-bubble-enabled";
+import { getNexPromptConfig } from "@/lib/nex/prompt";
+import { getActiveLlmConfig } from "@/lib/llm/get-active-config";
 
 const ACCOUNT_COOKIE = "nexus_active_account";
 const DEFAULT_ACCOUNT_ID = 9; // Matrix Fitness Group
@@ -83,6 +85,17 @@ export default async function ProtectedLayout({
   const enabledReportKeys = Array.from(await getVisibleReportKeys(platformRole));
   const nexBubbleEnabled = await isNexBubbleEnabled();
 
+  // Áudio só está realmente habilitado quando: (1) admin marcou o toggle no
+  // Prompt config E (2) o provider ativo é OpenAI (única transcrição via
+  // Whisper hoje). Falhas em qualquer leitura caem para `false` para não
+  // quebrar a SSR de páginas internas.
+  const [llmActive, nexCfg] = await Promise.all([
+    getActiveLlmConfig().catch(() => null),
+    getNexPromptConfig().catch(() => null),
+  ]);
+  const effectiveAudioEnabled =
+    !!nexCfg?.audioInputEnabled && llmActive?.provider === "openai";
+
   return (
     <TourProvider>
       <div className="flex h-screen overflow-hidden bg-background">
@@ -95,7 +108,9 @@ export default async function ProtectedLayout({
         <main className="flex-1 overflow-y-auto overscroll-contain">
           <div className="pt-16 pb-8 sm:pt-8">{children}</div>
         </main>
-        {nexBubbleEnabled ? <NexBubble /> : null}
+        {nexBubbleEnabled ? (
+          <NexBubble audioInputEnabled={effectiveAudioEnabled} />
+        ) : null}
       </div>
     </TourProvider>
   );

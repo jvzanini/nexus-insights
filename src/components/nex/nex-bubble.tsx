@@ -21,7 +21,15 @@ import { cn } from "@/lib/utils";
 
 import { NexChatPanel } from "./nex-chat-panel";
 
-export function NexBubble() {
+interface NexBubbleProps {
+  /**
+   * Quando `true`, o painel libera o botão de gravação de áudio. Resolvido pelo
+   * layout protegido com base no toggle do Prompt config + provider ativo.
+   */
+  audioInputEnabled?: boolean;
+}
+
+export function NexBubble({ audioInputEnabled = false }: NexBubbleProps = {}) {
   const [open, setOpen] = React.useState(false);
   const reduceMotion = useReducedMotion();
 
@@ -81,7 +89,11 @@ export function NexBubble() {
 
       <AnimatePresence>
         {open ? (
-          <NexChatPanel open={open} onClose={() => setOpen(false)} />
+          <NexChatPanel
+            open={open}
+            onClose={() => setOpen(false)}
+            audioInputEnabled={audioInputEnabled}
+          />
         ) : null}
       </AnimatePresence>
     </>

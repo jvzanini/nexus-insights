@@ -27,16 +27,20 @@ import {
   X,
 } from "lucide-react";
 import * as React from "react";
+import { toast } from "sonner";
 
 import { sendNexMessage } from "@/lib/actions/nex-chat";
 import type { ChatMessage } from "@/lib/llm/types";
 import { cn } from "@/lib/utils";
 
+import { AudioRecorder } from "./audio-recorder";
 import { NexMessage, type NexMessageRole } from "./nex-message";
 
 interface NexChatPanelProps {
   open: boolean;
   onClose: () => void;
+  /** Quando `true`, exibe o botão de gravação de áudio na input bar. */
+  audioInputEnabled?: boolean;
 }
 
 interface UiMessage {
@@ -44,6 +48,12 @@ interface UiMessage {
   role: NexMessageRole;
   content: string;
   toolName?: string;
+  /** Tipo de mensagem; default "text". "audio" renderiza player + transcrição. */
+  kind?: "text" | "audio";
+  /** Blob URL da gravação — válido apenas na sessão atual; expira ao recarregar. */
+  audioBlobUrl?: string | null;
+  /** Duração em segundos da gravação original. */
+  durationSeconds?: number;
 }
 
 const STORAGE_KEY = "nex-history-v1";
@@ -55,15 +65,21 @@ const SUGGESTIONS: string[] = [
   "Quantas mensagens não respondidas hoje?",
 ];
 
-export function NexChatPanel({ open, onClose }: NexChatPanelProps) {
+export function NexChatPanel({
+  open,
+  onClose,
+  audioInputEnabled = false,
+}: NexChatPanelProps) {
   const reduceMotion = useReducedMotion();
   const [messages, setMessages] = React.useState<UiMessage[]>([]);
   const [input, setInput] = React.useState("");
   const [pending, setPending] = React.useState(false);
+  const [audioFlight, setAudioFlight] = React.useState(false);
   const [menuOpen, setMenuOpen] = React.useState(false);
 
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
   const inputRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const audioControllerRef = React.useRef<AbortController | null>(null);
 
   // -------- Persistência em localStorage --------
   React.useEffect(() => {
@@ -80,9 +96,15 @@ export function NexChatPanel({ open, onClose }: NexChatPanelProps) {
 
   React.useEffect(() => {
     try {
+      // audioBlobUrl é uma URL de objeto (blob:) que vive só na sessão atual
+      // — persistir o valor cria um link quebrado depois do reload. Mantemos
+      // a transcrição (`content`) e marcamos o áudio como expirado.
+      const stripped = messages.map((m) =>
+        m.kind === "audio" ? { ...m, audioBlobUrl: null } : m,
+      );
       window.localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify(messages.slice(-MAX_HISTORY)),
+        JSON.stringify(stripped.slice(-MAX_HISTORY)),
       );
     } catch {
       /* noop */
@@ -175,8 +197,168 @@ export function NexChatPanel({ open, onClose }: NexChatPanelProps) {
     [messages, pending],
   );
 
+  const handleSendAudio = React.useCallback(
+    async (blob: Blob, durationSeconds: number) => {
+      if (audioFlight) return;
+
+      // Aborta qualquer transcrição em voo antes de iniciar outra (defensivo).
+      audioControllerRef.current?.abort();
+      const controller = new AbortController();
+      audioControllerRef.current = controller;
+
+      const blobUrl = URL.createObjectURL(blob);
+      const loadingId = `al_${Date.now()}`;
+      setAudioFlight(true);
+      setMessages((prev) => [
+        ...prev,
+        { id: loadingId, role: "loading", content: "" },
+      ]);
+
+      try {
+        const fd = new FormData();
+        fd.append("audio", blob, "recording.webm");
+        fd.append("language", "pt");
+
+        const res = await fetch("/api/nex/transcribe", {
+          method: "POST",
+          body: fd,
+          signal: controller.signal,
+        });
+
+        if (!res.ok) {
+          let detail = `HTTP ${res.status}`;
+          try {
+            const data = (await res.json()) as { error?: string };
+            if (data?.error) detail = data.error;
+          } catch {
+            /* noop — resposta sem JSON */
+          }
+          URL.revokeObjectURL(blobUrl);
+          setMessages((prev) => prev.filter((m) => m.id !== loadingId));
+          toast.error(`Falha ao transcrever áudio: ${detail}`);
+          return;
+        }
+
+        const data = (await res.json()) as { text?: string };
+        const text = (data?.text ?? "").trim();
+        if (!text) {
+          URL.revokeObjectURL(blobUrl);
+          setMessages((prev) => prev.filter((m) => m.id !== loadingId));
+          toast.error("Não conseguimos entender o áudio. Tente de novo.");
+          return;
+        }
+
+        // Substitui o loading por uma mensagem de áudio do usuário com a
+        // transcrição como `content`. Em paralelo, monta o histórico (texto)
+        // pra mandar pro agente.
+        const audioId = `ua_${Date.now()}`;
+        const audioMsg: UiMessage = {
+          id: audioId,
+          role: "user",
+          content: text,
+          kind: "audio",
+          audioBlobUrl: blobUrl,
+          durationSeconds,
+        };
+
+        // Snapshot ANTES da atualização: serve de base para o histórico.
+        const snapshot = messages;
+        setMessages((prev) => [
+          ...prev.filter((m) => m.id !== loadingId),
+          audioMsg,
+        ]);
+
+        const history: ChatMessage[] = [
+          ...snapshot
+            .filter((m) => m.role === "user" || m.role === "assistant")
+            .map((m) => ({
+              role: m.role as "user" | "assistant",
+              content: m.content,
+            })),
+          { role: "user", content: text },
+        ];
+
+        // Chama o agente (mesmo fluxo do envio de texto).
+        setPending(true);
+        try {
+          const agentRes = await sendNexMessage(history);
+          if (agentRes.ok) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: `a_${Date.now()}`,
+                role: "assistant",
+                content: agentRes.message,
+              },
+            ]);
+          } else {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: `e_${Date.now()}`,
+                role: "assistant",
+                content: `**Erro:** ${agentRes.error}`,
+              },
+            ]);
+          }
+        } catch (err) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `e_${Date.now()}`,
+              role: "assistant",
+              content: `**Erro inesperado:** ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+            },
+          ]);
+        } finally {
+          setPending(false);
+        }
+      } catch (err) {
+        // Aborto silencioso (cancelamento intencional).
+        if (err instanceof DOMException && err.name === "AbortError") {
+          URL.revokeObjectURL(blobUrl);
+          setMessages((prev) => prev.filter((m) => m.id !== loadingId));
+          return;
+        }
+        URL.revokeObjectURL(blobUrl);
+        setMessages((prev) => prev.filter((m) => m.id !== loadingId));
+        toast.error(
+          `Falha ao transcrever áudio: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      } finally {
+        setAudioFlight(false);
+        audioControllerRef.current = null;
+      }
+    },
+    [audioFlight, messages],
+  );
+
+  // Aborta transcrição em voo e revoga blob URLs no unmount.
+  React.useEffect(() => {
+    return () => {
+      audioControllerRef.current?.abort();
+      audioControllerRef.current = null;
+    };
+  }, []);
+
   const handleClear = React.useCallback(() => {
-    setMessages([]);
+    // Revoga blob URLs ainda vivas pra não vazar memória da sessão.
+    setMessages((prev) => {
+      for (const m of prev) {
+        if (m.kind === "audio" && m.audioBlobUrl) {
+          try {
+            URL.revokeObjectURL(m.audioBlobUrl);
+          } catch {
+            /* noop */
+          }
+        }
+      }
+      return [];
+    });
     setMenuOpen(false);
     try {
       window.localStorage.removeItem(STORAGE_KEY);
@@ -317,6 +499,9 @@ export function NexChatPanel({ open, onClose }: NexChatPanelProps) {
                   role={m.role}
                   content={m.content}
                   toolName={m.toolName}
+                  kind={m.kind}
+                  audioBlobUrl={m.audioBlobUrl}
+                  durationSeconds={m.durationSeconds}
                 />
               ))}
               {pending ? (
@@ -356,10 +541,17 @@ export function NexChatPanel({ open, onClose }: NexChatPanelProps) {
                 "disabled:cursor-not-allowed disabled:opacity-50",
               )}
             />
+            {audioInputEnabled && !audioFlight ? (
+              <AudioRecorder
+                onSend={(blob, durationSeconds) => {
+                  void handleSendAudio(blob, durationSeconds);
+                }}
+              />
+            ) : null}
             <button
               type="submit"
               aria-label="Enviar pergunta"
-              disabled={pending || input.trim().length === 0}
+              disabled={pending || audioFlight || input.trim().length === 0}
               className={cn(
                 "flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-xl",
                 "bg-gradient-to-br from-violet-600 to-violet-500 text-white shadow-md shadow-violet-600/30",
