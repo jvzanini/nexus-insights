@@ -48,25 +48,25 @@ enum AuditAction {
 }
 
 model User {
-  id                  String              @id @default(uuid()) @db.Uuid
-  email               String              @unique
+  id                  String               @id @default(uuid()) @db.Uuid
+  email               String               @unique
   password            String
   name                String
-  platformRole        PlatformRole        @default(viewer) @map("platform_role")
-  isOwner             Boolean             @default(false) @map("is_owner")
-  isActive            Boolean             @default(true) @map("is_active")
-  mustChangePassword  Boolean             @default(true) @map("must_change_password")
-  passwordChangedAt   DateTime?           @map("password_changed_at")
-  avatarUrl           String?             @map("avatar_url")
-  theme               Theme               @default(system)
-  emailVerifiedAt     DateTime?           @map("email_verified_at")
-  lastLoginAt         DateTime?           @map("last_login_at")
-  lastLoginIp         String?             @map("last_login_ip")
-  createdAt           DateTime            @default(now()) @map("created_at")
-  updatedAt           DateTime            @updatedAt @map("updated_at")
-  createdById         String?             @db.Uuid @map("created_by_id")
-  createdBy           User?               @relation("UserCreator", fields: [createdById], references: [id])
-  createdUsers        User[]              @relation("UserCreator")
+  platformRole        PlatformRole         @default(viewer) @map("platform_role")
+  isOwner             Boolean              @default(false) @map("is_owner")
+  isActive            Boolean              @default(true) @map("is_active")
+  mustChangePassword  Boolean              @default(true) @map("must_change_password")
+  passwordChangedAt   DateTime?            @map("password_changed_at")
+  avatarUrl           String?              @map("avatar_url")
+  theme               Theme                @default(system)
+  emailVerifiedAt     DateTime?            @map("email_verified_at")
+  lastLoginAt         DateTime?            @map("last_login_at")
+  lastLoginIp         String?              @map("last_login_ip")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+  createdById         String?              @map("created_by_id") @db.Uuid
+  createdBy           User?                @relation("UserCreator", fields: [createdById], references: [id])
+  createdUsers        User[]               @relation("UserCreator")
   accountAccess       UserAccountAccess[]
   teamAccess          UserTeamAccess[]
   audits              AuditLog[]
@@ -80,12 +80,12 @@ model User {
 
 model UserAccountAccess {
   id                  String   @id @default(uuid()) @db.Uuid
-  userId              String   @db.Uuid @map("user_id")
+  userId              String   @map("user_id") @db.Uuid
   user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   chatwootAccountId   Int      @map("chatwoot_account_id")
   chatwootAccountName String   @map("chatwoot_account_name")
   grantedAt           DateTime @default(now()) @map("granted_at")
-  grantedById         String?  @db.Uuid @map("granted_by_id")
+  grantedById         String?  @map("granted_by_id") @db.Uuid
 
   @@unique([userId, chatwootAccountId])
   @@index([chatwootAccountId])
@@ -94,7 +94,7 @@ model UserAccountAccess {
 
 model UserTeamAccess {
   id                String   @id @default(uuid()) @db.Uuid
-  userId            String   @db.Uuid @map("user_id")
+  userId            String   @map("user_id") @db.Uuid
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   chatwootAccountId Int      @map("chatwoot_account_id")
   chatwootTeamId    Int      @map("chatwoot_team_id")
@@ -112,14 +112,14 @@ model AppSetting {
   description String?
   category    String
   updatedAt   DateTime @updatedAt @map("updated_at")
-  updatedById String?  @db.Uuid @map("updated_by_id")
+  updatedById String?  @map("updated_by_id") @db.Uuid
 
   @@map("app_settings")
 }
 
 model AuditLog {
   id         String      @id @default(uuid()) @db.Uuid
-  userId     String?     @db.Uuid @map("user_id")
+  userId     String?     @map("user_id") @db.Uuid
   user       User?       @relation(fields: [userId], references: [id])
   action     AuditAction
   targetType String?     @map("target_type")
@@ -136,7 +136,7 @@ model AuditLog {
 
 model PasswordResetToken {
   id        String    @id @default(uuid()) @db.Uuid
-  userId    String    @db.Uuid @map("user_id")
+  userId    String    @map("user_id") @db.Uuid
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   tokenHash String    @unique @map("token_hash")
   expiresAt DateTime  @map("expires_at")
@@ -149,7 +149,7 @@ model PasswordResetToken {
 
 model EmailChangeToken {
   id         String    @id @default(uuid()) @db.Uuid
-  userId     String    @db.Uuid @map("user_id")
+  userId     String    @map("user_id") @db.Uuid
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   newEmail   String    @map("new_email")
   tokenHash  String    @unique @map("token_hash")
@@ -168,8 +168,8 @@ model LlmConfig {
   isActive        Boolean  @default(true) @map("is_active")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
-  createdById     String?  @db.Uuid @map("created_by_id")
-  credentialId    String?  @db.Uuid @map("credential_id")
+  createdById     String?  @map("created_by_id") @db.Uuid
+  credentialId    String?  @map("credential_id") @db.Uuid
 
   @@map("llm_configs")
 }
@@ -182,7 +182,7 @@ model LlmCredential {
   last4           String
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
-  createdById     String?  @db.Uuid @map("created_by_id")
+  createdById     String?  @map("created_by_id") @db.Uuid
 
   @@unique([provider, label], name: "llm_credentials_provider_label_idx")
   @@index([provider, updatedAt(sort: Desc)], name: "llm_credentials_provider_updated_idx")
@@ -198,7 +198,7 @@ model LlmUsage {
   costUsd       Decimal  @map("cost_usd") @db.Decimal(10, 6)
   promptChars   Int      @map("prompt_chars")
   responseChars Int      @map("response_chars")
-  userId        String?  @db.Uuid @map("user_id")
+  userId        String?  @map("user_id") @db.Uuid
   durationMs    Int?     @map("duration_ms")
   errorMessage  String?  @map("error_message")
   costBrl       Decimal? @map("cost_brl") @db.Decimal(12, 6)
@@ -211,49 +211,68 @@ model LlmUsage {
 }
 
 model NexSettings {
-  id                  String   @id @default("global")
-  personality         String   @default("")
-  tone                String   @default("")
-  guardrails          Json     @default("[]")
-  advancedOverride    String?  @map("advanced_override")
-  audioInputEnabled   Boolean  @default(false) @map("audio_input_enabled")
-  kbEnabled           Boolean  @default(true) @map("kb_enabled")
-  updatedAt           DateTime @updatedAt @map("updated_at")
-  updatedById         String?  @db.Uuid @map("updated_by_id")
+  id                String    @id @default("global")
+  personality       String    @default("")
+  tone              String    @default("")
+  guardrails        Json      @default("[]")
+  advancedOverride  String?   @map("advanced_override")
+  audioInputEnabled Boolean   @default(false) @map("audio_input_enabled")
+  kbEnabled         Boolean   @default(true) @map("kb_enabled")
+  seededDefaultsAt  DateTime? @map("seeded_defaults_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  updatedById       String?   @map("updated_by_id") @db.Uuid
 
   @@map("nex_settings")
 }
 
+enum NexKbKind {
+  PDF
+  TXT
+  URL
+}
+
 model NexKbDocument {
-  id            String   @id @default(uuid()) @db.Uuid
+  id            String    @id @default(uuid()) @db.Uuid
   name          String
-  mimeType      String   @map("mime_type")
-  fileSize      Int      @map("file_size")
-  charCount     Int      @map("char_count")
-  extractedText String   @map("extracted_text")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  uploadedById  String?  @db.Uuid @map("uploaded_by_id")
+  kind          NexKbKind @default(PDF)
+  sourceUrl     String?   @map("source_url")
+  mimeType      String    @map("mime_type")
+  fileSize      Int       @map("file_size")
+  charCount     Int       @map("char_count")
+  extractedText String    @map("extracted_text")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  uploadedById  String?   @map("uploaded_by_id") @db.Uuid
 
   @@index([createdAt(sort: Desc)])
   @@map("nex_kb_documents")
 }
 
+model ChatwootAccountUrl {
+  accountId   Int      @id @map("account_id")
+  publicUrl   String   @map("public_url")
+  label       String?
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  updatedById String?  @map("updated_by_id") @db.Uuid
+
+  @@map("chatwoot_account_urls")
+}
+
 model ChatwootFactsDailyByAccount {
-  accountId       Int      @map("account_id")
-  bucketDate      DateTime @map("bucket_date") @db.Date
-  received        Int      @default(0)
-  resolved        Int      @default(0)
-  openAtEod       Int      @default(0) @map("open_at_eod")
-  pendingAtEod    Int      @default(0) @map("pending_at_eod")
-  messagesIn      Int      @default(0) @map("messages_in")
-  messagesOut     Int      @default(0) @map("messages_out")
-  uniqueContacts  Int      @default(0) @map("unique_contacts")
-  frtP50Seconds   Int?     @map("frt_p50_seconds")
-  frtP90Seconds   Int?     @map("frt_p90_seconds")
-  rtP50Seconds    Int?     @map("rt_p50_seconds")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  accountId      Int      @map("account_id")
+  bucketDate     DateTime @map("bucket_date") @db.Date
+  received       Int      @default(0)
+  resolved       Int      @default(0)
+  openAtEod      Int      @default(0) @map("open_at_eod")
+  pendingAtEod   Int      @default(0) @map("pending_at_eod")
+  messagesIn     Int      @default(0) @map("messages_in")
+  messagesOut    Int      @default(0) @map("messages_out")
+  uniqueContacts Int      @default(0) @map("unique_contacts")
+  frtP50Seconds  Int?     @map("frt_p50_seconds")
+  frtP90Seconds  Int?     @map("frt_p90_seconds")
+  rtP50Seconds   Int?     @map("rt_p50_seconds")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   @@id([accountId, bucketDate])
   @@index([accountId, bucketDate(sort: Desc)])
@@ -261,21 +280,21 @@ model ChatwootFactsDailyByAccount {
 }
 
 model ChatwootFactsDailyByInbox {
-  accountId       Int      @map("account_id")
-  bucketDate      DateTime @map("bucket_date") @db.Date
-  inboxId         Int      @map("inbox_id")
-  received        Int      @default(0)
-  resolved        Int      @default(0)
-  openAtEod       Int      @default(0) @map("open_at_eod")
-  pendingAtEod    Int      @default(0) @map("pending_at_eod")
-  messagesIn      Int      @default(0) @map("messages_in")
-  messagesOut     Int      @default(0) @map("messages_out")
-  uniqueContacts  Int      @default(0) @map("unique_contacts")
-  frtP50Seconds   Int?     @map("frt_p50_seconds")
-  frtP90Seconds   Int?     @map("frt_p90_seconds")
-  rtP50Seconds    Int?     @map("rt_p50_seconds")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  accountId      Int      @map("account_id")
+  bucketDate     DateTime @map("bucket_date") @db.Date
+  inboxId        Int      @map("inbox_id")
+  received       Int      @default(0)
+  resolved       Int      @default(0)
+  openAtEod      Int      @default(0) @map("open_at_eod")
+  pendingAtEod   Int      @default(0) @map("pending_at_eod")
+  messagesIn     Int      @default(0) @map("messages_in")
+  messagesOut    Int      @default(0) @map("messages_out")
+  uniqueContacts Int      @default(0) @map("unique_contacts")
+  frtP50Seconds  Int?     @map("frt_p50_seconds")
+  frtP90Seconds  Int?     @map("frt_p90_seconds")
+  rtP50Seconds   Int?     @map("rt_p50_seconds")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   @@id([accountId, bucketDate, inboxId])
   @@index([accountId, bucketDate(sort: Desc)])
@@ -284,22 +303,22 @@ model ChatwootFactsDailyByInbox {
 }
 
 model ChatwootFactsDailyByAgent {
-  accountId       Int      @map("account_id")
-  bucketDate      DateTime @map("bucket_date") @db.Date
-  agentId         Int      @map("agent_id")
-  received        Int      @default(0)
-  resolved        Int      @default(0)
-  openAtEod       Int      @default(0) @map("open_at_eod")
-  pendingAtEod    Int      @default(0) @map("pending_at_eod")
-  messagesIn      Int      @default(0) @map("messages_in")
-  messagesOut     Int      @default(0) @map("messages_out")
-  uniqueContacts  Int      @default(0) @map("unique_contacts")
-  frtP50Seconds   Int?     @map("frt_p50_seconds")
-  frtP90Seconds   Int?     @map("frt_p90_seconds")
-  rtP50Seconds    Int?     @map("rt_p50_seconds")
-  isActiveAtEod   Boolean  @default(true) @map("is_active_at_eod")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  accountId      Int      @map("account_id")
+  bucketDate     DateTime @map("bucket_date") @db.Date
+  agentId        Int      @map("agent_id")
+  received       Int      @default(0)
+  resolved       Int      @default(0)
+  openAtEod      Int      @default(0) @map("open_at_eod")
+  pendingAtEod   Int      @default(0) @map("pending_at_eod")
+  messagesIn     Int      @default(0) @map("messages_in")
+  messagesOut    Int      @default(0) @map("messages_out")
+  uniqueContacts Int      @default(0) @map("unique_contacts")
+  frtP50Seconds  Int?     @map("frt_p50_seconds")
+  frtP90Seconds  Int?     @map("frt_p90_seconds")
+  rtP50Seconds   Int?     @map("rt_p50_seconds")
+  isActiveAtEod  Boolean  @default(true) @map("is_active_at_eod")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   @@id([accountId, bucketDate, agentId])
   @@index([accountId, bucketDate(sort: Desc)])
@@ -308,22 +327,22 @@ model ChatwootFactsDailyByAgent {
 }
 
 model ChatwootFactsDailyByTeam {
-  accountId       Int      @map("account_id")
-  bucketDate      DateTime @map("bucket_date") @db.Date
+  accountId      Int      @map("account_id")
+  bucketDate     DateTime @map("bucket_date") @db.Date
   // teamId=0 sentinel for 'no team'
-  teamId          Int      @default(0) @map("team_id")
-  received        Int      @default(0)
-  resolved        Int      @default(0)
-  openAtEod       Int      @default(0) @map("open_at_eod")
-  pendingAtEod    Int      @default(0) @map("pending_at_eod")
-  messagesIn      Int      @default(0) @map("messages_in")
-  messagesOut     Int      @default(0) @map("messages_out")
-  uniqueContacts  Int      @default(0) @map("unique_contacts")
-  frtP50Seconds   Int?     @map("frt_p50_seconds")
-  frtP90Seconds   Int?     @map("frt_p90_seconds")
-  rtP50Seconds    Int?     @map("rt_p50_seconds")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  teamId         Int      @default(0) @map("team_id")
+  received       Int      @default(0)
+  resolved       Int      @default(0)
+  openAtEod      Int      @default(0) @map("open_at_eod")
+  pendingAtEod   Int      @default(0) @map("pending_at_eod")
+  messagesIn     Int      @default(0) @map("messages_in")
+  messagesOut    Int      @default(0) @map("messages_out")
+  uniqueContacts Int      @default(0) @map("unique_contacts")
+  frtP50Seconds  Int?     @map("frt_p50_seconds")
+  frtP90Seconds  Int?     @map("frt_p90_seconds")
+  rtP50Seconds   Int?     @map("rt_p50_seconds")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   @@id([accountId, bucketDate, teamId])
   @@index([accountId, bucketDate(sort: Desc)])
@@ -332,16 +351,16 @@ model ChatwootFactsDailyByTeam {
 }
 
 model ChatwootFactsHourlyByAccount {
-  accountId       Int      @map("account_id")
-  bucketDate      DateTime @map("bucket_date") @db.Date
-  bucketHour      Int      @map("bucket_hour")
-  received        Int      @default(0)
-  resolved        Int      @default(0)
-  messagesIn      Int      @default(0) @map("messages_in")
-  messagesOut     Int      @default(0) @map("messages_out")
-  uniqueContacts  Int      @default(0) @map("unique_contacts")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  accountId      Int      @map("account_id")
+  bucketDate     DateTime @map("bucket_date") @db.Date
+  bucketHour     Int      @map("bucket_hour")
+  received       Int      @default(0)
+  resolved       Int      @default(0)
+  messagesIn     Int      @default(0) @map("messages_in")
+  messagesOut    Int      @default(0) @map("messages_out")
+  uniqueContacts Int      @default(0) @map("unique_contacts")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   @@id([accountId, bucketDate, bucketHour])
   @@index([accountId, bucketDate(sort: Desc), bucketHour])
@@ -349,15 +368,15 @@ model ChatwootFactsHourlyByAccount {
 }
 
 model ChatwootFactsMeta {
-  dimension         String
-  accountId         Int       @map("account_id")
-  lastRefreshAt     DateTime? @map("last_refresh_at")
-  lastAttemptAt     DateTime? @map("last_attempt_at")
-  lastError         String?   @map("last_error") @db.Text
-  oldestBucketDate  DateTime? @map("oldest_bucket_date") @db.Date
-  newestBucketDate  DateTime? @map("newest_bucket_date") @db.Date
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
+  dimension        String
+  accountId        Int       @map("account_id")
+  lastRefreshAt    DateTime? @map("last_refresh_at")
+  lastAttemptAt    DateTime? @map("last_attempt_at")
+  lastError        String?   @map("last_error") @db.Text
+  oldestBucketDate DateTime? @map("oldest_bucket_date") @db.Date
+  newestBucketDate DateTime? @map("newest_bucket_date") @db.Date
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
 
   @@id([dimension, accountId])
   @@map("chatwoot_facts_meta")
