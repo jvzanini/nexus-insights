@@ -5,12 +5,6 @@ import { getAccessibleAccountIds } from "@/lib/tenant";
 import { shouldExcludeMatrixIA } from "@/lib/reports/exclude-matrix-ia";
 import type { AuthUser } from "@/lib/auth-helpers";
 import {
-  getDashboardPeriod,
-  type DashboardPeriod,
-} from "@/lib/dashboard-period";
-import { getDashboardSettings } from "@/lib/dashboard-settings";
-import { getPlatformTz } from "@/lib/datetime";
-import {
   getOpenDrillDown,
   getReceivedDrillDown,
   getResolutionRateDrillDown,
@@ -27,7 +21,7 @@ import {
   type ByTeamDrillDownData,
 } from "@/lib/chatwoot/queries/dashboard-drill-down";
 
-export type { DashboardPeriod };
+export type DashboardPeriod = "hoje" | "semana" | "mes";
 
 export interface DrillDownActionResult<T> {
   success: boolean;
@@ -35,26 +29,42 @@ export interface DrillDownActionResult<T> {
   error?: string;
 }
 
+/**
+ * v0.13.3 (hotfix): voltou para lógica simples (rolling 24h/7d/30d).
+ * O pipeline de getDashboardPeriod + getDashboardSettings introduzido
+ * no v0.13.0 causou crash em produção.
+ */
 async function resolvePeriodRanges(period: DashboardPeriod): Promise<{
   current: { start: Date; end: Date };
   prev: { start: Date; end: Date };
 }> {
-  const [tz, settings] = await Promise.all([
-    getPlatformTz(),
-    getDashboardSettings(),
-  ]);
-  const mode =
-    period === "semana"
-      ? settings.weekMode
-      : period === "mes"
-        ? settings.monthMode
-        : "current";
-  return getDashboardPeriod({
-    period,
-    mode,
-    weekStartsOn: settings.weekStartsOn,
-    tz,
-  });
+  const now = new Date();
+  let start: Date;
+  let prevStart: Date;
+  let prevEnd: Date;
+
+  if (period === "hoje") {
+    const d = new Date(now);
+    d.setHours(0, 0, 0, 0);
+    start = d;
+    prevEnd = d;
+    const ps = new Date(d);
+    ps.setDate(ps.getDate() - 1);
+    prevStart = ps;
+  } else if (period === "semana") {
+    start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    prevEnd = start;
+    prevStart = new Date(start.getTime() - 7 * 24 * 60 * 60 * 1000);
+  } else {
+    start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    prevEnd = start;
+    prevStart = new Date(start.getTime() - 30 * 24 * 60 * 60 * 1000);
+  }
+
+  return {
+    current: { start, end: now },
+    prev: { start: prevStart, end: prevEnd },
+  };
 }
 
 async function authorize(accountId: number): Promise<{

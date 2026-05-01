@@ -1,5 +1,32 @@
 # Changelog
 
+## [v0.13.3] 2026-05-01 — Hotfix dashboard ainda quebrado: rollback de getDashboardPeriod/getDashboardSettings
+
+> Após o v0.13.2 (que simplificou o `ConversationsLineChart`), João reportou que o dashboard **continua mostrando "Erro de conexão com o servidor"** — significa que a Server Action `getDashboardData` está lançando exception, não retornando `{success: false, error: ...}`. A causa NÃO era o ConversationsLineChart (já simplificado em v0.13.2). A causa real está em algum dos novos pipelines do v0.13.0: `getDashboardPeriod` + `getDashboardSettings` + `pgPool.query` em tabela `app_settings` JSONB.
+
+### O que mudou no v0.13.3
+
+- **`actions/dashboard.ts` voltou para a lógica simples pré-v0.13.0**: `periodRanges()` interno calcula rolling 24h/7d/30d direto (sem `getDashboardPeriod`, sem `getDashboardSettings`). Tipo `DashboardPeriod` mantido (`"hoje" | "semana" | "mes"`) — o front já usa.
+- **`actions/dashboard-drill-down.ts` idem**: `resolvePeriodRanges()` interna sem `getDashboardPeriod` / `getDashboardSettings`.
+- **Frontend mostra mensagem de erro REAL** (não mais "Erro de conexão com o servidor" genérico) — `err.message` exposto.
+
+### Implicações funcionais
+
+- **"Semana" volta a ser rolling 7 dias**, não "segunda → hoje". Configuração em `/configuracoes` deixa de ter efeito sobre os filtros (o card UI continua existindo mas é cosmético até o re-fix).
+- **"Mês" volta a ser rolling 30 dias**, não "dia 1 → hoje".
+- **`comparison.open` continua sendo computado** (mudança em `dashboardData` query continua intacta).
+- **Tudo o mais do v0.13.0 continua intacto**: paginação 50/pg, drill-down genérico de status, formatRelativeShort, KpiClickableCard sem overlap, DashboardSettingsCard UI (apesar de cosmético).
+
+### Roadmap
+
+- A causa raiz de `getDashboardPeriod` ou `getDashboardSettings` lançar precisa investigação com **logs do container Portainer** (acesso direto, não via gh API). Será reaplicado em release futura com **smoke test em produção antes do redirect 100% do tráfego**.
+
+### Verificação
+
+- `npm test` 670 testes / 77 suites PASS · typecheck 0 erros · build verde.
+
+---
+
 ## [v0.13.2] 2026-05-01 — Hotfix dashboard quebrado: ConversationsLineChart simplificado
 
 > Imediatamente após o deploy do v0.13.0, João reportou que o dashboard `/dashboard` não abria — "tem uma mensagem de erro e não aparece nada". A causa foi a reescrita agressiva do `ConversationsLineChart` no v0.13.0 (Pacote H/T11) que combinou: scroll horizontal com largura dinâmica calculada por JS + `<ResponsiveContainer>` aninhado num `<div style={{ width: number }}>` + função `expandFullDay` chamando `Intl.DateTimeFormat` em loop com locale-aware parsing — interação frágil entre recharts ResizeObserver, container scrollable e Tailwind, gerando layout instável ou crash de hidratação dependendo do browser/cache.

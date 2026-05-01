@@ -165,8 +165,10 @@ export function DashboardContent({
         } else {
           setError(result.error ?? "Erro ao carregar dados");
         }
-      } catch {
-        setError("Erro de conexão com o servidor");
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("[fetchData] erro ao chamar getDashboardData:", err);
+        setError(`Erro de conexão: ${message}`);
       } finally {
         setIsLoading(false);
         setIsInitialLoad(false);
