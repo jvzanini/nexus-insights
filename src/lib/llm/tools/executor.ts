@@ -9,7 +9,9 @@ import "server-only";
  *
  * Garantias:
  *  - Toda query inclui `account_id` como filtro obrigatório (multi-tenant).
- *  - Toda query exclui `inbox_id = 31` (Matrix IA) por default.
+ *  - A inbox Matrix IA (id=31) é incluída ou excluída conforme o flag
+ *    `excludeMatrixIA` (vindo de `shouldExcludeMatrixIA()` baseado na
+ *    visibility 3-níveis). Antes do v0.13.7 era sempre excluída.
  *  - Resultados são limitados (LIMIT) para não estourar o contexto do LLM.
  *  - Erros são capturados e devolvidos como `{ result: null, error }` — o LLM
  *    decide como reagir (pedir reformulação, etc).
@@ -28,27 +30,39 @@ export interface ToolExecutionResult {
   error?: string;
 }
 
+/**
+ * Constrói a cláusula SQL que filtra a inbox Matrix IA. Quando NÃO devemos
+ * excluir, retorna uma tautologia que referencia `$<paramIdx>` para preservar
+ * o índice de parâmetros sem alterar o resto do código.
+ */
+function matrixIAClause(excludeMatrixIA: boolean, paramIdx: number = 2): string {
+  return excludeMatrixIA
+    ? `c.inbox_id <> $${paramIdx}`
+    : `($${paramIdx} IS NOT NULL)`;
+}
+
 export async function executeTool(
   name: string,
   args: Record<string, unknown>,
   accountId: number,
+  excludeMatrixIA: boolean = true,
 ): Promise<ToolExecutionResult> {
   try {
     switch (name) {
       case "query_conversations":
-        return { result: await queryConversations(args, accountId) };
+        return { result: await queryConversations(args, accountId, excludeMatrixIA) };
       case "query_messages":
-        return { result: await queryMessages(args, accountId) };
+        return { result: await queryMessages(args, accountId, excludeMatrixIA) };
       case "query_users":
         return { result: await queryUsers(args, accountId) };
       case "query_contacts":
         return { result: await queryContacts(args, accountId) };
       case "aggregate_conversations":
-        return { result: await aggregateConversations(args, accountId) };
+        return { result: await aggregateConversations(args, accountId, excludeMatrixIA) };
       case "get_top_agents":
-        return { result: await getTopAgents(args, accountId) };
+        return { result: await getTopAgents(args, accountId, excludeMatrixIA) };
       case "get_dashboard_summary":
-        return { result: await getDashboardSummary(args, accountId) };
+        return { result: await getDashboardSummary(args, accountId, excludeMatrixIA) };
       default:
         return { result: null, error: `Ferramenta desconhecida: ${name}` };
     }
@@ -175,6 +189,7 @@ async function resolvePeriod(
 async function queryConversations(
   args: Record<string, unknown>,
   accountId: number,
+  excludeMatrixIA: boolean,
 ): Promise<Json> {
   const status = asInt(args.status);
   const assigneeName = asString(args.assignee_name);
@@ -186,7 +201,7 @@ async function queryConversations(
 
   const params: unknown[] = [accountId, MATRIX_IA_INBOX_ID];
   let p = 2;
-  const where: string[] = [`c.account_id = $1`, `c.inbox_id <> $2`];
+  const where: string[] = [`c.account_id = $1`, matrixIAClause(excludeMatrixIA)];
 
   if (status !== undefined) {
     where.push(`c.status = $${++p}`);
@@ -273,6 +288,7 @@ async function queryConversations(
 async function queryMessages(
   args: Record<string, unknown>,
   accountId: number,
+  excludeMatrixIA: boolean,
 ): Promise<Json> {
   const messageType = asInt(args.message_type);
   const conversationId = asInt(args.conversation_id);
@@ -283,7 +299,7 @@ async function queryMessages(
   let p = 2;
   const where: string[] = [
     `c.account_id = $1`,
-    `c.inbox_id <> $2`,
+    matrixIAClause(excludeMatrixIA),
     `m.conversation_id = c.id`,
   ];
 
@@ -449,6 +465,7 @@ async function queryContacts(
 async function aggregateConversations(
   args: Record<string, unknown>,
   accountId: number,
+  excludeMatrixIA: boolean,
 ): Promise<Json> {
   const groupBy = asString(args.group_by) ?? "inbox";
   const agg = asString(args.agg) ?? "count";
@@ -496,9 +513,10 @@ async function aggregateConversations(
       return { error: `group_by inválido: ${groupBy}` };
   }
 
+  const matrixClause = matrixIAClause(excludeMatrixIA);
   const params: unknown[] = [accountId, MATRIX_IA_INBOX_ID];
   let p = 2;
-  const where: string[] = [`c.account_id = $1`, `c.inbox_id <> $2`];
+  const where: string[] = [`c.account_id = $1`, matrixClause];
   if (status !== undefined) {
     where.push(`c.status = $${++p}`);
     params.push(status);
@@ -557,7 +575,7 @@ async function aggregateConversations(
       JOIN conversations c ON c.id = re.conversation_id
       ${joinClause}
       WHERE re.account_id = $1
-        AND c.inbox_id <> $2
+        AND ${matrixClause}
         AND re.name = 'first_response'
         AND re.value IS NOT NULL
         ${periodReClause}
@@ -587,10 +605,12 @@ async function aggregateConversations(
 async function getTopAgents(
   args: Record<string, unknown>,
   accountId: number,
+  excludeMatrixIA: boolean,
 ): Promise<Json> {
   const metric = asString(args.metric) ?? "fastest";
   const period = await resolvePeriod(args.period);
   const limit = clampLimit(args.limit, 5);
+  const matrixClause = matrixIAClause(excludeMatrixIA);
 
   if (metric === "fastest") {
     const params: unknown[] = [accountId, MATRIX_IA_INBOX_ID];
@@ -608,7 +628,7 @@ async function getTopAgents(
       JOIN conversations c ON c.id = re.conversation_id
       JOIN users u ON u.id = c.assignee_id
       WHERE re.account_id = $1
-        AND c.inbox_id <> $2
+        AND ${matrixClause}
         AND re.name = 'first_response'
         AND re.value IS NOT NULL
         ${periodClause}
@@ -653,7 +673,7 @@ async function getTopAgents(
     FROM conversations c
     JOIN users u ON u.id = c.assignee_id
     WHERE c.account_id = $1
-      AND c.inbox_id <> $2
+      AND ${matrixClause}
       AND c.status = $3
       ${periodClause}
     GROUP BY u.id, u.name
@@ -677,22 +697,24 @@ async function getTopAgents(
 async function getDashboardSummary(
   args: Record<string, unknown>,
   accountId: number,
+  excludeMatrixIA: boolean,
 ): Promise<Json> {
   const period =
     (await resolvePeriod(args.period)) ??
     (await resolvePeriod("hoje")) ??
     undefined;
 
+  const matrixClause = matrixIAClause(excludeMatrixIA);
   const params: unknown[] = [accountId, MATRIX_IA_INBOX_ID];
 
   // Em aberto, pendentes (snapshot agora — sem período)
   const sqlOpen = `
     SELECT COUNT(*)::bigint AS total FROM conversations c
-    WHERE c.account_id = $1 AND c.inbox_id <> $2 AND c.status = 0
+    WHERE c.account_id = $1 AND ${matrixClause} AND c.status = 0
   `;
   const sqlPending = `
     SELECT COUNT(*)::bigint AS total FROM conversations c
-    WHERE c.account_id = $1 AND c.inbox_id <> $2 AND c.status = 2
+    WHERE c.account_id = $1 AND ${matrixClause} AND c.status = 2
   `;
 
   // Resolvidas no período
@@ -707,7 +729,7 @@ async function getDashboardSummary(
   }
   const sqlResolved = `
     SELECT COUNT(*)::bigint AS total FROM conversations c
-    WHERE c.account_id = $1 AND c.inbox_id <> $2 AND c.status = 1${resolvedClause}
+    WHERE c.account_id = $1 AND ${matrixClause} AND c.status = 1${resolvedClause}
   `;
 
   // Top inbox em aberto
@@ -715,7 +737,7 @@ async function getDashboardSummary(
     SELECT i.name, COUNT(c.id)::bigint AS total
     FROM conversations c
     JOIN inboxes i ON i.id = c.inbox_id
-    WHERE c.account_id = $1 AND c.inbox_id <> $2 AND c.status = 0
+    WHERE c.account_id = $1 AND ${matrixClause} AND c.status = 0
     GROUP BY i.id, i.name
     ORDER BY total DESC
     LIMIT 1
@@ -726,7 +748,7 @@ async function getDashboardSummary(
     SELECT u.name, COUNT(c.id)::bigint AS total
     FROM conversations c
     JOIN users u ON u.id = c.assignee_id
-    WHERE c.account_id = $1 AND c.inbox_id <> $2 AND c.status = 0
+    WHERE c.account_id = $1 AND ${matrixClause} AND c.status = 0
     GROUP BY u.id, u.name
     ORDER BY total DESC
     LIMIT 1

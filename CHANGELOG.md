@@ -1,5 +1,32 @@
 # Changelog
 
+## [v0.13.9] 2026-05-01 — Agente Nex respeita visibility do Matrix IA
+
+> O Agente Nex hardcodava `inbox_id <> 31` em **todas** as queries de tools — independentemente da configuração de visibility. Agora ele respeita a regra 3-níveis igual ao resto do app: `all` (vê), `super_admin_only` (super_admin vê, demais não) e `none` (ninguém vê).
+
+### Causa
+
+`src/lib/llm/tools/executor.ts` (executor das tools do Nex) tinha 7 funções com `c.inbox_id <> $2` cravado direto no SQL. Foi escrito assim no v0.7 quando o Matrix IA era sempre excluído por design. Quando v0.11.0 introduziu a regra 3-níveis (e v0.12.1 corrigiu o bug do "Ninguém"), o Nex ficou desalinhado — continuou ignorando a inbox 31 mesmo quando a config dizia "Todos".
+
+### Fix
+
+- **`executor.ts`** ganhou helper `matrixIAClause(excludeMatrixIA, paramIdx)` que devolve `c.inbox_id <> $N` quando deve excluir, ou `($N IS NOT NULL)` (tautologia, sempre `TRUE`) quando não. A tautologia preserva o índice de parâmetros — zero refactor nos `++p`/`$3`/`$4`/etc subsequentes.
+- **`executeTool(name, args, accountId, excludeMatrixIA)`** propaga o flag para todas as 7 funções afetadas (`queryConversations`, `queryMessages`, `aggregateConversations`, `getTopAgents`, `getDashboardSummary`, mais 2 no path agg secundário).
+- **`runNexAgent`** chama `shouldExcludeMatrixIA()` UMA vez no início da conversa e passa para cada `executeTool`. Mesma fonte da verdade que `/dashboard`, `/relatorios/conversas`, etc.
+
+### Resultado
+
+- Visibility = `all` (Todos): Nex vê e responde sobre conversas da inbox 31 (Matrix IA).
+- Visibility = `super_admin_only`: super_admin vê, viewer/manager não.
+- Visibility = `none`: Nex não vê para ninguém (inclusive super_admin).
+
+### Outras notas
+
+- 77 suites / 672 tests PASS · typecheck 0 erros.
+- Mock de `shouldExcludeMatrixIA` adicionado em `run-nex.test.ts` (NextAuth não roda em ambiente Jest).
+
+---
+
 ## [v0.13.8] 2026-05-01 — Hotfix RSC error: simplifica dashboard-settings
 
 > O v0.13.7 trazia o pipeline `getDashboardPeriod + getDashboardSettings` de volta, mas o dashboard mostrou "An error occurred in the Server Components render. The specific message is omitted in production builds...". A combinação `import "server-only"` + `let cache` module-level + import via Server Action files (`actions/dashboard.ts` e `actions/dashboard-drill-down.ts`) parece causar bundling/RSC issue no Next.js 16.

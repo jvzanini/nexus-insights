@@ -13,6 +13,8 @@ import "server-only";
  * registrados via `logUsage`.
  */
 
+import { shouldExcludeMatrixIA } from "@/lib/reports/exclude-matrix-ia";
+
 import { getActiveLlmClient } from "../get-client";
 import { NEX_TOOLS } from "../tools/definitions";
 import { executeTool } from "../tools/executor";
@@ -77,6 +79,17 @@ export async function runNexAgent(args: RunNexInput): Promise<RunNexResult> {
   };
   const start = Date.now();
 
+  // Resolve a regra de visibility do Matrix IA UMA VEZ pra essa conversa.
+  // shouldExcludeMatrixIA() consulta a session do user atual + a config
+  // global (3-níveis: all / super_admin_only / none). v0.13.7 alinhou o Nex
+  // com o resto do app — antes ele sempre excluía hardcoded.
+  let excludeMatrixIA = false;
+  try {
+    excludeMatrixIA = await shouldExcludeMatrixIA();
+  } catch (err) {
+    console.warn("[runNexAgent] shouldExcludeMatrixIA falhou:", err);
+  }
+
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     const iterStart = Date.now();
     const result = await client.chat({
@@ -126,6 +139,7 @@ export async function runNexAgent(args: RunNexInput): Promise<RunNexResult> {
         tc.name,
         (tc.arguments ?? {}) as Record<string, unknown>,
         args.accountId,
+        excludeMatrixIA,
       );
       conversation.push({
         role: "tool",

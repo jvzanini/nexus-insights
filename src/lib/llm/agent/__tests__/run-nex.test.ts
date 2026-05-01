@@ -16,6 +16,12 @@ jest.mock("@/lib/llm/agent/usage-logger", () => ({
   logUsage: jest.fn(async () => {}),
 }));
 
+// shouldExcludeMatrixIA toca em auth() (NextAuth) que não roda em ambiente
+// jest. v0.13.7: mockamos para isolar o orquestrador.
+jest.mock("@/lib/reports/exclude-matrix-ia", () => ({
+  shouldExcludeMatrixIA: jest.fn(async () => false),
+}));
+
 import { runNexAgent } from "@/lib/llm/agent/run-nex";
 import { executeTool } from "@/lib/llm/tools/executor";
 import type { ChatRequest, ChatResult, ProviderClient } from "@/lib/llm/types";
@@ -103,6 +109,7 @@ describe("runNexAgent", () => {
       "query_conversations",
       { status: 0 },
       9,
+      false, // excludeMatrixIA — mock retorna false (não exclui)
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
