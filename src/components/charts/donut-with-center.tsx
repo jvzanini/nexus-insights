@@ -10,16 +10,20 @@ import {
   Tooltip,
 } from "recharts";
 
-import {
-  ChartTooltip,
-  type ChartTooltipPayloadItem,
-} from "@/components/charts/chart-tooltip";
+import { type ChartTooltipPayloadItem } from "@/components/charts/chart-tooltip";
 import { EmptyChartState } from "@/components/charts/empty-chart-state";
 import {
   CHART_PALETTE,
   getColorByIndex,
 } from "@/lib/charts/colors";
 import type { PieChartData } from "@/components/charts/pie-chart";
+import { cn } from "@/lib/utils";
+
+export type DonutTooltipPosition =
+  | "top-left"
+  | "top-right"
+  | "bottom-left"
+  | "bottom-right";
 
 export interface DonutWithCenterProps {
   data: PieChartData[];
@@ -41,6 +45,85 @@ export interface DonutWithCenterProps {
    * Recebe `name` (label da fatia) e `index` na lista filtrada.
    */
   onSliceClick?: (name: string, index: number) => void;
+  /**
+   * Posição fixa do tooltip dentro do container do chart.
+   * Mantém o tooltip lateral, sem cobrir o donut nem o valor central.
+   * Default: `"top-right"`.
+   */
+  tooltipPosition?: DonutTooltipPosition;
+}
+
+export interface DonutTooltipStackedProps {
+  active?: boolean;
+  payload?: ChartTooltipPayloadItem[];
+  formatValue?: (v: number) => string;
+  className?: string;
+}
+
+/**
+ * Tooltip empilhado (nome em cima, valor formatado embaixo) usado pelo
+ * DonutWithCenter quando o tooltip é fixado lateralmente. Garante que valores
+ * longos como `R$ 0,1234 (12,3%)` quebrem em duas linhas e respeitem
+ * `max-w-[180px]`.
+ */
+export function DonutTooltipStacked({
+  active,
+  payload,
+  formatValue,
+  className,
+}: DonutTooltipStackedProps) {
+  if (!active || !payload || payload.length === 0) return null;
+  const entry = payload[0];
+  if (!entry) return null;
+
+  const numericValue =
+    typeof entry.value === "number" ? entry.value : Number(entry.value ?? 0);
+  const formattedValue = formatValue
+    ? formatValue(numericValue)
+    : Number.isFinite(numericValue)
+      ? numericValue.toLocaleString("pt-BR")
+      : "—";
+  const name = String(entry.name ?? entry.dataKey ?? "");
+
+  return (
+    <div
+      role="tooltip"
+      className={cn(
+        "max-w-[180px] rounded-md border border-border bg-popover px-3 py-2 text-xs shadow-md",
+        className,
+      )}
+    >
+      <p className="font-medium text-foreground">{name}</p>
+      <p className="text-muted-foreground tabular-nums">{formattedValue}</p>
+    </div>
+  );
+}
+
+/**
+ * Calcula `wrapperStyle` absoluto para o `<Tooltip>` do recharts conforme
+ * `tooltipPosition`. Mantém z-index alto (50) para ficar acima da legenda
+ * dentro do mesmo container.
+ *
+ * Exportado para testabilidade — não é parte da API pública.
+ */
+export function donutTooltipWrapperStyle(
+  pos: DonutTooltipPosition,
+): React.CSSProperties {
+  const base: React.CSSProperties = {
+    position: "absolute",
+    zIndex: 50,
+    pointerEvents: "none",
+  };
+  switch (pos) {
+    case "top-left":
+      return { ...base, top: 8, left: 8 };
+    case "top-right":
+      return { ...base, top: 8, right: 8 };
+    case "bottom-left":
+      return { ...base, bottom: 8, left: 8 };
+    case "bottom-right":
+      return { ...base, bottom: 8, right: 8 };
+  }
 }
 
 /**
@@ -51,7 +134,8 @@ export interface DonutWithCenterProps {
  * conversas).
  *
  * - Hover destaca slice ativo (opacity das demais cai para 0.45);
- * - Tooltip rico com %;
+ * - Tooltip fixo lateral (default `top-right`) que não cobre o donut nem o
+ *   valor central — mostra nome do item e valor formatado em duas linhas;
  * - Centro sempre legível (texto sobre var(--color-card) implícito);
  * - Empty state explicativo.
  */
@@ -69,6 +153,7 @@ export function DonutWithCenter({
   className,
   ariaLabel = "Donut chart",
   onSliceClick,
+  tooltipPosition = "top-right",
 }: DonutWithCenterProps) {
   const prefersReducedMotion = useReducedMotion();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -111,8 +196,12 @@ export function DonutWithCenter({
       <ResponsiveContainer width="100%" height="100%">
         <PieChart margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
           <Tooltip
+            cursor={false}
+            wrapperStyle={donutTooltipWrapperStyle(tooltipPosition)}
+            position={{ x: 0, y: 0 }}
+            allowEscapeViewBox={{ x: true, y: true }}
             content={(props: { active?: boolean; payload?: unknown }) => (
-              <ChartTooltip
+              <DonutTooltipStacked
                 active={props.active}
                 payload={props.payload as ChartTooltipPayloadItem[] | undefined}
                 formatValue={formatTooltipValue}

@@ -14,7 +14,10 @@ export {
 } from "@/components/charts/pie-chart";
 export {
   DonutWithCenter,
+  DonutTooltipStacked,
   type DonutWithCenterProps,
+  type DonutTooltipPosition,
+  type DonutTooltipStackedProps,
 } from "@/components/charts/donut-with-center";
 export {
   InteractiveBarChart,
