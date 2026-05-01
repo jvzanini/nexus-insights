@@ -13,6 +13,13 @@ import {
 
 import type { NexPromptConfig } from "@/lib/nex/prompt";
 
+// jsdom não implementa PointerEvent — base-ui Switch escuta pointerdown.
+// Polyfill mínimo: PointerEvent = MouseEvent.
+if (typeof globalThis.PointerEvent === "undefined") {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (globalThis as any).PointerEvent = MouseEvent;
+}
+
 const refresh = jest.fn();
 
 jest.mock("next/navigation", () => ({
@@ -102,12 +109,12 @@ describe("PromptConfigForm", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.queryByText(
-        /Override desativa Personalidade, Tom, Guardrails e Base de conhecimento/i,
+        /Modo manual desativa identidade fixa, personalidade, tom, guardrails, base de conhecimento e URLs públicas/i,
       ),
     ).not.toBeInTheDocument();
   });
 
-  it("override ON (via initial) revela textarea com placeholder 'prompt completo' e warning amarelo", () => {
+  it("override ON (via initial) revela textarea com placeholder 'prompt completo' e warning explicativo", () => {
     render(
       <PromptConfigForm
         initial={{ ...baseInitial, advancedOverride: "qualquer texto" }}
@@ -119,9 +126,138 @@ describe("PromptConfigForm", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        /Override desativa Personalidade, Tom, Guardrails e Base de conhecimento/i,
+        /Modo manual desativa identidade fixa, personalidade, tom, guardrails, base de conhecimento e URLs públicas/i,
       ),
     ).toBeInTheDocument();
+  });
+
+  it("renderiza label 'Modo prompt manual' (não 'override')", () => {
+    render(<PromptConfigForm initial={baseInitial} />);
+    expect(screen.getByText(/Modo prompt manual/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Modo override avançado/i)).not.toBeInTheDocument();
+  });
+
+  it("badge 'MODO MANUAL ATIVO' aparece quando override está ON", () => {
+    render(
+      <PromptConfigForm
+        initial={{ ...baseInitial, advancedOverride: "PROMPT BRUTO" }}
+      />,
+    );
+    expect(screen.getByText(/MODO MANUAL ATIVO/)).toBeInTheDocument();
+  });
+
+  it("badge 'MODO MANUAL ATIVO' NÃO aparece quando override está OFF", () => {
+    render(<PromptConfigForm initial={baseInitial} />);
+    expect(screen.queryByText(/MODO MANUAL ATIVO/)).not.toBeInTheDocument();
+  });
+
+  it("override ON desabilita Personalidade/Tom/Guardrails e mostra texto auxiliar laranja", () => {
+    render(
+      <PromptConfigForm
+        initial={{
+          ...baseInitial,
+          advancedOverride: "PROMPT",
+          guardrails: ["Regra 1"],
+        }}
+      />,
+    );
+
+    const personality = screen.getByLabelText(/Personalidade/i) as HTMLTextAreaElement;
+    const tone = screen.getByLabelText(/^Tom$/i) as HTMLTextAreaElement;
+    expect(personality).toBeDisabled();
+    expect(tone).toBeDisabled();
+
+    // Texto auxiliar laranja informativo
+    const helpers = screen.getAllByText(
+      /Desativado pelo Modo manual ativo\. Desligue acima para editar\./i,
+    );
+    expect(helpers.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("toggle override OFF→ON abre AlertDialog de confirmação e Cancelar não ativa", async () => {
+    render(<PromptConfigForm initial={baseInitial} />);
+
+    // Pega o switch
+    const toggle = screen.getByLabelText(/Ativar Modo prompt manual/i);
+    await act(async () => {
+      fireEvent.pointerDown(toggle);
+      fireEvent.pointerUp(toggle);
+      fireEvent.click(toggle);
+    });
+
+    // AlertDialog visível com texto explicativo
+    expect(
+      await screen.findByText(
+        /Modo manual desativa identidade fixa, personalidade, tom, guardrails, base de conhecimento e URLs públicas/i,
+      ),
+    ).toBeInTheDocument();
+
+    // Cancelar
+    const cancel = screen.getByRole("button", { name: /^Cancelar$/i });
+    await act(async () => {
+      fireEvent.click(cancel);
+    });
+
+    // Override permanece OFF — placeholder do prompt completo não aparece
+    await waitFor(() =>
+      expect(
+        screen.queryByPlaceholderText(/prompt completo/i),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("toggle override OFF→ON + Confirmar ativa o modo manual", async () => {
+    render(<PromptConfigForm initial={baseInitial} />);
+
+    const toggle = screen.getByLabelText(/Ativar Modo prompt manual/i);
+    await act(async () => {
+      fireEvent.pointerDown(toggle);
+      fireEvent.pointerUp(toggle);
+      fireEvent.click(toggle);
+    });
+
+    const confirm = await screen.findByRole("button", { name: /^Ativar$/i });
+    await act(async () => {
+      fireEvent.click(confirm);
+    });
+
+    expect(
+      await screen.findByPlaceholderText(/prompt completo/i),
+    ).toBeInTheDocument();
+  });
+
+  it("override ON com texto vazio: clicar Salvar dispara toast de erro e NÃO chama saveAction", async () => {
+    render(
+      <PromptConfigForm
+        initial={{ ...baseInitial, advancedOverride: "" }}
+      />,
+    );
+
+    // Estado: override ON via toggle inicial (advancedOverride === "" não dispara overrideOn).
+    // Forçamos via toggle + confirm.
+    const toggle = screen.getByLabelText(/Ativar Modo prompt manual/i);
+    await act(async () => {
+      fireEvent.pointerDown(toggle);
+      fireEvent.pointerUp(toggle);
+      fireEvent.click(toggle);
+    });
+    const confirm = await screen.findByRole("button", { name: /^Ativar$/i });
+    await act(async () => {
+      fireEvent.click(confirm);
+    });
+
+    // Agora override ON, override text vazio. Salvar deve falhar.
+    const saveBtn = screen.getByRole("button", { name: /^Salvar$/i });
+    await act(async () => {
+      fireEvent.click(saveBtn);
+    });
+
+    await waitFor(() =>
+      expect(toastMock.error).toHaveBeenCalledWith(
+        expect.stringMatching(/Modo manual ativo precisa de texto não-vazio/i),
+      ),
+    );
+    expect(saveNexPromptConfigAction).not.toHaveBeenCalled();
   });
 
   it("clica em 'Pré-visualizar' chama previewSystemPromptAction e abre dialog com PROMPT", async () => {

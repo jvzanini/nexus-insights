@@ -1,14 +1,22 @@
 "use client";
 
 /**
- * Card 1 — "Comportamento" do Agente Nex (super_admin only).
+ * Card "Comportamento" do Agente Nex (super_admin only).
  *
  * Campos:
  * - Personalidade (textarea, ≤ 500 chars).
  * - Tom (textarea, ≤ 500 chars).
  * - Guardrails (lista de até 20 itens × 300 chars).
- * - Toggle "Modo override avançado" → revela textarea mono (≤ 50.000 chars)
- *   com warning amarelo: override desativa Personalidade/Tom/Guardrails/KB.
+ * - Toggle "Modo prompt manual" → revela textarea mono (≤ 50.000 chars)
+ *   com warning explicativo e bloqueia Personalidade/Tom/Guardrails.
+ *
+ * Mudanças (T6c plan v0.16.0):
+ * - "Modo override avançado" → "Modo prompt manual" + tooltip explicativo.
+ * - Ativar OFF→ON dispara AlertDialog de confirmação (Cancelar/Ativar).
+ * - Quando ON: badge "MODO MANUAL ATIVO" + texto auxiliar laranja em
+ *   Personalidade/Tom/Guardrails ("Desativado pelo Modo manual ativo.
+ *   Desligue acima para editar.").
+ * - Salvar bloqueado se override ON + texto vazio (toast explicativo).
  *
  * Ações:
  * - "Pré-visualizar prompt completo" (chama previewSystemPromptAction → modal).
@@ -24,6 +32,7 @@ import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   Eye,
+  HelpCircle,
   Loader2,
   Plus,
   Save,
@@ -34,6 +43,16 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -59,6 +78,11 @@ const MAX_TONE = 500;
 const MAX_GUARDRAIL = 300;
 const MAX_GUARDRAILS = 20;
 const MAX_OVERRIDE = 50_000;
+
+const MANUAL_DISABLED_HELP =
+  "Desativado pelo Modo manual ativo. Desligue acima para editar.";
+const MANUAL_WARNING_TEXT =
+  "O Modo manual desativa identidade fixa, personalidade, tom, guardrails, base de conhecimento e URLs públicas configuradas em /configuracoes. Continuar?";
 
 interface PromptConfigFormProps {
   initial: NexPromptConfig;
@@ -88,6 +112,9 @@ export function PromptConfigForm({ initial }: PromptConfigFormProps) {
   const [isPreviewLoading, startPreview] = useTransition();
   const [previewOpen, setPreviewOpen] = useState<boolean>(false);
   const [previewText, setPreviewText] = useState<string>("");
+
+  // AlertDialog de confirmação ao ativar Modo prompt manual.
+  const [confirmActivateOpen, setConfirmActivateOpen] = useState<boolean>(false);
 
   const guardrailsCount = guardrails.length;
   const canAddGuardrail = guardrailsCount < MAX_GUARDRAILS;
@@ -134,7 +161,21 @@ export function PromptConfigForm({ initial }: PromptConfigFormProps) {
   }
 
   function handleOverrideToggle(checked: boolean) {
-    setOverrideOn(checked);
+    if (checked) {
+      // Ativar requer confirmação explícita.
+      setConfirmActivateOpen(true);
+      return;
+    }
+    setOverrideOn(false);
+  }
+
+  function handleConfirmActivate() {
+    setOverrideOn(true);
+    setConfirmActivateOpen(false);
+  }
+
+  function handleCancelActivate() {
+    setConfirmActivateOpen(false);
   }
 
   function handlePreview() {
@@ -150,6 +191,11 @@ export function PromptConfigForm({ initial }: PromptConfigFormProps) {
   }
 
   function handleSave() {
+    // Bloqueio: override on + texto vazio (depois do trim).
+    if (overrideOn && override.trim().length === 0) {
+      toast.error("Modo manual ativo precisa de texto não-vazio.");
+      return;
+    }
     startSave(async () => {
       const result = await saveNexPromptConfigAction(currentConfig);
       if (!result.ok) {
@@ -162,9 +208,22 @@ export function PromptConfigForm({ initial }: PromptConfigFormProps) {
   }
 
   const busy = isSaving || isPreviewLoading;
+  const fieldsDisabled = overrideOn || busy;
 
   return (
     <div className="space-y-6">
+      {/* Badge MODO MANUAL ATIVO no topo do card de Comportamento */}
+      {overrideOn ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200"
+        >
+          <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+          MODO MANUAL ATIVO
+        </div>
+      ) : null}
+
       {/* Personalidade */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
@@ -188,12 +247,17 @@ export function PromptConfigForm({ initial }: PromptConfigFormProps) {
           maxLength={MAX_PERSONALITY}
           rows={3}
           placeholder="Ex.: Direto, prático, prefere bullets curtos. Evita rodeios."
-          disabled={overrideOn || busy}
+          disabled={fieldsDisabled}
           aria-describedby="nex-personality-help"
         />
         <p id="nex-personality-help" className="text-xs text-muted-foreground">
           Como o agente se comporta — voz, foco, atitude geral.
         </p>
+        {overrideOn ? (
+          <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+            {MANUAL_DISABLED_HELP}
+          </p>
+        ) : null}
       </div>
 
       {/* Tom */}
@@ -219,12 +283,17 @@ export function PromptConfigForm({ initial }: PromptConfigFormProps) {
           maxLength={MAX_TONE}
           rows={3}
           placeholder="Ex.: Profissional, mas amigável. Em pt-BR. Use 'você'."
-          disabled={overrideOn || busy}
+          disabled={fieldsDisabled}
           aria-describedby="nex-tone-help"
         />
         <p id="nex-tone-help" className="text-xs text-muted-foreground">
           Estilo de escrita — formalidade, calor humano, vocabulário.
         </p>
+        {overrideOn ? (
+          <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+            {MANUAL_DISABLED_HELP}
+          </p>
+        ) : null}
       </div>
 
       {/* Guardrails */}
@@ -258,7 +327,7 @@ export function PromptConfigForm({ initial }: PromptConfigFormProps) {
                     }
                     maxLength={MAX_GUARDRAIL}
                     placeholder={`Regra ${idx + 1}`}
-                    disabled={overrideOn || busy}
+                    disabled={fieldsDisabled}
                     className="min-h-[40px]"
                   />
                   <span
@@ -275,7 +344,7 @@ export function PromptConfigForm({ initial }: PromptConfigFormProps) {
                   variant="ghost"
                   size="icon-sm"
                   onClick={() => handleRemoveGuardrail(idx)}
-                  disabled={overrideOn || busy}
+                  disabled={fieldsDisabled}
                   aria-label={`Remover guardrail ${idx + 1}`}
                   className="mt-1 cursor-pointer text-muted-foreground hover:text-destructive"
                 >
@@ -291,22 +360,37 @@ export function PromptConfigForm({ initial }: PromptConfigFormProps) {
           variant="outline"
           size="sm"
           onClick={handleAddGuardrail}
-          disabled={!canAddGuardrail || overrideOn || busy}
+          disabled={!canAddGuardrail || fieldsDisabled}
           className="cursor-pointer"
         >
           <Plus className="mr-1.5 h-3.5 w-3.5" />
           Adicionar regra
         </Button>
+        {overrideOn ? (
+          <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+            {MANUAL_DISABLED_HELP}
+          </p>
+        ) : null}
       </div>
 
-      {/* Override avançado */}
-      <div className="rounded-xl border border-border bg-background/40 p-4 space-y-3">
+      {/* Modo prompt manual */}
+      <div className="space-y-3 rounded-xl border border-border bg-background/40 p-4">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-foreground">
-              Modo override avançado
-            </p>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-medium text-foreground">
+                Modo prompt manual
+              </p>
+              <span
+                role="img"
+                aria-label="Ajuda sobre Modo prompt manual"
+                title="Substitui completamente o prompt composto (identidade fixa, personalidade, tom, guardrails, KB e URLs públicas) por um texto bruto. Use apenas se você sabe exatamente o que está fazendo."
+                className="inline-flex h-4 w-4 cursor-help items-center justify-center text-muted-foreground"
+              >
+                <HelpCircle className="h-3.5 w-3.5" aria-hidden="true" />
+              </span>
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
               Substitui o prompt composto por um texto bruto. Use apenas se você
               sabe exatamente o que está fazendo.
             </p>
@@ -317,7 +401,9 @@ export function PromptConfigForm({ initial }: PromptConfigFormProps) {
               onCheckedChange={handleOverrideToggle}
               disabled={busy}
               aria-label={
-                overrideOn ? "Desativar override avançado" : "Ativar override avançado"
+                overrideOn
+                  ? "Desativar Modo prompt manual"
+                  : "Ativar Modo prompt manual"
               }
             />
           </span>
@@ -330,13 +416,10 @@ export function PromptConfigForm({ initial }: PromptConfigFormProps) {
               className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
             >
               <AlertTriangle
-                className="h-4 w-4 shrink-0 mt-0.5"
+                className="mt-0.5 h-4 w-4 shrink-0"
                 aria-hidden="true"
               />
-              <p className="leading-snug">
-                Override desativa Personalidade, Tom, Guardrails e Base de
-                conhecimento. Inclua manualmente o que quiser que entre.
-              </p>
+              <p className="leading-snug">{MANUAL_WARNING_TEXT}</p>
             </div>
 
             <div className="flex items-center justify-between gap-2">
@@ -374,7 +457,7 @@ export function PromptConfigForm({ initial }: PromptConfigFormProps) {
           variant="outline"
           onClick={handlePreview}
           disabled={busy}
-          className="cursor-pointer min-h-[44px]"
+          className="min-h-[44px] cursor-pointer"
         >
           {isPreviewLoading ? (
             <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
@@ -387,7 +470,7 @@ export function PromptConfigForm({ initial }: PromptConfigFormProps) {
           type="button"
           onClick={handleSave}
           disabled={busy}
-          className="cursor-pointer min-h-[44px]"
+          className="min-h-[44px] cursor-pointer"
         >
           {isSaving ? (
             <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
@@ -397,6 +480,44 @@ export function PromptConfigForm({ initial }: PromptConfigFormProps) {
           Salvar
         </Button>
       </div>
+
+      {/* AlertDialog de confirmação para ativar Modo prompt manual */}
+      <AlertDialog
+        open={confirmActivateOpen}
+        onOpenChange={(open) => {
+          if (!open) handleCancelActivate();
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-foreground">
+              <AlertTriangle
+                className="h-5 w-5 text-amber-500"
+                aria-hidden="true"
+              />
+              Ativar Modo prompt manual?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {MANUAL_WARNING_TEXT}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={handleCancelActivate}
+              className="cursor-pointer"
+            >
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              type="button"
+              onClick={handleConfirmActivate}
+              className="cursor-pointer bg-amber-600 text-white hover:bg-amber-700"
+            >
+              Ativar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Modal de pré-visualização */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
