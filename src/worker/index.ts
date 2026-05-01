@@ -8,11 +8,17 @@ import {
   refreshByInboxQueue,
   refreshByTeamQueue,
 } from "../lib/queue";
+import {
+  integrationsRefreshDimQueue,
+  integrationsReconcileQueue,
+} from "../lib/integrations/queue";
 import { processRefreshByAccount } from "./jobs/pre-agregacao/refresh-by-account";
 import { processRefreshByInbox } from "./jobs/pre-agregacao/refresh-by-inbox";
 import { processRefreshByAgent } from "./jobs/pre-agregacao/refresh-by-agent";
 import { processRefreshByTeam } from "./jobs/pre-agregacao/refresh-by-team";
 import { processHousekeeping } from "./jobs/pre-agregacao/housekeeping";
+import { processRefreshDimSnapshots } from "./jobs/integrations/refresh-dim-snapshots";
+import { processReconcileIntegrations } from "./jobs/integrations/reconcile-integrations";
 
 console.log("[worker] Starting Nexus Insights worker…");
 console.log(`[worker] Node.js ${process.version}, PID: ${process.pid}`);
@@ -81,6 +87,26 @@ const housekeepingWorker = new Worker(
   { connection: redis, concurrency: 1 },
 );
 
+const integrationsRefreshDimWorker = new Worker(
+  "integrations.refresh-dim-snapshots",
+  async (job: Job) => {
+    const result = await processRefreshDimSnapshots(job);
+    console.log("[worker.integrations.refresh-dim] done", job.id);
+    return result;
+  },
+  { connection: redis, concurrency: 1 },
+);
+
+const integrationsReconcileWorker = new Worker(
+  "integrations.reconcile",
+  async (job: Job) => {
+    const result = await processReconcileIntegrations(job);
+    console.log("[worker.integrations.reconcile] done", job.id);
+    return result;
+  },
+  { connection: redis, concurrency: 1 },
+);
+
 // ─── Schedules (repeatable jobs) ──────────────────────────────────────────
 
 async function scheduleRepeatables() {
@@ -109,8 +135,18 @@ async function scheduleRepeatables() {
     { pattern: "0 3 * * *" },
     { name: "facts-housekeeping" },
   );
+  await integrationsRefreshDimQueue.upsertJobScheduler(
+    "integrations-refresh-dim",
+    { pattern: "*/30 * * * *" },
+    { name: "integrations.refresh-dim-snapshots" },
+  );
+  await integrationsReconcileQueue.upsertJobScheduler(
+    "integrations-reconcile",
+    { pattern: "0 */6 * * *" },
+    { name: "integrations.reconcile" },
+  );
   console.log(
-    "[worker] Schedules registered: refresh-by-* every 5min, housekeeping daily 03:00",
+    "[worker] Schedules registered: refresh-by-* every 5min, housekeeping daily 03:00, integrations.refresh-dim every 30min, integrations.reconcile every 6h",
   );
 }
 
@@ -125,6 +161,8 @@ console.log("[worker] Workers iniciados:", [
   refreshByAgentWorker.name,
   refreshByTeamWorker.name,
   housekeepingWorker.name,
+  integrationsRefreshDimWorker.name,
+  integrationsReconcileWorker.name,
 ]);
 
 // ─── Graceful shutdown ────────────────────────────────────────────────────
@@ -138,6 +176,8 @@ async function shutdown(signal: string) {
     refreshByAgentWorker.close(),
     refreshByTeamWorker.close(),
     housekeepingWorker.close(),
+    integrationsRefreshDimWorker.close(),
+    integrationsReconcileWorker.close(),
   ]);
   await redis.quit();
   process.exit(0);
