@@ -1,12 +1,17 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-05-01
-**Versão atual em produção:** v0.16.0
+**Versão atual em produção:** v0.17.0
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.16.0)
+## Em produção (v0.17.0)
+
+### Release v0.17.0 (2026-05-01) — Conversas Revamp (export + busca + drill-down + virtualização)
+
+Revamp do `/relatorios/conversas`: export XLSX completo (50k linhas, colunas dinâmicas top-50 por chave de `custom_attributes`, header congelado, status/prioridade pt-BR), busca server-side por Enter (ILIKE OR em 11 campos com escape E'\\'), drill-down inline 3 seções (WhatsApp/Etiquetas/Atributos sem espaço fantasma), coluna #ID clicável substitui coluna Ações (hover violet + tooltip + nova aba), remoção de paginação visual + botão Carregar mais + seletor 100/Todos, virtualização com `@tanstack/react-virtual` (preserva thead sticky), LoadingOverlay polish (label dinâmico + blur-md + fade-in motion-safe), tour `conversas-v2` atualizado. Spec v3 com 27+19 achados de pente-fino · plan v3 com 14 tasks TDD · ui-ux-pro-max em toda task UI.
+
 
 ### Release v0.16.0 (2026-05-01) — Suite Agente Nex · Refinement
 

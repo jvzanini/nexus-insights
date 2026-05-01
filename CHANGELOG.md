@@ -1,5 +1,35 @@
 # Changelog
 
+## [v0.17.0] 2026-05-01 — Conversas Revamp (export + busca + drill-down + virtualização)
+
+> Revamp completo do `/relatorios/conversas`. Workflow rigoroso (spec v3 com 27+19 achados de pente-fino + plan v3 com 14 tasks granulares TDD + ui-ux-pro-max em todas as tasks de UI).
+
+### Implementação
+
+- **Botão Exportar** no toolbar — gera XLSX (até 50.000 linhas) respeitando filtros, ordenação e busca. Colunas dinâmicas por chave de `custom_attributes` (top-50 mais frequentes em ordem alfabética), header congelado, datas pt-BR, status/prioridade traduzidos.
+- **Busca server-side** (Enter para aplicar): cláusula ILIKE OR sobre nome, WhatsApp, documento, estado (inbox), departamento (team), atendente, status (texto pt-BR), prioridade (texto pt-BR), etiquetas e atributos. Sanitize de `%`/`_`/`\` + cap 256 chars + `ESCAPE E'\\'` (std-conforming-strings safe).
+- **Drill-down redesenhado**: 3 seções inline (WhatsApp / Etiquetas / Atributos) com rótulos alinhados via `min-w-[100px]`. Sem espaço fantasma entre seções (`space-y-2`). Sem botão "Abrir" duplicado.
+- **Coluna #ID clicável** substitui coluna "Ações": border cinza fininho default, hover roxo (`border-violet-500/60` + `bg-violet-500/5` + `text-violet-500`), tooltip "Abrir conversa #N no Chatwoot", focus-visible ring violet, abre em nova aba via `<a target="_blank">`.
+- **Coluna Etiquetas removida** da tabela e do `<ColumnsToggle>` (continua disponível no drill-down e o filtro `labelIds` em `<FiltersDialog>` permanece intacto).
+- **Sem paginação visual**: removido seletor "100 / Todos", botão "Carregar mais" e `<InfiniteScrollSentinel>`. Backend traz tudo até `MAX_TABLE_ROWS=10.000`. Banner amarelo "Mostrando primeiras 10.000 — refine os filtros" quando `nextCursor` retorna não-null.
+- **Virtualização** com `@tanstack/react-virtual` v3 — preserva thead sticky via padding-top/padding-bottom. Drill-down expand mensurado dinamicamente via `measureElement`.
+- **LoadingOverlay polish**: label dinâmico (`Carregando conversas...` / `Buscando...` / `Gerando planilha...`), `bg-card/70 backdrop-blur-md` (mais blur), fade-in `motion-safe:animate-in`, spinner com `animation-duration:1.2s` motion-safe.
+- **Tour `conversas-v2`**: novo step "Exportar"; descrições de search/drill-down/open-action reescritas; step `page-size` removido; `id` bumpado para forçar re-onboarding.
+
+### Compat
+
+- `localStorage["conversas-table-page-size"]` é limpo automaticamente no mount (cleanup runtime).
+- `chatwootConversationUrl(accountId, displayId)` mantém assinatura — usa as URLs públicas per-account configuradas em `/configuracoes` (entregue na v0.16.0) quando há mapping; senão fallback para env var.
+
+### Notas
+
+- Cap de export: 50.000 linhas (toast warning quando excede).
+- Cap de tabela: 10.000 linhas (banner amarelo quando excede).
+- Cap de 50 colunas dinâmicas no XLSX (top-N por frequência); excedente reportado em `droppedAttrCount` no result da Server Action.
+- `OpenInChatwoot` mantido (ainda usado em dashboard, mensagens-nao-respondidas e outros relatórios).
+
+
+
 ## [v0.16.0] 2026-05-01 — Suite Agente Nex · Refinement
 
 > Pacote consolidado de polish da Suite Agente Nex (lançada em v0.15.x). Spec v3 com 51 achados de pente-fino + plan v3 com 50 tasks granulares (TDD, ui-ux-pro-max em UI). 982 testes verde.
