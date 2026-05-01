@@ -25,6 +25,12 @@ export interface ReportFilters {
   period?: { start: Date; end: Date };
   /** Default `true` — exclui Matrix IA (inbox 31). Super admin pode passar `false`. */
   excludeMatrixIA?: boolean;
+  /**
+   * Texto de busca livre (ILIKE em nome, WhatsApp, documento, estado, departamento,
+   * atendente, status texto, prioridade texto, etiquetas, atributos). Aplicado
+   * apenas em conversas-list.ts via buildConversasSearchClause.
+   */
+  search?: string;
 }
 
 export interface BuiltFilter {
