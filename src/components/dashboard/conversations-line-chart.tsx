@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LineChart as LineChartIcon } from "lucide-react";
 import {
   CartesianGrid,
@@ -225,7 +225,6 @@ export function ConversationsLineChart({
   nextAvailable,
   onReferenceDateChange,
 }: ConversationsLineChartProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
   const [visibleSeries, setVisibleSeries] = useState<SeriesKey[]>(DEFAULT_VISIBLE);
 
   useEffect(() => {
@@ -271,38 +270,9 @@ export function ConversationsLineChart({
     (p) => p.received === 0 && p.open === 0 && p.resolved === 0 && p.pending === 0,
   );
 
-  // Para "Dia" (granularity=hour), chart precisa de scroll horizontal de 24h
-  // centralizando na hora atual quando referenceDate é hoje. Largura fixa.
-  // Para "Semana"/"Mês" (granularity=day), full-width responsivo.
-  const useScrollHorizontal = granularity === "hour";
-  const PX_PER_HOUR = 80;
-  const totalScrollWidth = useScrollHorizontal
-    ? Math.max(640, chartData.length * PX_PER_HOUR)
-    : 0;
-
-  useEffect(() => {
-    if (!useScrollHorizontal || !scrollRef.current || chartData.length === 0) return;
-    const container = scrollRef.current;
-    const containerWidth = container.clientWidth;
-
-    let targetIndex = chartData.length - 1;
-    // Se referenceDate é null OU é hoje, centra na hora atual
-    if (!referenceDate) {
-      const nowHourStr = new Intl.DateTimeFormat("en-GB", {
-        timeZone: tz,
-        hour: "2-digit",
-        hour12: false,
-      }).format(new Date());
-      const nowHour = parseInt(nowHourStr, 10);
-      if (Number.isFinite(nowHour)) targetIndex = nowHour;
-    } else {
-      // Em dias passados: centra no meio do dia (12h)
-      targetIndex = 12;
-    }
-
-    const targetX = targetIndex * PX_PER_HOUR + PX_PER_HOUR / 2;
-    container.scrollLeft = Math.max(0, targetX - containerWidth / 2);
-  }, [useScrollHorizontal, tz, chartData.length, referenceDate]);
+  // v0.14.2: TODOS os modos (dia/semana/mês) renderizam full-width sem
+  // scroll horizontal. recharts auto-deduplica labels apertados — o tooltip
+  // cobre os detalhes de cada bucket.
 
   return (
     <Card className="bg-card border border-border rounded-xl">
@@ -381,56 +351,6 @@ export function ConversationsLineChart({
           <div className="flex items-center justify-center h-[350px] text-sm text-muted-foreground">
             Nenhuma conversa no período
           </div>
-        ) : useScrollHorizontal ? (
-          <div
-            ref={scrollRef}
-            className="overflow-x-auto overflow-y-hidden scrollbar-thin"
-            tabIndex={0}
-            aria-label="Gráfico por hora — rolagem horizontal disponível"
-          >
-            <div style={{ width: totalScrollWidth, height: 350 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart
-                  data={chartData}
-                  margin={{ top: 16, right: 24, left: 8, bottom: 16 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                  <XAxis
-                    dataKey="label"
-                    tick={{ fill: "#a1a1aa", fontSize: 13 }}
-                    tickLine={false}
-                    tickMargin={14}
-                    axisLine={{ stroke: "#3f3f46" }}
-                    interval={0}
-                    height={44}
-                  />
-                  <YAxis
-                    tick={{ fill: "#a1a1aa", fontSize: 13 }}
-                    tickLine={false}
-                    axisLine={false}
-                    allowDecimals={false}
-                    width={44}
-                  />
-                  <Tooltip
-                    content={CustomTooltip}
-                    cursor={{ stroke: "rgba(63, 63, 70, 0.6)" }}
-                  />
-                  {SERIES.filter((s) => visibleSeries.includes(s.key)).map((s) => (
-                    <Line
-                      key={s.key}
-                      type="monotone"
-                      dataKey={s.key}
-                      name={s.label}
-                      stroke={s.color}
-                      strokeWidth={2.5}
-                      dot={false}
-                      activeDot={{ r: 5, strokeWidth: 0 }}
-                    />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
         ) : (
           <div style={{ width: "100%", height: 350 }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -441,12 +361,13 @@ export function ConversationsLineChart({
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                 <XAxis
                   dataKey="label"
-                  tick={{ fill: "#a1a1aa", fontSize: 13 }}
+                  tick={{ fill: "#a1a1aa", fontSize: 12 }}
                   tickLine={false}
-                  tickMargin={14}
+                  tickMargin={12}
                   axisLine={{ stroke: "#3f3f46" }}
                   interval="preserveStartEnd"
-                  height={44}
+                  minTickGap={20}
+                  height={40}
                 />
                 <YAxis
                   tick={{ fill: "#a1a1aa", fontSize: 13 }}

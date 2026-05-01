@@ -1,5 +1,26 @@
 # Changelog
 
+## [v0.14.2] 2026-05-01 — Coorte por atividade (open/pending) + chart Dia full-width + nav compacto
+
+> Bug crítico reportado pelo João: conversa criada em 30/04 e **reaberta** em 01/05 às 5h15 não aparecia em "Abertas (no período)" nem no gráfico do dia 01/05 — tudo zerado. Causa: SQL filtrava por `created_at ∈ período` (decisão da v0.10 "mesma coorte"), perdendo conversas reabertas. Corrigido para usar `last_activity_at` nas séries que falam de **atividade** (open/pending/no-response).
+
+### Mudou
+
+- **`dashboard-data.ts` chart query**: `received`/`resolved` continuam por `created_at` (coerência com KPIs); `open`/`pending` passam a usar `last_activity_at` no bucket. Implementado via `FULL OUTER JOIN` de duas CTEs (`created_buckets` + `activity_buckets`).
+- **KPI "Abertas (no período)"**: filtra `status=0 AND last_activity_at ∈ período` (era `created_at`).
+- **`byTeam`/`topInboxes`**: filtram por `last_activity_at` (open=0, pending=2, snoozed=3 com atividade no período).
+- **`byStatus`**: status 0/2/3 por `last_activity_at`; status 1 (resolved) mantém `created_at`.
+- **`noResponse`** (card hero + drill-down): filtra `last_activity_at ∈ período + status=0 + última msg é do contato`. Captura conversas reabertas com mensagem aguardando resposta.
+- **Cache key bump**: `dashboard-data-v6` → `v7`.
+- **Chart "Dia" full-width**: removido scroll horizontal de 24 buckets. Agora todos os modos (Dia/Semana/Mês) usam `<ResponsiveContainer width="100%" height={350}>`. Eixo X com `interval="preserveStartEnd"` + `minTickGap={20}` para auto-deduplicar labels apertados.
+- **`<PeriodNavigator>` compacto**: padding menor (h-6 w-6 ícones), borda violeta sutil (`border-violet-500/40`), hover violeta (`hover:border-violet-500/70 hover:bg-violet-500/5`), focus ring violeta. Largura auto-ajustável conforme label.
+
+### Verificação
+
+- 674 testes / 77 suites PASS · typecheck 0 erros · build verde local.
+
+---
+
 ## [v0.14.1] 2026-05-01 — Hotfix Agente Nex × Matrix IA: cast PG + role explícito
 
 > Dois bugs descobertos pelo super_admin testando o Nex em todas as configurações de visibility do Matrix IA:

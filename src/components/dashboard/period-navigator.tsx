@@ -98,7 +98,12 @@ export function PeriodNavigator({
 
   return (
     <div
-      className="inline-flex items-center gap-1 rounded-lg border border-border bg-card/80 px-1 py-1"
+      className={cn(
+        "inline-flex items-center gap-0.5 rounded-md border bg-card/80 px-0.5 py-0.5",
+        "border-violet-500/40 transition-colors duration-150",
+        "hover:border-violet-500/70 hover:bg-violet-500/5",
+        "focus-within:border-violet-500 focus-within:shadow-[0_0_0_2px_rgba(139,92,246,0.2)]",
+      )}
       role="group"
       aria-label={`Navegação de ${period}`}
     >
@@ -106,14 +111,15 @@ export function PeriodNavigator({
         type="button"
         onClick={handlePrev}
         className={cn(
-          "inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors",
-          "text-muted-foreground hover:bg-accent/60 hover:text-foreground cursor-pointer",
+          "inline-flex h-6 w-6 items-center justify-center rounded transition-colors duration-150",
+          "text-violet-300 hover:bg-violet-500/15 hover:text-violet-200 cursor-pointer",
+          "focus-visible:outline-none focus-visible:bg-violet-500/20",
         )}
         aria-label="Período anterior"
       >
-        <ChevronLeft className="h-4 w-4" aria-hidden />
+        <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
       </button>
-      <span className="px-2 text-sm font-semibold tabular-nums text-foreground select-none">
+      <span className="px-2 py-0.5 text-xs font-semibold tabular-nums text-foreground select-none whitespace-nowrap">
         {label}
       </span>
       <button
@@ -121,14 +127,14 @@ export function PeriodNavigator({
         onClick={handleNext}
         disabled={!nextAvailable}
         className={cn(
-          "inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors",
+          "inline-flex h-6 w-6 items-center justify-center rounded transition-colors duration-150",
           nextAvailable
-            ? "text-muted-foreground hover:bg-accent/60 hover:text-foreground cursor-pointer"
-            : "text-muted-foreground/30 cursor-not-allowed",
+            ? "text-violet-300 hover:bg-violet-500/15 hover:text-violet-200 cursor-pointer focus-visible:outline-none focus-visible:bg-violet-500/20"
+            : "text-violet-300/20 cursor-not-allowed",
         )}
         aria-label="Próximo período"
       >
-        <ChevronRight className="h-4 w-4" aria-hidden />
+        <ChevronRight className="h-3.5 w-3.5" aria-hidden />
       </button>
     </div>
   );

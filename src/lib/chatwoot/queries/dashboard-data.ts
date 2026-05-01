@@ -212,10 +212,11 @@ export async function dashboardData(args: DashboardDataInput) {
     forcedGranularity: args.forcedGranularity ?? null,
   };
 
-  // Cache key v6 — bump por mudança em granularity forçada (v0.14.0).
+  // Cache key v7 — bump v0.14.2 (coorte open/pending/no-response por
+  // last_activity_at em vez de created_at).
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-data-v6",
+    name: "dashboard-data-v7",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -258,13 +259,16 @@ export async function dashboardData(args: DashboardDataInput) {
               ${matrixClause}
           `;
 
-          // ---------- 3. Abertas — MESMA coorte (created_at no período + status=0 agora) ----------
+          // ---------- 3. Abertas (no período) — coorte por ATIVIDADE no período ----------
+          // v0.14.2: troca created_at por last_activity_at. Isso captura conversas
+          // criadas antes do período mas REABERTAS dentro dele (com status=0).
+          // Bug original: conversa criada em 30/04 reaberta em 01/05 não aparecia.
           const sqlOpen = `
             SELECT COUNT(*)::bigint AS total
             FROM conversations c
             WHERE c.account_id = $1
-              AND c.created_at >= $2
-              AND c.created_at < $3
+              AND c.last_activity_at >= $2
+              AND c.last_activity_at < $3
               AND c.status = 0
               ${matrixClause}
           `;
@@ -273,37 +277,87 @@ export async function dashboardData(args: DashboardDataInput) {
           const sqlReceivedPrev = sqlReceived;
           const sqlResolvedPrev = sqlResolved;
 
-          // ---------- 5. Chart bucketed (4 séries: received/resolved/open/pending) ----------
+          // ---------- 5. Chart bucketed (4 séries) ----------
+          //
+          // v0.14.2 (hotfix coorte): UNION de 2 queries:
+          //  - Recebidas/Resolvidas: por bucket de `created_at` (mantém coerência
+          //    com KPIs Recebidas/Resolvidas que falam da coorte criada).
+          //  - Abertas/Pendentes: por bucket de `last_activity_at` filtrando
+          //    pelo `status` atual (mostra ATIVIDADE no bucket — captura
+          //    conversas reabertas, não só criadas).
+          //
+          // Bug corrigido: conversa criada antes do período mas reaberta dentro
+          // dele não aparecia em "Abertas". Agora aparece via last_activity_at.
           const sqlChart =
             granularity === "hour"
               ? `
+              WITH created_buckets AS (
+                SELECT
+                  (date_trunc('hour', c.created_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
+                  COUNT(*)::bigint AS received,
+                  COUNT(*) FILTER (WHERE c.status = 1)::bigint AS resolved
+                FROM conversations c
+                WHERE c.account_id = $1
+                  AND c.created_at >= $2
+                  AND c.created_at < $3
+                  ${matrixClause}
+                GROUP BY bucket
+              ),
+              activity_buckets AS (
+                SELECT
+                  (date_trunc('hour', c.last_activity_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
+                  COUNT(*) FILTER (WHERE c.status = 0)::bigint AS open,
+                  COUNT(*) FILTER (WHERE c.status = 2)::bigint AS pending
+                FROM conversations c
+                WHERE c.account_id = $1
+                  AND c.last_activity_at >= $2
+                  AND c.last_activity_at < $3
+                  ${matrixClause}
+                GROUP BY bucket
+              )
               SELECT
-                (date_trunc('hour', c.created_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
-                COUNT(*)::bigint AS received,
-                COUNT(*) FILTER (WHERE c.status = 1)::bigint AS resolved,
-                COUNT(*) FILTER (WHERE c.status = 0)::bigint AS open,
-                COUNT(*) FILTER (WHERE c.status = 2)::bigint AS pending
-              FROM conversations c
-              WHERE c.account_id = $1
-                AND c.created_at >= $2
-                AND c.created_at < $3
-                ${matrixClause}
-              GROUP BY bucket
+                COALESCE(cb.bucket, ab.bucket) AS bucket,
+                COALESCE(cb.received, 0)::bigint AS received,
+                COALESCE(cb.resolved, 0)::bigint AS resolved,
+                COALESCE(ab.open, 0)::bigint AS open,
+                COALESCE(ab.pending, 0)::bigint AS pending
+              FROM created_buckets cb
+              FULL OUTER JOIN activity_buckets ab ON cb.bucket = ab.bucket
               ORDER BY bucket ASC
             `
               : `
+              WITH created_buckets AS (
+                SELECT
+                  (date_trunc('day', c.created_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
+                  COUNT(*)::bigint AS received,
+                  COUNT(*) FILTER (WHERE c.status = 1)::bigint AS resolved
+                FROM conversations c
+                WHERE c.account_id = $1
+                  AND c.created_at >= $2
+                  AND c.created_at < $3
+                  ${matrixClause}
+                GROUP BY bucket
+              ),
+              activity_buckets AS (
+                SELECT
+                  (date_trunc('day', c.last_activity_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
+                  COUNT(*) FILTER (WHERE c.status = 0)::bigint AS open,
+                  COUNT(*) FILTER (WHERE c.status = 2)::bigint AS pending
+                FROM conversations c
+                WHERE c.account_id = $1
+                  AND c.last_activity_at >= $2
+                  AND c.last_activity_at < $3
+                  ${matrixClause}
+                GROUP BY bucket
+              )
               SELECT
-                (date_trunc('day', c.created_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
-                COUNT(*)::bigint AS received,
-                COUNT(*) FILTER (WHERE c.status = 1)::bigint AS resolved,
-                COUNT(*) FILTER (WHERE c.status = 0)::bigint AS open,
-                COUNT(*) FILTER (WHERE c.status = 2)::bigint AS pending
-              FROM conversations c
-              WHERE c.account_id = $1
-                AND c.created_at >= $2
-                AND c.created_at < $3
-                ${matrixClause}
-              GROUP BY bucket
+                COALESCE(cb.bucket, ab.bucket) AS bucket,
+                COALESCE(cb.received, 0)::bigint AS received,
+                COALESCE(cb.resolved, 0)::bigint AS resolved,
+                COALESCE(ab.open, 0)::bigint AS open,
+                COALESCE(ab.pending, 0)::bigint AS pending
+              FROM created_buckets cb
+              FULL OUTER JOIN activity_buckets ab ON cb.bucket = ab.bucket
               ORDER BY bucket ASC
             `;
 
@@ -325,14 +379,16 @@ export async function dashboardData(args: DashboardDataInput) {
             LIMIT 5
           `;
 
-          // ---------- 7. Inboxes em aberto no período ----------
+          // ---------- 7. Inboxes em aberto no período (atividade) ----------
+          // v0.14.2: filtra por last_activity_at em vez de created_at — captura
+          // conversas reabertas dentro do período.
           const sqlTopInboxes = `
             SELECT i.id, i.name, COUNT(c.id)::bigint AS total
             FROM conversations c
             JOIN inboxes i ON i.id = c.inbox_id
             WHERE c.account_id = $1
-              AND c.created_at >= $2
-              AND c.created_at < $3
+              AND c.last_activity_at >= $2
+              AND c.last_activity_at < $3
               AND c.status = 0
               ${matrixClause}
             GROUP BY i.id, i.name
@@ -340,7 +396,7 @@ export async function dashboardData(args: DashboardDataInput) {
             LIMIT 10
           `;
 
-          // ---------- 8. byTeam — open/pending/snoozed por departamento (com bucket "Sem departamento") ----------
+          // ---------- 8. byTeam — open/pending/snoozed por atividade no período ----------
           const sqlByTeam = `
             SELECT
               t.id,
@@ -349,28 +405,45 @@ export async function dashboardData(args: DashboardDataInput) {
             FROM conversations c
             LEFT JOIN teams t ON t.id = c.team_id
             WHERE c.account_id = $1
-              AND c.created_at >= $2
-              AND c.created_at < $3
+              AND c.last_activity_at >= $2
+              AND c.last_activity_at < $3
               AND c.status IN (0, 2, 3)
               ${matrixClause}
             GROUP BY t.id, t.name
             ORDER BY total DESC
           `;
 
-          // ---------- 9. byStatus — distribuição por status no período ----------
+          // ---------- 9. byStatus — distribuição por status (atividade no período) ----------
+          // v0.14.2: status 0/2/3 por last_activity_at; status 1 (resolved)
+          // por created_at (mantém coerência com KPI Resolvidas).
           const sqlByStatus = `
-            SELECT
-              c.status::int AS status,
-              COUNT(*)::bigint AS total
-            FROM conversations c
-            WHERE c.account_id = $1
-              AND c.created_at >= $2
-              AND c.created_at < $3
-              ${matrixClause}
-            GROUP BY c.status
+            SELECT status, total FROM (
+              SELECT
+                c.status::int AS status,
+                COUNT(*)::bigint AS total
+              FROM conversations c
+              WHERE c.account_id = $1
+                AND c.last_activity_at >= $2
+                AND c.last_activity_at < $3
+                AND c.status IN (0, 2, 3)
+                ${matrixClause}
+              GROUP BY c.status
+              UNION ALL
+              SELECT
+                1 AS status,
+                COUNT(*)::bigint AS total
+              FROM conversations c
+              WHERE c.account_id = $1
+                AND c.created_at >= $2
+                AND c.created_at < $3
+                AND c.status = 1
+                ${matrixClause}
+            ) sub
           `;
 
           // ---------- 10. noResponse — preview (5) + agg ----------
+          // v0.14.2: filtra por last_activity_at no período (capta conversas
+          // reabertas com mensagem do contato sem resposta).
           const sqlNoResponse = `
             WITH last_msg AS (
               SELECT DISTINCT ON (m.conversation_id)
@@ -396,8 +469,8 @@ export async function dashboardData(args: DashboardDataInput) {
             LEFT JOIN inboxes ix ON ix.id = c.inbox_id
             LEFT JOIN users u ON u.id = c.assignee_id
             WHERE c.account_id = $1
-              AND c.created_at >= $2
-              AND c.created_at < $3
+              AND c.last_activity_at >= $2
+              AND c.last_activity_at < $3
               AND c.status = 0
               ${matrixClause}
             ORDER BY waiting_seconds DESC
@@ -421,8 +494,8 @@ export async function dashboardData(args: DashboardDataInput) {
               ON lm.conversation_id = c.id
              AND lm.message_type = 0
             WHERE c.account_id = $1
-              AND c.created_at >= $2
-              AND c.created_at < $3
+              AND c.last_activity_at >= $2
+              AND c.last_activity_at < $3
               AND c.status = 0
               ${matrixClause}
           `;
