@@ -88,6 +88,31 @@ describe("LlmCredentialsManager", () => {
     ).toBeInTheDocument();
   });
 
+  it("provider sem credenciais renderiza estado vazio com 2 CTAs", () => {
+    render(
+      <LlmCredentialsManager initial={[]} activeCredentialId={null} />,
+    );
+    // Card vazio com testid próprio
+    expect(
+      screen.getByTestId("credentials-empty-openai"),
+    ).toBeInTheDocument();
+    // Texto descritivo
+    expect(
+      screen.getByText(/Nenhuma chave cadastrada para OpenAI/i),
+    ).toBeInTheDocument();
+    // CTA externo (link)
+    const externalCta = screen.getByTestId("credentials-empty-external-openai");
+    expect(externalCta).toHaveAttribute(
+      "href",
+      "https://platform.openai.com/api-keys",
+    );
+    expect(externalCta).toHaveAttribute("target", "_blank");
+    // CTA "Nova chave" (botão dentro do card vazio)
+    expect(
+      screen.getByTestId("credentials-empty-new-openai"),
+    ).toBeInTheDocument();
+  });
+
   it("ponto verde aparece somente na credencial ativa", () => {
     render(
       <LlmCredentialsManager
@@ -210,16 +235,80 @@ describe("LlmCredentialsManager", () => {
     );
   });
 
-  it("clicar deletar (lixeira) na credencial ativa: action retorna erro → toast 'em uso'", async () => {
+  it("clicar 'Excluir' abre AlertDialog (não chama window.confirm)", async () => {
+    const confirmSpy = jest.spyOn(window, "confirm");
+
+    render(
+      <LlmCredentialsManager
+        initial={[cred({ id: "c1", label: "Atual", last4: "1234" })]}
+        activeCredentialId={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText("Excluir Atual"));
+
+    expect(
+      await screen.findByText(/Excluir chave "Atual"\?/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Essa ação remove permanentemente/i),
+    ).toBeInTheDocument();
+    expect(confirmSpy).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+  });
+
+  it("AlertDialog: Cancelar NÃO dispara delete", async () => {
+    render(
+      <LlmCredentialsManager
+        initial={[cred({ id: "c1", label: "Atual", last4: "1234" })]}
+        activeCredentialId={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText("Excluir Atual"));
+    await screen.findByText(/Excluir chave "Atual"\?/i);
+
+    const cancelBtn = screen.getByRole("button", { name: /^cancelar$/i });
+    await act(async () => {
+      fireEvent.click(cancelBtn);
+    });
+
+    expect(deleteLlmCredentialAction).not.toHaveBeenCalled();
+  });
+
+  it("AlertDialog: Confirmar dispara deleteLlmCredentialAction + toast sucesso", async () => {
+    deleteLlmCredentialAction.mockResolvedValue({ ok: true });
+
+    render(
+      <LlmCredentialsManager
+        initial={[cred({ id: "c1", label: "Atual", last4: "1234" })]}
+        activeCredentialId={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText("Excluir Atual"));
+    await screen.findByText(/Excluir chave "Atual"\?/i);
+
+    const excluirBtn = screen.getByRole("button", { name: /^excluir$/i });
+    await act(async () => {
+      fireEvent.click(excluirBtn);
+    });
+
+    await waitFor(() =>
+      expect(deleteLlmCredentialAction).toHaveBeenCalledWith("c1"),
+    );
+    await waitFor(() =>
+      expect(toastMock.success).toHaveBeenCalledWith("Chave deletada"),
+    );
+  });
+
+  it("AlertDialog: erro 'em uso' chega como toast quando action falha", async () => {
     deleteLlmCredentialAction.mockResolvedValue({
       ok: false,
       error:
         "Esta chave está em uso pelo Agente Nex. Selecione outra antes de deletar.",
     });
-
-    const confirmSpy = jest
-      .spyOn(window, "confirm")
-      .mockImplementation(() => true);
 
     render(
       <LlmCredentialsManager
@@ -228,9 +317,12 @@ describe("LlmCredentialsManager", () => {
       />,
     );
 
-    const trash = screen.getByLabelText("Deletar Em uso");
+    fireEvent.click(screen.getByLabelText("Excluir Em uso"));
+    await screen.findByText(/Excluir chave "Em uso"\?/i);
+
+    const excluirBtn = screen.getByRole("button", { name: /^excluir$/i });
     await act(async () => {
-      fireEvent.click(trash);
+      fireEvent.click(excluirBtn);
     });
 
     await waitFor(() =>
@@ -241,7 +333,5 @@ describe("LlmCredentialsManager", () => {
         expect.stringMatching(/em uso/i),
       ),
     );
-
-    confirmSpy.mockRestore();
   });
 });

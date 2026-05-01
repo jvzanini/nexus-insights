@@ -10,6 +10,8 @@ import {
   Sparkles,
   Loader2,
   Plug,
+  KeyRound,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -18,6 +20,16 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { PROVIDER_CATALOG } from "@/lib/llm/catalog";
 import type { CredentialSummary } from "@/lib/llm/credentials";
 import {
@@ -48,16 +60,18 @@ type DialogState =
   | { mode: "rotate"; cred: CredentialSummary };
 
 /**
- * Componente "headless" (sem `<Card>` wrapper) que gerencia a lista de
- * credenciais por provider + dialogs de criar/renomear/trocar.
+ * Gerencia a lista de credenciais por provider + dialogs de criar/renomear/trocar.
  *
- * Consumido pela página `/agente-nex/chaves` (Server Component que embrulha
- * em PageShell + Card e injeta `initial` + `activeCredentialId`).
+ * Refactor T6a (v0.16.0):
+ *  - Header de cada provedor padronizado: ícone violet + label, botão "Nova chave" gradient violet, link "Criar API key".
+ *  - AlertDialog substitui window.confirm na exclusão (UX consistente).
+ *  - Card vazio com 2 CTAs (link externo + botão Nova chave).
  */
 export function LlmCredentialsManager({ initial, activeCredentialId }: Props) {
   const router = useRouter();
   const [items, setItems] = useState<CredentialSummary[]>(initial);
   const [pending, startTransition] = useTransition();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Sincroniza estado local quando o pai re-renderiza com lista nova
   // (router.refresh() depois de uma mutação).
@@ -96,20 +110,17 @@ export function LlmCredentialsManager({ initial, activeCredentialId }: Props) {
     router.refresh();
   }
 
-  function handleDelete(c: CredentialSummary) {
-    if (typeof window === "undefined") return;
-    const confirmed = window.confirm(
-      `Deletar chave "${c.label}"? Essa ação não pode ser desfeita.`,
-    );
-    if (!confirmed) return;
+  function confirmDelete(c: CredentialSummary) {
     startTransition(async () => {
       const r = await deleteLlmCredentialAction(c.id);
       if (!r.ok) {
         toast.error(r.error ?? "Erro ao deletar");
+        setDeletingId(null);
         return;
       }
       toast.success("Chave deletada");
       setItems((arr) => arr.filter((x) => x.id !== c.id));
+      setDeletingId(null);
       refreshFromServer();
     });
   }
@@ -118,34 +129,93 @@ export function LlmCredentialsManager({ initial, activeCredentialId }: Props) {
     <div className="space-y-4">
       {PROVIDERS.map((p) => {
         const list = grouped[p] ?? [];
+        const catalog = PROVIDER_CATALOG[p];
+        const initial = catalog.label.charAt(0);
         return (
           <section
             key={p}
             data-testid={`credentials-section-${p}`}
-            className="rounded-xl border border-border bg-background/40 p-3"
+            className="rounded-xl border border-border bg-background/40 p-4"
           >
-            <header className="flex items-center justify-between">
-              <h3 className="text-sm font-medium text-foreground">
-                {PROVIDER_CATALOG[p].label}
-              </h3>
-              <Button
-                size="sm"
-                variant="outline"
-                className="cursor-pointer"
-                onClick={() => setDialogState({ mode: "create", provider: p })}
-                disabled={pending}
-                aria-label={`Nova chave para ${PROVIDER_CATALOG[p].label}`}
-              >
-                <Plus className="mr-1 h-4 w-4" /> Nova
-              </Button>
+            <header className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <span
+                  aria-hidden
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-600/10 text-violet-500 dark:text-violet-400 text-sm font-semibold"
+                >
+                  {initial}
+                </span>
+                <h3 className="truncate text-sm font-semibold text-foreground">
+                  {catalog.label}
+                </h3>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <a
+                  href={catalog.apiKeyUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background cursor-pointer"
+                  aria-label={`Criar API key no painel do ${catalog.label}`}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Criar API key
+                </a>
+                <Button
+                  size="sm"
+                  variant="default"
+                  className="cursor-pointer bg-gradient-to-br from-violet-600 to-violet-500 text-white shadow-sm hover:from-violet-700 hover:to-violet-600 dark:from-violet-500 dark:to-violet-400"
+                  onClick={() => setDialogState({ mode: "create", provider: p })}
+                  disabled={pending}
+                  aria-label={`Nova chave para ${catalog.label}`}
+                >
+                  <Plus className="mr-1 h-4 w-4" /> Nova chave
+                </Button>
+              </div>
             </header>
 
             {list.length === 0 ? (
-              <p className="mt-2 text-xs text-muted-foreground">
-                — Nenhuma chave cadastrada
-              </p>
+              <div
+                data-testid={`credentials-empty-${p}`}
+                className="mt-4 rounded-lg border border-dashed border-border bg-muted/20 p-6 text-center"
+              >
+                <KeyRound
+                  aria-hidden
+                  className="mx-auto h-7 w-7 text-muted-foreground"
+                />
+                <p className="mt-2 text-sm font-medium text-foreground">
+                  Nenhuma chave cadastrada para {catalog.label}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Crie uma chave no painel do {catalog.label} e cadastre-a aqui
+                  para usar nos modelos.
+                </p>
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                  <a
+                    href={catalog.apiKeyUrl}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    data-testid={`credentials-empty-external-${p}`}
+                    className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background cursor-pointer"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Criar API key no painel do {catalog.label}
+                  </a>
+                  <Button
+                    size="sm"
+                    variant="default"
+                    data-testid={`credentials-empty-new-${p}`}
+                    className="cursor-pointer bg-gradient-to-br from-violet-600 to-violet-500 text-white shadow-sm hover:from-violet-700 hover:to-violet-600 dark:from-violet-500 dark:to-violet-400"
+                    onClick={() =>
+                      setDialogState({ mode: "create", provider: p })
+                    }
+                    disabled={pending}
+                  >
+                    <Plus className="mr-1 h-4 w-4" /> Nova chave
+                  </Button>
+                </div>
+              </div>
             ) : (
-              <ul className="mt-2 divide-y divide-border">
+              <ul className="mt-3 divide-y divide-border">
                 {list.map((c) => {
                   const isActive = c.id === activeCredentialId;
                   return (
@@ -209,11 +279,49 @@ export function LlmCredentialsManager({ initial, activeCredentialId }: Props) {
                           variant="ghost"
                           className="cursor-pointer text-destructive hover:text-destructive"
                           disabled={pending}
-                          aria-label={`Deletar ${c.label}`}
-                          onClick={() => handleDelete(c)}
+                          aria-label={`Excluir ${c.label}`}
+                          onClick={() => setDeletingId(c.id)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
+
+                        <AlertDialog
+                          open={deletingId === c.id}
+                          onOpenChange={(open) => {
+                            if (!open && !pending) setDeletingId(null);
+                          }}
+                        >
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>
+                                Excluir chave &quot;{c.label}&quot;?
+                              </AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Essa ação remove permanentemente a credencial e
+                                não pode ser desfeita. Configurações que usavam
+                                essa chave precisarão ser refeitas.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel disabled={pending}>
+                                Cancelar
+                              </AlertDialogCancel>
+                              <AlertDialogAction
+                                variant="destructive"
+                                disabled={pending}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  confirmDelete(c);
+                                }}
+                              >
+                                {pending ? (
+                                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                                ) : null}
+                                Excluir
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
                     </li>
                   );
