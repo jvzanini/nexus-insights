@@ -18,6 +18,12 @@ export interface KpiCardProps {
   label: string;
   value: ReactNode;
   hint?: string;
+  /**
+   * Slot opcional de 2ª linha textual (ex.: conversão de moeda "≈ 2,30 USD").
+   * Renderizado abaixo do hint (ou do valor, se hint ausente) com peso visual
+   * menor que o hint (text-xs vs text-xs muted-foreground; mt-0.5 separação).
+   */
+  subtitle?: ReactNode;
   tone?: "default" | "danger" | "success" | "warning";
   delta?: KpiDelta;
 }
@@ -64,12 +70,13 @@ export function KpiCard({
   label,
   value,
   hint,
+  subtitle,
   tone = "default",
   delta,
 }: KpiCardProps) {
   const DeltaIcon = delta ? deltaIcon[delta.direction] : null;
   return (
-    <div className="group relative rounded-2xl border border-border bg-muted/30 p-5 transition-colors hover:border-foreground/20">
+    <div className="group relative min-h-[128px] rounded-2xl border border-border bg-muted/30 p-5 transition-colors hover:border-foreground/20">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -89,6 +96,14 @@ export function KpiCard({
           ) : null}
           {hint ? (
             <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
+          ) : null}
+          {subtitle ? (
+            <p
+              data-slot="kpi-subtitle"
+              className="mt-0.5 text-xs text-muted-foreground/80"
+            >
+              {subtitle}
+            </p>
           ) : null}
         </div>
         <div
