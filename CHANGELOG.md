@@ -1,5 +1,27 @@
 # Changelog
 
+## [v0.13.1] 2026-04-30 — Backfill BRL no relatório de Consumo do Agente Nex
+
+> Estende o backfill do v0.12.3 para também popular `cost_brl` e `usd_to_brl_rate` em chamadas antigas que estavam com BRL = NULL. Antes desta release, todas as chamadas anteriores ao v0.12.0 mostravam "—" na coluna Custo BRL e contribuíam com R$ 0 nos totais — porque a tabela `llm_usage` não tinha as colunas BRL na época. Agora todos os relatórios de Consumo (KPIs, charts e tabela detalhada) mostram valores em reais para todas as chamadas registradas.
+
+### O que mudou
+
+- **`backfillUsageCosts()` ganhou uma segunda etapa** que aplica `cost_brl = cost_usd × rate_atual` e `usd_to_brl_rate = rate_atual` em todas as rows com `cost_brl IS NULL AND cost_usd > 0`. Idempotente — segunda execução não toca nada porque o filtro `IS NULL` deixa de matchear. Roda automaticamente em `ensureLlmTables()` no primeiro request após o deploy.
+- Como **perdemos a cotação histórica de cada chamada** (não foi gravada na época), o backfill aplica a **cotação atual** (commercial × spread cartão, AwesomeAPI cache 4h) — é uma aproximação. Chamadas registradas a partir do v0.12.0 continuam tendo a cotação real do dia da chamada. Apenas as **antigas** ganham essa aproximação retroativa.
+- O log do container registra: `[backfill-usage-costs] cost_brl populado em N rows com taxa X.XXXX (live|cache|fallback)`.
+
+### Comportamento da UI após o deploy
+
+- KPI "Custo total": valor BRL agora reflete o total real (USD primário continuou correto desde o v0.12.3).
+- Gráficos "Custo por dia / por modelo / Distribuição por provider": rendem em BRL com valores reais.
+- Tabela "Chamadas detalhadas": coluna **Custo BRL** mostra `R$ 0,00XXXX` (mín. 3, máx. 6 casas decimais) em todas as chamadas; cotação aplicada disponível no campo `usd_to_brl_rate` (não exibido, mas auditável).
+
+### Outras coisas
+
+- 77 suites / 670 tests PASS · typecheck 0 erros.
+
+---
+
 ## [v0.13.0] 2026-04-30 — Dashboard polish: variação relativa, semana/mês inteligentes, drill-downs completos
 
 > Resolve 11 problemas reportados pelo super_admin via screenshots no dashboard `/dashboard` e nos drill-downs dos KPIs, mais 5 melhorias incidentais no `ConversationsLineChart`. A spec passou por dois pente-finos reais (12+5 achados corrigidos) antes da implementação. Implementação via subagent-driven-development com TDD nos helpers puros.

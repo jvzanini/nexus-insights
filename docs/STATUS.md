@@ -1,12 +1,20 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-04-30
-**Versão atual em produção:** v0.13.0
+**Versão atual em produção:** v0.13.1
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.13.0)
+## Em produção (v0.13.1)
+
+### Hotfix v0.13.1 (2026-04-30) — backfill BRL no relatório de Consumo
+
+- `backfillUsageCosts()` agora preenche `cost_brl` + `usd_to_brl_rate` em rows BRL=NULL, aplicando a cotação atual cartão (aproximação retroativa). Idempotente.
+- Resultado: KPIs, charts e tabela detalhada de `/configuracoes/consumo` mostram valores em R$ para TODAS as chamadas registradas (antes do v0.12.0 ainda mostravam "—").
+- Chamadas a partir de v0.12.0 continuam com cotação real do dia da chamada.
+
+## Em produção anteriormente (v0.13.0)
 
 ### Release v0.13.0 (2026-04-30) — Dashboard polish & configurabilidade
 
