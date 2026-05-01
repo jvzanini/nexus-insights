@@ -525,67 +525,68 @@ export function NexChatPanel({
             }}
             className="flex items-end gap-2"
           >
-            {isRecording ? (
-              // Modo gravação: a barra do AudioRecorder ocupa toda a largura.
-              // Textarea + label "Enter envia" + botão enviar texto ficam ocultos
-              // (fix v0.15.2: antes apareciam comprimidos ao lado da barra).
-              audioInputEnabled && !audioFlight ? (
-                <AudioRecorder
-                  onSend={(blob, durationSeconds) => {
-                    void handleSendAudio(blob, durationSeconds);
-                  }}
-                  onRecordingStateChange={setIsRecording}
-                />
-              ) : null
-            ) : (
-              <>
-                <textarea
-                  ref={inputRef}
-                  value={input}
-                  disabled={pending}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      void handleSend(input);
-                    }
-                  }}
-                  rows={1}
-                  placeholder="Pergunte algo sobre o atendimento…"
-                  aria-label="Mensagem para o Agente Nex"
-                  className={cn(
-                    "flex-1 resize-none rounded-xl border border-input bg-background px-3 py-2 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground",
-                    "max-h-28 min-h-9 outline-none transition-colors field-sizing-content",
-                    "focus-visible:border-violet-500/60 focus-visible:ring-3 focus-visible:ring-violet-400/30",
-                    "disabled:cursor-not-allowed disabled:opacity-50",
-                  )}
-                />
-                {audioInputEnabled && !audioFlight ? (
-                  <AudioRecorder
-                    onSend={(blob, durationSeconds) => {
-                      void handleSendAudio(blob, durationSeconds);
-                    }}
-                    onRecordingStateChange={setIsRecording}
-                  />
-                ) : null}
-                <button
-                  type="submit"
-                  aria-label="Enviar pergunta"
-                  disabled={
-                    pending || audioFlight || input.trim().length === 0
+            {/*
+              Fix v0.15.3: UMA ÚNICA instância do AudioRecorder sempre montada
+              quando audio está habilitado. Antes (v0.15.2) tínhamos duas
+              instâncias condicionadas a `isRecording` — o React desmontava
+              uma e remontava outra ao mudar o flag, perdendo o estado interno
+              (status="recording") e os refs do MediaRecorder. Resultado: ao
+              clicar mic, o stream começava (browser mostrava ícone de
+              gravação) mas a UI voltava ao estado idle com botão mic de novo.
+
+              Agora o AudioRecorder fica montado fora do branch condicional;
+              só os siblings (textarea + send button) somem quando gravando.
+              `flex-1` na barra de gravação faz ela ocupar todo o espaço
+              disponível.
+            */}
+            {!isRecording ? (
+              <textarea
+                ref={inputRef}
+                value={input}
+                disabled={pending}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void handleSend(input);
                   }
-                  className={cn(
-                    "flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-xl",
-                    "bg-gradient-to-br from-violet-600 to-violet-500 text-white shadow-md shadow-violet-600/30",
-                    "transition-all hover:from-violet-500 hover:to-violet-400 hover:shadow-lg",
-                    "focus-visible:ring-3 focus-visible:ring-violet-400/50 focus-visible:outline-none",
-                    "disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none",
-                  )}
-                >
-                  <Send className="h-4 w-4" strokeWidth={2.25} />
-                </button>
-              </>
-            )}
+                }}
+                rows={1}
+                placeholder="Pergunte algo sobre o atendimento…"
+                aria-label="Mensagem para o Agente Nex"
+                className={cn(
+                  "flex-1 resize-none rounded-xl border border-input bg-background px-3 py-2 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground",
+                  "max-h-28 min-h-9 outline-none transition-colors field-sizing-content",
+                  "focus-visible:border-violet-500/60 focus-visible:ring-3 focus-visible:ring-violet-400/30",
+                  "disabled:cursor-not-allowed disabled:opacity-50",
+                )}
+              />
+            ) : null}
+            {audioInputEnabled && !audioFlight ? (
+              <AudioRecorder
+                onSend={(blob, durationSeconds) => {
+                  void handleSendAudio(blob, durationSeconds);
+                }}
+                onRecordingStateChange={setIsRecording}
+                className={isRecording ? "flex-1" : ""}
+              />
+            ) : null}
+            {!isRecording ? (
+              <button
+                type="submit"
+                aria-label="Enviar pergunta"
+                disabled={pending || audioFlight || input.trim().length === 0}
+                className={cn(
+                  "flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-xl",
+                  "bg-gradient-to-br from-violet-600 to-violet-500 text-white shadow-md shadow-violet-600/30",
+                  "transition-all hover:from-violet-500 hover:to-violet-400 hover:shadow-lg",
+                  "focus-visible:ring-3 focus-visible:ring-violet-400/50 focus-visible:outline-none",
+                  "disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none",
+                )}
+              >
+                <Send className="h-4 w-4" strokeWidth={2.25} />
+              </button>
+            ) : null}
           </form>
           {!isRecording ? (
             <p className="mt-1.5 px-1 text-[11px] text-muted-foreground">

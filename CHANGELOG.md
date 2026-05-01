@@ -1,5 +1,24 @@
 # Changelog
 
+## [v0.15.3] 2026-05-01 — Hotfix gravação não aparece (regressão da v0.15.2)
+
+> Super_admin reportou: clica no mic, browser mostra ícone de gravação ativa no tab, mas a UI volta ao botão Mic — barra de gravação nunca aparece.
+
+### Causa
+
+A v0.15.2 introduziu **DUAS instâncias** do `<AudioRecorder>` no JSX do `NexChatPanel`: uma em `isRecording=true` (modo full-width), outra em `isRecording=false` (idle ao lado do textarea). Quando o `start()` async setava `status="recording"` internamente no recorder, o callback `onRecordingStateChange(true)` mudava `isRecording` no parent, e o React **desmontava** a instância idle e **montava** outra do zero — perdendo o `status` interno e os refs do `MediaRecorder`. O stream do mic continuava ativo no browser (daí o ícone do tab), mas a UI mostrava um componente novo em estado `idle`.
+
+### Fix
+
+UMA única instância do `<AudioRecorder>` sempre montada quando `audioInputEnabled && !audioFlight`. Apenas os siblings (textarea + Send button + label "Enter envia") são renderizados condicionalmente baseados em `isRecording`. Quando gravando, o recorder ganha `flex-1` para ocupar todo o espaço disponível.
+
+### Notas
+
+- Layout final = intenção do v0.15.2 (textarea/send somem; barra ocupa tudo) — só corrigido o lifecycle.
+- `className` já era prop suportada pelo `AudioRecorder`; nenhuma mudança nele.
+
+---
+
 ## [v0.15.2] 2026-05-01 — Hotfix UX bubble audio (3 bugs)
 
 > Super_admin reportou: (1) input bar quebrado quando gravando (textarea esmagado + 2 botões enviar), (2) timer continua avançando quando pausado, (3) speed dropdown ruim de usar.
