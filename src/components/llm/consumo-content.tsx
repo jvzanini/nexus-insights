@@ -9,34 +9,22 @@ import {
 } from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
-import { ptBR } from "date-fns/locale";
-import { type DateRange } from "react-day-picker";
 import {
-  Calendar as CalendarIcon,
+  Activity,
+  ChevronLeft,
+  ChevronRight,
   CircuitBoard,
   Coins,
   DollarSign,
   Hash,
+  History,
   Loader2,
-  PhoneCall,
   Sparkles,
   Zap,
 } from "lucide-react";
 
-import { Button, buttonVariants } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -46,6 +34,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { KpiCard } from "@/components/reports/kpi-card";
+import { PeriodPills } from "@/components/reports/period-pills";
 import {
   InteractiveAreaChart,
   InteractiveBarChart,
@@ -56,128 +45,63 @@ import {
 } from "@/components/charts";
 import { CHART_COLORS, getColorByIndex } from "@/lib/charts/colors";
 import { cn } from "@/lib/utils";
-import { fetchUsageDetails, fetchUsageStats } from "@/lib/actions/llm-usage";
+import {
+  fetchDistinctModelsInRange,
+  fetchDistinctProvidersInRange,
+  fetchUsageDetails,
+  fetchUsageStats,
+} from "@/lib/actions/llm-usage";
 import {
   type UsageDetailRow,
+  type UsageDetailsTotals,
   type UsageSummary,
 } from "@/lib/llm/queries/usage-stats";
 import { PROVIDER_LABELS } from "@/lib/llm/pricing";
+import { formatBrl4, formatUsd4 } from "@/lib/llm/format";
+import { type PeriodKey as LegacyPeriodKey } from "@/lib/reports/period";
+import { getPeriodInTz, type PeriodKey } from "@/lib/datetime-core";
+import { UsageDetailSheet } from "@/components/llm/usage-detail-sheet";
+import { UsageTableFilters } from "@/components/llm/usage-table-filters";
 
 // ---------------------------------------------------------------------------
 // Tipos / constantes
 // ---------------------------------------------------------------------------
 
-type PillKey = "hoje" | "7d" | "30d" | "90d" | "tudo" | "custom";
-
-const PILLS: Array<{ key: PillKey; label: string }> = [
-  { key: "hoje", label: "Hoje" },
-  { key: "7d", label: "7 dias" },
-  { key: "30d", label: "30 dias" },
-  { key: "90d", label: "90 dias" },
-  { key: "tudo", label: "Tudo" },
-  { key: "custom", label: "Personalizado" },
-];
-
-const PAGE_SIZE = 25;
-const MOBILE_BREAKPOINT = 640;
 const TZ = "America/Sao_Paulo";
+const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
+type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
+const DEFAULT_PAGE_SIZE: PageSize = 25;
 
 interface ConsumoContentProps {
   /** ISO string da primeira chamada (ou início do mês corrente). */
   minDate: string;
 }
 
-interface DateRangeIso {
-  start: string;
-  end: string;
-}
-
 // ---------------------------------------------------------------------------
-// Helpers de data
+// Helpers
 // ---------------------------------------------------------------------------
-
-function startOfTodayLocal(): Date {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-}
-
-function endOfTodayLocal(): Date {
-  const now = new Date();
-  return new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-    23,
-    59,
-    59,
-    999,
-  );
-}
-
-function pillToRange(pill: PillKey, minDate: Date): { start: Date; end: Date } {
-  const end = endOfTodayLocal();
-  const startToday = startOfTodayLocal();
-
-  switch (pill) {
-    case "hoje":
-      return { start: startToday, end };
-    case "7d": {
-      const start = new Date(startToday);
-      start.setDate(start.getDate() - 6);
-      return { start, end };
-    }
-    case "30d": {
-      const start = new Date(startToday);
-      start.setDate(start.getDate() - 29);
-      return { start, end };
-    }
-    case "90d": {
-      const start = new Date(startToday);
-      start.setDate(start.getDate() - 89);
-      return { start, end };
-    }
-    case "tudo":
-      return { start: minDate, end };
-    case "custom":
-      return { start: startToday, end };
-    default:
-      return { start: startToday, end };
-  }
-}
-
-function dateToIsoLocal(d: Date): string {
-  const yyyy = String(d.getFullYear()).padStart(4, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
 
 function isoLocalToDate(iso: string): Date {
   const [y, m, d] = iso.split("-").map((p) => Number.parseInt(p, 10));
   return new Date(y, (m ?? 1) - 1, d ?? 1, 0, 0, 0, 0);
 }
 
-function formatRangeShort(start: string, end: string): string {
-  const fmt = new Intl.DateTimeFormat("pt-BR", {
-    day: "2-digit",
-    month: "short",
-  });
-  const sStr = fmt.format(isoLocalToDate(start)).replace(".", "");
-  const eStr = fmt.format(isoLocalToDate(end)).replace(".", "");
-  return `${sStr} – ${eStr}`;
-}
-
-function useIsMobile(): boolean {
-  const [m, setM] = useState(false);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mq = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
-    const handler = () => setM(mq.matches);
-    handler();
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, []);
-  return m;
+function rangeForPills(
+  pill: PeriodKey,
+  customRange: { start: string; end: string } | undefined,
+  minDate: Date,
+): { start: Date; end: Date } {
+  // "todos" → corta a partir do minDate (1ª chamada do banco) até agora.
+  if (pill === "todos") {
+    return { start: minDate, end: new Date() };
+  }
+  if (pill === "custom" && customRange) {
+    const start = isoLocalToDate(customRange.start);
+    const end = isoLocalToDate(customRange.end);
+    end.setHours(23, 59, 59, 999);
+    return { start, end };
+  }
+  return getPeriodInTz(pill, TZ);
 }
 
 // ---------------------------------------------------------------------------
@@ -185,16 +109,18 @@ function useIsMobile(): boolean {
 // ---------------------------------------------------------------------------
 
 const numberFmt = new Intl.NumberFormat("pt-BR");
-const usdFmt = new Intl.NumberFormat("en-US", {
+// Moeda "bruta" para a tabela: 2 a 6 casas decimais (exibe valores muito
+// pequenos sem perder precisão).
+const usdRawFmt = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
-  minimumFractionDigits: 3,
+  minimumFractionDigits: 2,
   maximumFractionDigits: 6,
 });
-const brlFmt = new Intl.NumberFormat("pt-BR", {
+const brlRawFmt = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
-  minimumFractionDigits: 3,
+  minimumFractionDigits: 2,
   maximumFractionDigits: 6,
 });
 const dateTimeFmt = new Intl.DateTimeFormat("pt-BR", {
@@ -211,14 +137,14 @@ const dayLabelFmt = new Intl.DateTimeFormat("pt-BR", {
   month: "short",
 });
 
-function formatUsd(v: number | null | undefined): string {
+function formatUsdRaw(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v)) return "—";
-  return usdFmt.format(v);
+  return usdRawFmt.format(v);
 }
 
-function formatBrl(v: number | null | undefined): string {
+function formatBrlRaw(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v)) return "—";
-  return brlFmt.format(v);
+  return brlRawFmt.format(v);
 }
 
 function formatTokens(v: number): string {
@@ -232,165 +158,8 @@ function providerLabel(key: string): string {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Custom range picker (sem cap superior; respeita minDate)
-// ---------------------------------------------------------------------------
-
-interface CustomRangePickerProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  initialRange?: DateRangeIso;
-  minDate: Date;
-  onApply: (range: DateRangeIso) => void;
-  trigger: React.ReactNode;
-  isMobile: boolean;
-}
-
-function CustomRangePicker({
-  open,
-  onOpenChange,
-  initialRange,
-  minDate,
-  onApply,
-  trigger,
-  isMobile,
-}: CustomRangePickerProps) {
-  const panel = open ? (
-    <PickerPanel
-      key={`${initialRange?.start ?? ""}-${initialRange?.end ?? ""}`}
-      initialRange={initialRange}
-      minDate={minDate}
-      onApply={(range) => {
-        onApply(range);
-        onOpenChange(false);
-      }}
-      onCancel={() => onOpenChange(false)}
-      isMobile={isMobile}
-    />
-  ) : null;
-
-  if (isMobile) {
-    return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogTrigger render={trigger as React.ReactElement} />
-        <DialogContent className="max-w-[calc(100%-2rem)] p-4 sm:max-w-md">
-          <DialogTitle className="mb-2">Período personalizado</DialogTitle>
-          {panel}
-        </DialogContent>
-      </Dialog>
-    );
-  }
-
-  return (
-    <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger render={trigger as React.ReactElement} />
-      <PopoverContent
-        align="start"
-        className="w-auto max-w-[min(calc(100vw-2rem),640px)] p-3"
-      >
-        {panel}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-interface PickerPanelProps {
-  initialRange?: DateRangeIso;
-  minDate: Date;
-  onApply: (range: DateRangeIso) => void;
-  onCancel: () => void;
-  isMobile: boolean;
-}
-
-function PickerPanel({
-  initialRange,
-  minDate,
-  onApply,
-  onCancel,
-  isMobile,
-}: PickerPanelProps) {
-  const [range, setRange] = useState<DateRange | undefined>(() =>
-    initialRange
-      ? {
-          from: isoLocalToDate(initialRange.start),
-          to: isoLocalToDate(initialRange.end),
-        }
-      : undefined,
-  );
-
-  // Normaliza minDate para meia-noite local (DayPicker compara dias).
-  const minDay = useMemo(
-    () =>
-      new Date(
-        minDate.getFullYear(),
-        minDate.getMonth(),
-        minDate.getDate(),
-        0,
-        0,
-        0,
-        0,
-      ),
-    [minDate],
-  );
-
-  const error = useMemo(() => {
-    if (!range?.from || !range?.to) return null;
-    if (range.to.getTime() < range.from.getTime()) {
-      return "A data final deve ser igual ou posterior à data inicial.";
-    }
-    if (range.from.getTime() < minDay.getTime()) {
-      return "Datas anteriores ao primeiro registro não estão disponíveis.";
-    }
-    return null;
-  }, [range, minDay]);
-
-  const canApply = !!range?.from && !!range?.to && !error;
-
-  const handleApply = () => {
-    if (!canApply || !range?.from || !range?.to) return;
-    onApply({
-      start: dateToIsoLocal(range.from),
-      end: dateToIsoLocal(range.to),
-    });
-  };
-
-  return (
-    <div className="flex flex-col gap-3">
-      <Calendar
-        mode="range"
-        selected={range}
-        onSelect={setRange}
-        locale={ptBR}
-        numberOfMonths={isMobile ? 1 : 2}
-        defaultMonth={range?.from ?? minDay}
-        disabled={[{ before: minDay }]}
-        showOutsideDays
-      />
-      {error ? (
-        <p role="alert" className="px-1 text-xs text-destructive">
-          {error}
-        </p>
-      ) : (
-        <p className="px-1 text-xs text-muted-foreground">
-          Selecione qualquer intervalo a partir de{" "}
-          {dayLabelFmt.format(minDay).replace(".", "")}.
-        </p>
-      )}
-      <div className="flex items-center justify-end gap-2">
-        <Button variant="ghost" size="sm" onClick={onCancel}>
-          Cancelar
-        </Button>
-        <Button
-          variant="default"
-          size="sm"
-          onClick={handleApply}
-          disabled={!canApply}
-        >
-          Aplicar
-        </Button>
-      </div>
-    </div>
-  );
+function isWhisperModel(model: string): boolean {
+  return /whisper/i.test(model);
 }
 
 // ---------------------------------------------------------------------------
@@ -399,35 +168,41 @@ function PickerPanel({
 
 export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
   const prefersReducedMotion = useReducedMotion();
-  const isMobile = useIsMobile();
   const minDate = useMemo(() => new Date(minDateIso), [minDateIso]);
 
-  const [pill, setPill] = useState<PillKey>("30d");
-  const [customRange, setCustomRange] = useState<DateRangeIso | undefined>();
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pill, setPill] = useState<PeriodKey>("mes_atual");
+  const [customRange, setCustomRange] = useState<
+    { start: string; end: string } | undefined
+  >();
 
   const [stats, setStats] = useState<UsageSummary | null>(null);
   const [details, setDetails] = useState<UsageDetailRow[]>([]);
   const [detailsTotal, setDetailsTotal] = useState(0);
+  const [detailsTotals, setDetailsTotals] = useState<UsageDetailsTotals | null>(
+    null,
+  );
   const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState<PageSize>(DEFAULT_PAGE_SIZE);
+  const [filterProvider, setFilterProvider] = useState<string | undefined>();
+  const [filterModel, setFilterModel] = useState<string | undefined>();
+  const [providers, setProviders] = useState<string[]>([]);
+  const [modelsByProvider, setModelsByProvider] = useState<
+    Record<string, string[]>
+  >({});
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [sheetRow, setSheetRow] = useState<UsageDetailRow | null>(null);
 
   // Calcula intervalo efetivo a partir da pill atual.
-  const range = useMemo(() => {
-    if (pill === "custom" && customRange) {
-      const start = isoLocalToDate(customRange.start);
-      const end = isoLocalToDate(customRange.end);
-      end.setHours(23, 59, 59, 999);
-      return { start, end };
-    }
-    return pillToRange(pill, minDate);
-  }, [pill, customRange, minDate]);
+  const range = useMemo(
+    () => rangeForPills(pill, customRange, minDate),
+    [pill, customRange, minDate],
+  );
 
-  // Reseta paginação ao trocar período.
+  // Reseta paginação ao trocar período / filtros / pageSize.
   useEffect(() => {
     setPage(0);
-  }, [pill, customRange]);
+  }, [pill, customRange, filterProvider, filterModel, pageSize]);
 
   // Fetch stats + first page de details.
   useEffect(() => {
@@ -442,14 +217,17 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
           fetchUsageDetails({
             start: startIso,
             end: endIso,
-            limit: PAGE_SIZE,
-            offset: page * PAGE_SIZE,
+            limit: pageSize,
+            offset: page * pageSize,
+            provider: filterProvider ?? null,
+            model: filterModel ?? null,
           }),
         ]);
         if (cancelled) return;
         setStats(s);
         setDetails(d.rows);
         setDetailsTotal(d.total);
+        setDetailsTotals(d.totals);
       } catch (err) {
         if (cancelled) return;
         const msg =
@@ -461,22 +239,88 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [range.start.getTime(), range.end.getTime(), page]);
+  }, [range.start.getTime(), range.end.getTime(), page, pageSize, filterProvider, filterModel]);
 
-  const handlePillClick = useCallback((key: PillKey) => {
-    if (key === "custom") {
-      setPickerOpen(true);
-      return;
+  // Fetch lista de providers no range (para filtros cascade).
+  useEffect(() => {
+    let cancelled = false;
+    const startIso = range.start.toISOString();
+    const endIso = range.end.toISOString();
+    fetchDistinctProvidersInRange({ start: startIso, end: endIso })
+      .then((list) => {
+        if (cancelled) return;
+        setProviders(list);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setProviders([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [range.start, range.end]);
+
+  // Fetch modelos no range (cascade pelo provider — quando undefined, traz todos
+  // e agrupa por provider via consultas paralelas).
+  useEffect(() => {
+    let cancelled = false;
+    const startIso = range.start.toISOString();
+    const endIso = range.end.toISOString();
+
+    async function load() {
+      if (providers.length === 0) {
+        if (!cancelled) setModelsByProvider({});
+        return;
+      }
+      try {
+        const entries = await Promise.all(
+          providers.map(async (p) => {
+            const list = await fetchDistinctModelsInRange({
+              start: startIso,
+              end: endIso,
+              provider: p,
+            });
+            return [p, list] as const;
+          }),
+        );
+        if (cancelled) return;
+        const map: Record<string, string[]> = {};
+        for (const [p, list] of entries) map[p] = list;
+        setModelsByProvider(map);
+      } catch {
+        if (!cancelled) setModelsByProvider({});
+      }
     }
-    setPill(key);
-  }, []);
 
-  const handleApplyCustom = useCallback((next: DateRangeIso) => {
-    setCustomRange(next);
-    setPill("custom");
-  }, []);
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [providers, range.start, range.end]);
 
-  const totalPages = Math.max(1, Math.ceil(detailsTotal / PAGE_SIZE));
+  const handlePeriodChange = useCallback(
+    (next: LegacyPeriodKey, nextRange?: { start: string; end: string }) => {
+      // PeriodPills só emite chaves canonicas (5 opções renderizadas).
+      // Se vier alguma key legada por algum motivo, fallback para mes_atual.
+      const canonical: PeriodKey =
+        next === "hoje" ||
+        next === "semana_atual" ||
+        next === "mes_atual" ||
+        next === "todos" ||
+        next === "custom"
+          ? next
+          : "mes_atual";
+      setPill(canonical);
+      if (canonical === "custom" && nextRange) {
+        setCustomRange(nextRange);
+      } else if (canonical !== "custom") {
+        setCustomRange(undefined);
+      }
+    },
+    [],
+  );
+
+  const totalPages = Math.max(1, Math.ceil(detailsTotal / pageSize));
   const isEmpty =
     !!stats && stats.totalCalls === 0 && page === 0 && !isPending;
   const isFirstLoad = stats === null && isPending;
@@ -509,21 +353,29 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
   }, [stats]);
 
   const totalCostBrlFormatted = useMemo(
-    () => (stats ? formatBrl(stats.totalCostBrl) : "—"),
+    () => (stats ? formatBrl4(stats.totalCostBrl) : "—"),
     [stats],
   );
   const totalCostUsdFormatted = useMemo(
-    () => (stats ? formatUsd(stats.totalCost) : "—"),
+    () => (stats ? formatUsd4(stats.totalCost) : "—"),
     [stats],
   );
 
   // ---- Render -------------------------------------------------------------
 
   if (isEmpty && !error) {
-    return (
-      <EmptyConsumoState />
-    );
+    return <EmptyConsumoState />;
   }
+
+  // Range visível (mostrando X-Y de N). Quando há filtros, N é detailsTotal.
+  const rangeStartIdx = detailsTotal === 0 ? 0 : page * pageSize + 1;
+  const rangeEndIdx = Math.min((page + 1) * pageSize, detailsTotal);
+
+  // Trocar de página fecha o sheet (evita cursor stale).
+  const handlePageChange = (next: number) => {
+    setPage(next);
+    setSheetRow(null);
+  };
 
   return (
     <motion.div
@@ -532,77 +384,13 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
       transition={{ duration: 0.2, ease: "easeOut" }}
       className="space-y-6"
     >
-      {/* Filtros */}
+      {/* Filtros — PeriodPills compartilhada */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div
-          role="tablist"
-          aria-label="Período"
-          className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 snap-x snap-mandatory sm:flex-wrap sm:overflow-visible sm:pb-0"
-        >
-          {PILLS.map((opt) => {
-            const active = opt.key === pill;
-            const isCustom = opt.key === "custom";
-            const labelContent = isCustom ? (
-              <>
-                <CalendarIcon className="mr-1.5 h-4 w-4" />
-                {active && customRange
-                  ? formatRangeShort(customRange.start, customRange.end)
-                  : opt.label}
-              </>
-            ) : (
-              opt.label
-            );
-
-            const pillClasses = cn(
-              "inline-flex h-11 shrink-0 snap-start items-center rounded-full px-3.5 py-1.5 text-sm font-medium whitespace-nowrap transition-colors",
-              "border border-transparent",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40",
-              active
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted/40 text-muted-foreground hover:bg-muted/80 hover:text-foreground",
-              isCustom && active && "border-primary/50",
-            );
-
-            if (isCustom) {
-              return (
-                <CustomRangePicker
-                  key={opt.key}
-                  open={pickerOpen}
-                  onOpenChange={setPickerOpen}
-                  initialRange={customRange}
-                  minDate={minDate}
-                  onApply={handleApplyCustom}
-                  isMobile={isMobile}
-                  trigger={
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      onClick={() => handlePillClick(opt.key)}
-                      className={pillClasses}
-                    >
-                      {labelContent}
-                    </button>
-                  }
-                />
-              );
-            }
-
-            return (
-              <button
-                key={opt.key}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => handlePillClick(opt.key)}
-                className={pillClasses}
-              >
-                {labelContent}
-              </button>
-            );
-          })}
-        </div>
-
+        <PeriodPills
+          value={pill}
+          customRange={customRange}
+          onChange={handlePeriodChange}
+        />
         {isPending ? (
           <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -633,34 +421,31 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
       >
         {[
           {
-            icon: PhoneCall,
+            icon: Activity,
             label: "Total de chamadas",
             value: stats ? numberFmt.format(stats.totalCalls) : "—",
+            subtitle: "no período",
             tone: "default" as const,
           },
           {
             icon: Hash,
-            label: "Tokens de input",
+            label: "Tokens de entrada",
             value: stats ? formatTokens(stats.totalTokensInput) : "—",
+            subtitle: "no período",
             tone: "default" as const,
           },
           {
             icon: Zap,
-            label: "Tokens de output",
+            label: "Tokens de saída",
             value: stats ? formatTokens(stats.totalTokensOutput) : "—",
+            subtitle: "no período",
             tone: "default" as const,
           },
           {
             icon: DollarSign,
             label: "Custo total",
-            value: (
-              <span className="flex flex-col">
-                <span>{totalCostBrlFormatted}</span>
-                <span className="text-xs font-medium text-muted-foreground">
-                  ≈ {totalCostUsdFormatted} USD
-                </span>
-              </span>
-            ),
+            value: totalCostBrlFormatted,
+            subtitle: `≈ ${totalCostUsdFormatted}`,
             tone: "default" as const,
           },
         ].map((card) => (
@@ -679,6 +464,7 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
               icon={card.icon}
               label={card.label}
               value={card.value}
+              subtitle={card.subtitle}
               tone={card.tone}
             />
           </motion.div>
@@ -701,10 +487,17 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
               <InteractiveAreaChart
                 data={areaData}
                 series={[
-                  { key: "Custo", label: "Custo (R$)", color: CHART_COLORS.violet },
+                  {
+                    key: "Custo",
+                    label: "Custo (R$)",
+                    color: CHART_COLORS.violet,
+                  },
                 ]}
                 height={300}
-                formatValue={formatBrl}
+                formatValue={formatBrlRaw}
+                yAxisCurrency="BRL"
+                xAxisFontSize={13}
+                xAxisPadding={12}
                 ariaLabel="Custo diário em BRL"
                 emptyMessage="Sem custos no período"
                 emptyHint="Tente ampliar o intervalo de datas."
@@ -729,7 +522,8 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
                 centerLabel="Custo total"
                 centerValue={totalCostBrlFormatted}
                 height={300}
-                formatValue={formatBrl}
+                formatValue={formatBrl4}
+                tooltipPosition="top-right"
                 ariaLabel="Custo agrupado por provider em BRL"
                 emptyMessage="Sem dados de provider"
               />
@@ -752,12 +546,19 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
             <InteractiveBarChart
               data={modelBarData}
               series={[
-                { key: "Custo", label: "Custo (R$)", color: CHART_COLORS.violet },
+                {
+                  key: "Custo",
+                  label: "Custo (R$)",
+                  color: CHART_COLORS.violet,
+                },
               ]}
               height={320}
               layout={modelBarData.length > 6 ? "horizontal" : "vertical"}
               yAxisWidth={180}
-              formatValue={formatBrl}
+              formatValue={formatBrlRaw}
+              yAxisCurrency="BRL"
+              xAxisFontSize={13}
+              xAxisPadding={12}
               showLegend={false}
               ariaLabel="Custo agrupado por modelo em BRL"
               emptyMessage="Sem chamadas por modelo no período"
@@ -766,10 +567,21 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
         </CardContent>
       </Card>
 
-      {/* Tabela detalhada */}
+      {/* Histórico de chamadas */}
       <Card className="rounded-2xl border border-border bg-muted/30">
-        <CardHeader>
-          <CardTitle>Chamadas detalhadas</CardTitle>
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <History className="h-4 w-4 text-violet-500" />
+            Histórico de chamadas
+          </CardTitle>
+          <UsageTableFilters
+            providers={providers}
+            modelsByProvider={modelsByProvider}
+            selectedProvider={filterProvider}
+            selectedModel={filterModel}
+            onProviderChange={(p) => setFilterProvider(p)}
+            onModelChange={(m) => setFilterModel(m)}
+          />
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -779,8 +591,18 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
                   <TableHead>Data/hora</TableHead>
                   <TableHead>Provider</TableHead>
                   <TableHead className="hidden md:table-cell">Modelo</TableHead>
-                  <TableHead className="text-right">Tokens in</TableHead>
-                  <TableHead className="text-right">Tokens out</TableHead>
+                  <TableHead
+                    className="text-right"
+                    title="Whisper (transcrição) é cobrado por minuto. Tokens não se aplicam a chamadas de áudio."
+                  >
+                    Tokens de entrada
+                  </TableHead>
+                  <TableHead
+                    className="text-right"
+                    title="Whisper (transcrição) é cobrado por minuto. Tokens não se aplicam a chamadas de áudio."
+                  >
+                    Tokens de saída
+                  </TableHead>
                   <TableHead className="hidden md:table-cell text-right">
                     Duração
                   </TableHead>
@@ -789,6 +611,30 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {/* Linha de TOTAL no topo */}
+                {detailsTotals && detailsTotals.count > 0 ? (
+                  <TableRow className="sticky top-0 z-[1] bg-muted/40 font-semibold">
+                    <TableCell className="whitespace-nowrap text-xs uppercase tracking-wide text-muted-foreground">
+                      Total ({numberFmt.format(detailsTotals.count)})
+                    </TableCell>
+                    <TableCell />
+                    <TableCell className="hidden md:table-cell" />
+                    <TableCell className="text-right tabular-nums">
+                      {numberFmt.format(detailsTotals.tokensInput)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {numberFmt.format(detailsTotals.tokensOutput)}
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell" />
+                    <TableCell className="text-right tabular-nums">
+                      {formatUsdRaw(detailsTotals.costUsd)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatBrlRaw(detailsTotals.costBrl)}
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+
                 {details.length === 0 ? (
                   <TableRow>
                     <TableCell
@@ -801,69 +647,128 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  details.map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell className="whitespace-nowrap tabular-nums">
-                        {dateTimeFmt.format(new Date(row.createdAt))}
-                      </TableCell>
-                      <TableCell>{providerLabel(row.provider)}</TableCell>
-                      <TableCell className="hidden md:table-cell font-mono text-xs">
-                        {row.model}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {numberFmt.format(row.tokensInput)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {numberFmt.format(row.tokensOutput)}
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell text-right tabular-nums text-muted-foreground">
-                        {row.durationMs == null
-                          ? "—"
-                          : `${numberFmt.format(row.durationMs)} ms`}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {formatUsd(row.costUsd)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {formatBrl(row.costBrl)}
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  details.map((row) => {
+                    const whisper = isWhisperModel(row.model);
+                    return (
+                      <TableRow
+                        key={row.id}
+                        className="cursor-pointer transition-colors hover:bg-muted/40"
+                        onClick={() => setSheetRow(row)}
+                      >
+                        <TableCell className="whitespace-nowrap tabular-nums">
+                          {dateTimeFmt.format(new Date(row.createdAt))}
+                        </TableCell>
+                        <TableCell>{providerLabel(row.provider)}</TableCell>
+                        <TableCell className="hidden md:table-cell font-mono text-xs">
+                          {row.model}
+                        </TableCell>
+                        <TableCell
+                          className={cn(
+                            "text-right tabular-nums",
+                            whisper && "text-muted-foreground",
+                          )}
+                        >
+                          {whisper ? "—" : numberFmt.format(row.tokensInput)}
+                        </TableCell>
+                        <TableCell
+                          className={cn(
+                            "text-right tabular-nums",
+                            whisper && "text-muted-foreground",
+                          )}
+                        >
+                          {whisper ? "—" : numberFmt.format(row.tokensOutput)}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-right tabular-nums text-muted-foreground">
+                          {row.durationMs == null
+                            ? "—"
+                            : `${numberFmt.format(row.durationMs)} ms`}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {formatUsdRaw(row.costUsd)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {formatBrlRaw(row.costBrl)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
           </div>
 
-          {detailsTotal > PAGE_SIZE ? (
-            <div className="mt-4 flex items-center justify-between gap-3">
+          {/* Paginação footer com 3 zonas */}
+          {detailsTotal > 0 ? (
+            <div className="mt-4 flex flex-col items-center justify-between gap-3 border-t border-border pt-4 sm:flex-row">
+              {/* Zona 1: Mostrando X-Y de N */}
               <p className="text-xs text-muted-foreground tabular-nums">
-                Página {page + 1} de {totalPages} · {numberFmt.format(detailsTotal)}{" "}
-                chamadas
+                Mostrando {numberFmt.format(rangeStartIdx)}–
+                {numberFmt.format(rangeEndIdx)} de{" "}
+                {numberFmt.format(detailsTotal)}
               </p>
+
+              {/* Zona 2: Página X de Y + setas */}
               <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                <button
+                  type="button"
+                  aria-label="Página anterior"
+                  onClick={() => handlePageChange(Math.max(0, page - 1))}
                   disabled={page === 0 || isPending}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  Anterior
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
+                  <ChevronLeft className="h-4 w-4" aria-hidden />
+                </button>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  Página {page + 1} de {totalPages}
+                </span>
+                <button
+                  type="button"
+                  aria-label="Próxima página"
                   onClick={() =>
-                    setPage((p) => Math.min(totalPages - 1, p + 1))
+                    handlePageChange(Math.min(totalPages - 1, page + 1))
                   }
                   disabled={page >= totalPages - 1 || isPending}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  Próxima
-                </Button>
+                  <ChevronRight className="h-4 w-4" aria-hidden />
+                </button>
               </div>
+
+              {/* Zona 3: {n} por página */}
+              <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    const next = Number(e.currentTarget.value) as PageSize;
+                    if (PAGE_SIZE_OPTIONS.includes(next)) {
+                      setPageSize(next);
+                      // O reset de page já é tratado no useEffect dedicado.
+                    }
+                  }}
+                  className="h-8 rounded-md border border-border bg-card px-2 text-xs text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label="Itens por página"
+                >
+                  {PAGE_SIZE_OPTIONS.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+                por página
+              </label>
             </div>
           ) : null}
         </CardContent>
       </Card>
+
+      {/* Drill-down sheet */}
+      <UsageDetailSheet
+        open={sheetRow !== null}
+        onOpenChange={(open) => {
+          if (!open) setSheetRow(null);
+        }}
+        row={sheetRow}
+      />
     </motion.div>
   );
 }

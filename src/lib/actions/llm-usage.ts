@@ -2,6 +2,8 @@
 
 import { auth } from "@/auth";
 import {
+  getDistinctModelsInRange,
+  getDistinctProvidersInRange,
   getUsageDetails,
   getUsageStats,
   type UsageDetailsResult,
@@ -41,6 +43,8 @@ export async function fetchUsageDetails(args: {
   end: string;
   limit?: number;
   offset?: number;
+  provider?: string | null;
+  model?: string | null;
 }): Promise<UsageDetailsResult> {
   await ensureSuperAdmin();
   return getUsageDetails({
@@ -48,5 +52,31 @@ export async function fetchUsageDetails(args: {
     end: parseDate(args.end, "end"),
     limit: args.limit,
     offset: args.offset,
+    provider: args.provider,
+    model: args.model,
+  });
+}
+
+export async function fetchDistinctProvidersInRange(args: {
+  start: string;
+  end: string;
+}): Promise<string[]> {
+  await ensureSuperAdmin();
+  return getDistinctProvidersInRange({
+    start: parseDate(args.start, "start"),
+    end: parseDate(args.end, "end"),
+  });
+}
+
+export async function fetchDistinctModelsInRange(args: {
+  start: string;
+  end: string;
+  provider?: string | null;
+}): Promise<string[]> {
+  await ensureSuperAdmin();
+  return getDistinctModelsInRange({
+    start: parseDate(args.start, "start"),
+    end: parseDate(args.end, "end"),
+    provider: args.provider,
   });
 }
