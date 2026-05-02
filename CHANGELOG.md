@@ -1,5 +1,44 @@
 # Changelog
 
+## [v0.20.0] 2026-05-02 — Suite Agente Nex Polish
+
+> Polish dirigido por feedback do super_admin (após v0.16.0 LIVE): Whisper tokens reais via gpt-4o-mini-transcribe, gráficos com modo "menor que zero", linha total destaque, prompt menos prolixo, Maximize via Dialog, chaves com logos SVG e botão limpo, filtro global de Provider em Consumo. Spec v3 (49 achados pente-fino) + plan v3 (14 tasks TDD) + ui-ux-pro-max em todas tasks UI.
+
+### A. Consumo do Agente Nex
+
+- **Whisper → gpt-4o-mini-transcribe** (50% mais barato, $0.003/min vs $0.006/min): retorna tokens reais (`usage.input_token_details.audio_tokens` + `output_tokens`). Fallback silencioso para `whisper-1` em qualquer 4xx/5xx. Histórico mostra tokens reais para chamadas novas; legado `whisper-1` continua com "—" + nota explicativa.
+- **Linha total destaque**: `bg-violet-500/15 + border-y-2 border-violet-500/40 + font-bold` + ícone Sigma + label "Total no filtro" uppercase + colspan=3.
+- **Y-axis "menor que zero"**: gráficos com max < R$ 0,01 mostram apenas 2 ticks ("R$ 0,00" e "< R$ 0,01") — evita poluição visual com vários "R$ 0,00". Tooltip preserva valor real.
+- **Donut +10% / fonte central -10%**: outerRadius 80→88 + valor central text-2xl→text-xl. Evita sobreposição quando o número aumenta.
+- **Filtro global de Provider** ao lado do PeriodPills (`<CustomSelect>`): default "Todos". Mudar afeta KPIs + 3 gráficos + sincroniza filtro inicial da tabela "Histórico de chamadas" (mas tabela permite override manual). URL state shareable (`?provider=openai`).
+- **Bar chart "Custo por modelo"**: nome do modelo + tag "(Provider)" abaixo (fonte menor + opacity 0.6) — facilita identificação visual.
+- **PageSize CustomSelect**: dropdown "25/50/100 por página" agora usa o componente da plataforma (não `<select>` HTML nativo).
+
+### B. Prompt do Agente Nex
+
+- **PromptPreviewCard**: banner italic "Preview somente leitura" + botão "Editar" (scroll para form). `<pre>` com cursor-text + aria-readonly. Layout fix overflow `<pre>` (min-w-0 + ScrollArea overflow-x-hidden).
+- **IDENTITY_BASE radicalmente enxuta** (~14 linhas, 1063 chars vs ~3000 antes): postura curta, sem se apresentar a cada turno, sem citar jargão técnico interno (dashboard summary, query_*, snapshot). Lista de proibição (ChatGPT/GPT/Claude/Gemini/OpenAI/Anthropic/Google) preservada. Nova asserção `length < 1500` (anti-regressão).
+- **Personality + Tom default seedados** (idempotente via `seeded_defaults_at`): "Direto, prático, prefere bullets curtos..." + "Profissional e objetivo, em pt-BR. Usa 'você'. Sem se desculpar...". Não sobrescreve customizações.
+- **Modo manual** renomeado e tooltip explicativo (era "Modo override avançado"). AlertDialog de ativação avisando que desativa identidade fixa + URLs públicas.
+- **"Mostrar identidade fixa"** renomeado para "Ver identidade fixa do agente (somente leitura)" + parágrafo explicativo.
+- **Maximizar via Dialog** centralizado (max-w 900px max-h 85vh) — substitui Sheet lateral. Botão "Editar prompt" no header fecha + scrolla.
+- **KB**: atalho "Adicionar API Chatwoot (sugerida)" removido. KbUploadDialog mantém aba URL — usuário adiciona manualmente.
+
+### C. Chaves de API
+
+- **Botão "Nova chave" sem gradient**: variant="default" puro (consistente com restante da plataforma).
+- **Lógica condicional 0/≥1 chaves**: provider sem credenciais → botão só dentro do empty state (header limpo); provider com credenciais → botão só no header.
+- **Logos SVG dos 4 providers**: OpenAI / Anthropic / Google Gemini / OpenRouter — substituem as iniciais. SVG inline com `currentColor` (light/dark friendly). Fontes: OpenAI Lobe Icons mono; demais simple-icons.
+
+### Notas técnicas
+
+- `gpt-4o-mini-transcribe`: `output_tokens` pode vir 0 (bug conhecido da OpenAI) — primário é `input_token_details.audio_tokens`. Custo equivalente ~$0.003/min.
+- `composeSystemPrompt` aceita `accountUrls` (de v0.16.0) — preview client-side da página `/agente-nex/prompt` carrega via `listChatwootAccountUrls`.
+- `getUsageStats` aceita `provider?: string` — pattern `($N::text IS NULL OR provider = $N)` em todas as 4 queries internas.
+- ProviderIcons em `src/components/icons/providers/` (4 arquivos + index helper `getProviderIcon`).
+- 1235 testes verde (excluindo 20 falhas pré-existentes em integrations-power-bi.test.ts de outra release).
+- Schema sem mudanças (apenas seed adicional em `ensure-tables.ts` runtime).
+
 ## [v0.19.0] 2026-05-02 — Conversas Polish (paginação 1k + drill-down + filtros UX + calendar fix)
 
 > Pacote consolidado de polimento + hotfixes em /relatorios/conversas, derivado dos screenshots do super_admin. Workflow rigoroso (spec v1→v2→v3 com 30+18 achados de pente-fino + plan v1→v2→v3 com 20+33 achados + ui-ux-pro-max em todas as tasks UI). 8 ajustes diretos.

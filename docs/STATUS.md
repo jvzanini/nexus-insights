@@ -1,12 +1,24 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-05-02
-**Versão atual em produção:** v0.19.0
+**Versão atual em produção:** v0.20.0
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.19.0)
+## Em produção (v0.20.0)
+
+### Release v0.20.0 (2026-05-02) — Suite Agente Nex Polish
+
+Pacote consolidado de polish da Suite Agente Nex (lançada em v0.15.x e refinada em v0.16.0), dirigido por feedback do super_admin. Workflow rigoroso (spec v3 com 49 achados de pente-fino + plan v3 com 14 tasks granulares TDD + ui-ux-pro-max em todas as tasks de UI). 1235 testes verde · schema sem mudanças (apenas seed adicional).
+
+**A. Consumo do Agente Nex** — Whisper migrado para `gpt-4o-mini-transcribe` (50% mais barato, $0.003/min, retorna tokens reais via `usage.input_token_details.audio_tokens`; fallback silencioso para `whisper-1` em qualquer 4xx/5xx; histórico legado mantém "—"); linha total na tabela com destaque (`bg-violet-500/15` + ícone Sigma + label "Total no filtro" uppercase + colspan=3); Y-axis "menor que zero" (max < R$ 0,01 → 2 ticks "R$ 0,00" + "< R$ 0,01"); donut outerRadius 80→88 + valor central text-2xl→text-xl; **filtro global de Provider** ao lado do PeriodPills com URL state shareable (`?provider=openai`) afetando KPIs + 3 gráficos + sync com tabela; bar chart "Custo por modelo" exibe nome + tag "(Provider)" embaixo; PageSize migrado para `<CustomSelect>` (não nativo).
+
+**B. Prompt do Agente Nex** — **PromptPreviewCard** com banner "Preview somente leitura" + botão "Editar" + cursor-text/aria-readonly; **IDENTITY_BASE radicalmente enxuta** (~14 linhas, 1063 chars vs ~3000 antes — sem se apresentar a cada turno, sem jargão técnico interno; lista de proibição preservada; asserção `length < 1500` anti-regressão); Personality + Tom default seedados (idempotente via `seeded_defaults_at`, não sobrescreve); "Modo override avançado" renomeado para **"Modo manual"** com tooltip + AlertDialog de ativação; "Mostrar identidade fixa" renomeado para "Ver identidade fixa do agente (somente leitura)"; **Maximizar via Dialog** centralizado (max-w 900px max-h 85vh, substitui Sheet lateral); KB perde atalho "Adicionar API Chatwoot (sugerida)".
+
+**C. Chaves de API** — Botão "Nova chave" sem gradient (variant="default" consistente); lógica condicional 0/≥1 (provider vazio → CTA só no empty state; com chaves → só no header); **logos SVG dos 4 providers** (OpenAI / Anthropic / Google Gemini / OpenRouter) com `currentColor` substituem iniciais.
+
+Runbook: `docs/runbooks/agente-nex-audio-e-kb-url.md` (transcribe gpt-4o-mini-transcribe + KB URL pipeline + erros UX + bug `output_tokens=0`).
 
 ### Release v0.19.0 (2026-05-02) — Conversas Polish (paginação 1k + drill-down + filtros UX + calendar fix)
 
