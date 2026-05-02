@@ -681,6 +681,29 @@ export async function dashboardData(args: DashboardDataInput) {
             })),
           };
 
+          // Diagnostic logging G2 (v0.22.0): captura evidência em produção
+          // pra investigar bug "tooltip do mesmo dia em Semana/Mês ≠ soma do
+          // gráfico Dia". Client-side fillBuckets é matemático correto
+          // (provado em fill-buckets.test.ts). Se logs em produção mostrarem
+          // que a query retorna valores inconsistentes entre granularities,
+          // o fix vai pra hotfix v0.22.1.
+          if (process.env.NODE_ENV !== "test") {
+            console.log("[dashboardData diag G2]", {
+              accountId: args.accountId,
+              granularity,
+              rangeStart: args.period.start.toISOString(),
+              rangeEnd: args.period.end.toISOString(),
+              chartLen: data.chart.length,
+              chartFirstBucket: data.chart[0]?.bucket,
+              chartLastBucket: data.chart[data.chart.length - 1]?.bucket,
+              chartTotalReceived: data.chart.reduce(
+                (acc, r) => acc + r.received,
+                0,
+              ),
+              kpiReceived: received,
+            });
+          }
+
           return data;
         },
         { fallbackKey: key },

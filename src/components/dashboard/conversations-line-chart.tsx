@@ -101,8 +101,12 @@ function CustomTooltip(props: TooltipContentProps<ValueType, NameType>) {
   );
 }
 
-/** Gera buckets vazios cobrindo todo o range em granularity definida. */
-function generateEmptyBuckets(
+/**
+ * Gera buckets vazios cobrindo todo o range em granularity definida.
+ * Exportado para sanity tests (v0.22.0) — investigação G2 do bug
+ * "semana/mês não bate com dia".
+ */
+export function generateEmptyBuckets(
   rangeStart: Date,
   rangeEnd: Date,
   granularity: "hour" | "day",
@@ -150,7 +154,15 @@ function generateEmptyBuckets(
   return result;
 }
 
-function fillBuckets(
+/**
+ * Mapeia DashboardChartPoint[] (vindo do backend) em uma linha por bucket
+ * cobrindo todo o range. Buckets sem dado real ganham zeros nas 4 séries.
+ *
+ * Exportado para sanity tests (v0.22.0) — investigação G2 do bug "semana/mês
+ * não bate com dia". Hipótese é que matching de bucket key entre SQL e
+ * cliente esteja correto; este helper prova isso unitariamente.
+ */
+export function fillBuckets(
   data: DashboardChartPoint[],
   granularity: "hour" | "day",
   tz: string,
