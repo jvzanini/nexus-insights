@@ -156,3 +156,80 @@ describe("InteractiveAreaChart — eixo X/Y props", () => {
     expect(out).toMatch(/1\.234/);
   });
 });
+
+describe("InteractiveAreaChart — modo subcent (max < R$ 0,01)", () => {
+  it("subcent BRL: 2 ticks [0, 0.01], labels 'R$ 0,00' e '< R$ 0,01'", () => {
+    const data = [
+      { name: "01", cost: 0.005 },
+      { name: "02", cost: 0.003 },
+    ];
+    const series = [{ key: "cost", label: "Custo" }];
+    render(
+      <InteractiveAreaChart
+        data={data}
+        series={series}
+        yAxisCurrency="BRL"
+      />,
+    );
+    const y = getCaptured().yAxisProps[0];
+    expect(y.domain).toEqual([0, 0.01]);
+    expect(y.ticks).toEqual([0, 0.01]);
+    const fmt = y.tickFormatter as (v: number) => string;
+    expect(fmt(0)).toMatch(/R\$\s?0,00/);
+    expect(fmt(0.01)).toMatch(/<\s?R\$\s?0,01/);
+  });
+
+  it("subcent USD: 2 ticks [0, 0.01], labels '$0.00' e '< $0.01'", () => {
+    const data = [
+      { name: "01", cost: 0.005 },
+      { name: "02", cost: 0.001 },
+    ];
+    const series = [{ key: "cost", label: "Cost" }];
+    render(
+      <InteractiveAreaChart
+        data={data}
+        series={series}
+        yAxisCurrency="USD"
+      />,
+    );
+    const y = getCaptured().yAxisProps[0];
+    expect(y.domain).toEqual([0, 0.01]);
+    expect(y.ticks).toEqual([0, 0.01]);
+    const fmt = y.tickFormatter as (v: number) => string;
+    expect(fmt(0)).toBe("$0.00");
+    expect(fmt(0.01)).toBe("< $0.01");
+  });
+
+  it("max >= 0.01 NÃO ativa subcent (mantém formatter padrão)", () => {
+    const data = [
+      { name: "01", cost: 5 },
+      { name: "02", cost: 3 },
+    ];
+    const series = [{ key: "cost", label: "Custo" }];
+    render(
+      <InteractiveAreaChart
+        data={data}
+        series={series}
+        yAxisCurrency="BRL"
+      />,
+    );
+    const y = getCaptured().yAxisProps[0];
+    expect(y.domain).toBeUndefined();
+    expect(y.ticks).toBeUndefined();
+    const fmt = y.tickFormatter as (v: number) => string;
+    // Sem subcent, 0.01 é formatado como "R$ 0,01" (não "< R$ 0,01")
+    expect(fmt(0.01)).toMatch(/R\$\s?0,01/);
+    expect(fmt(0.01)).not.toMatch(/</);
+  });
+
+  it("sem yAxisCurrency NÃO ativa subcent (precisa flag de moeda)", () => {
+    const data = [
+      { name: "01", cost: 0.005 },
+    ];
+    const series = [{ key: "cost", label: "Custo" }];
+    render(<InteractiveAreaChart data={data} series={series} />);
+    const y = getCaptured().yAxisProps[0];
+    expect(y.domain).toBeUndefined();
+    expect(y.ticks).toBeUndefined();
+  });
+});

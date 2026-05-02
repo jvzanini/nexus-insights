@@ -4,6 +4,7 @@
 import "@testing-library/jest-dom";
 
 import { render } from "@testing-library/react";
+import type React from "react";
 
 import { InteractiveBarChart } from "@/components/charts/bar-chart";
 
@@ -185,5 +186,170 @@ describe("InteractiveBarChart — layout horizontal", () => {
     const fmt = x.tickFormatter as (v: number) => string;
     const out = fmt(2000);
     expect(out).toMatch(/R\$/);
+  });
+});
+
+describe("InteractiveBarChart — modo subcent (max < R$ 0,01)", () => {
+  it("subcent BRL no eixo Y vertical: domain/ticks [0, 0.01], '< R$ 0,01' no topo", () => {
+    const data = [
+      { name: "Jan", cost: 0.005 },
+      { name: "Fev", cost: 0.002 },
+    ];
+    const series = [{ key: "cost", label: "Custo" }];
+    render(
+      <InteractiveBarChart
+        data={data}
+        series={series}
+        yAxisCurrency="BRL"
+      />,
+    );
+    const y = getCaptured().yAxisProps[0];
+    expect(y.domain).toEqual([0, 0.01]);
+    expect(y.ticks).toEqual([0, 0.01]);
+    const fmt = y.tickFormatter as (v: number) => string;
+    expect(fmt(0)).toMatch(/R\$\s?0,00/);
+    expect(fmt(0.01)).toMatch(/<\s?R\$\s?0,01/);
+  });
+
+  it("subcent USD no eixo X horizontal: domain/ticks [0, 0.01], '< $0.01'", () => {
+    const data = [
+      { name: "A", cost: 0.004 },
+      { name: "B", cost: 0.001 },
+    ];
+    const series = [{ key: "cost", label: "Cost" }];
+    render(
+      <InteractiveBarChart
+        data={data}
+        series={series}
+        layout="horizontal"
+        yAxisCurrency="USD"
+      />,
+    );
+    const x = getCaptured().xAxisProps[0];
+    expect(x.domain).toEqual([0, 0.01]);
+    expect(x.ticks).toEqual([0, 0.01]);
+    const fmt = x.tickFormatter as (v: number) => string;
+    expect(fmt(0)).toBe("$0.00");
+    expect(fmt(0.01)).toBe("< $0.01");
+  });
+
+  it("max >= 0.01 NÃO ativa subcent (mantém formatter padrão)", () => {
+    const data = [
+      { name: "Jan", cost: 5 },
+    ];
+    const series = [{ key: "cost", label: "Custo" }];
+    render(
+      <InteractiveBarChart
+        data={data}
+        series={series}
+        yAxisCurrency="BRL"
+      />,
+    );
+    const y = getCaptured().yAxisProps[0];
+    expect(y.domain).toBeUndefined();
+    expect(y.ticks).toBeUndefined();
+  });
+});
+
+describe("InteractiveBarChart — providersByModel custom XAxis tick", () => {
+  const data = [
+    { name: "gpt-5.4-nano", v: 100 },
+    { name: "claude-haiku-4-5", v: 50 },
+  ];
+  const series = [{ key: "v", label: "Tokens" }];
+
+  it("sem providersByModel, XAxis usa tick padrão (objeto com fill/fontSize)", () => {
+    render(<InteractiveBarChart data={data} series={series} />);
+    const x = getCaptured().xAxisProps[0];
+    // tick é um objeto literal de estilo (não função)
+    expect(typeof x.tick).toBe("object");
+    expect(x.height).toBeUndefined();
+  });
+
+  it("com providersByModel, XAxis recebe tick como função e height=50", () => {
+    const providersByModel = {
+      "gpt-5.4-nano": "openai",
+      "claude-haiku-4-5": "anthropic",
+    };
+    render(
+      <InteractiveBarChart
+        data={data}
+        series={series}
+        providersByModel={providersByModel}
+      />,
+    );
+    const x = getCaptured().xAxisProps[0];
+    expect(typeof x.tick).toBe("function");
+    expect(x.height).toBe(50);
+  });
+
+  it("custom tick renderiza nome do modelo + (Provider) com label do PROVIDER_LABELS", () => {
+    const providersByModel = { "gpt-5.4-nano": "openai" };
+    render(
+      <InteractiveBarChart
+        data={data}
+        series={series}
+        providersByModel={providersByModel}
+      />,
+    );
+    const x = getCaptured().xAxisProps[0];
+    const TickFn = x.tick as (props: {
+      x: number;
+      y: number;
+      payload: { value: string };
+    }) => React.ReactElement;
+    const node = TickFn({ x: 10, y: 20, payload: { value: "gpt-5.4-nano" } });
+    // Renderiza node em string serializada via JSON-like check no children
+    const { container } = render(<svg>{node}</svg>);
+    const html = container.innerHTML;
+    expect(html).toContain("gpt-5.4-nano");
+    expect(html).toContain("(OpenAI)");
+  });
+
+  it("custom tick trunca nome de modelo > 24 chars com ellipsis", () => {
+    const longName = "gpt-super-mega-ultra-long-model-name-extra";
+    const providersByModel = { [longName]: "openai" };
+    render(
+      <InteractiveBarChart
+        data={[{ name: longName, v: 1 }]}
+        series={series}
+        providersByModel={providersByModel}
+      />,
+    );
+    const x = getCaptured().xAxisProps[0];
+    const TickFn = x.tick as (props: {
+      x: number;
+      y: number;
+      payload: { value: string };
+    }) => React.ReactElement;
+    const node = TickFn({ x: 0, y: 0, payload: { value: longName } });
+    const { container } = render(<svg>{node}</svg>);
+    const html = container.innerHTML;
+    // Truncado para 21 chars + ellipsis "…"
+    expect(html).toContain(`${longName.slice(0, 21)}…`);
+    expect(html).not.toContain(longName); // nome completo NÃO está renderizado
+  });
+
+  it("custom tick: modelo sem provider mapeado NÃO renderiza linha de provider", () => {
+    const providersByModel = { "outro-modelo": "openai" };
+    render(
+      <InteractiveBarChart
+        data={[{ name: "gpt-5.4-nano", v: 1 }]}
+        series={series}
+        providersByModel={providersByModel}
+      />,
+    );
+    const x = getCaptured().xAxisProps[0];
+    const TickFn = x.tick as (props: {
+      x: number;
+      y: number;
+      payload: { value: string };
+    }) => React.ReactElement;
+    const node = TickFn({ x: 0, y: 0, payload: { value: "gpt-5.4-nano" } });
+    const { container } = render(<svg>{node}</svg>);
+    const html = container.innerHTML;
+    expect(html).toContain("gpt-5.4-nano");
+    expect(html).not.toContain("(OpenAI)");
+    expect(html).not.toContain("(openai)");
   });
 });

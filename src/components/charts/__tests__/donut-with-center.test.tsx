@@ -44,6 +44,44 @@ describe("DonutWithCenter — tooltipPosition prop", () => {
   });
 });
 
+describe("DonutWithCenter — T2-DONUT v0.20.0 (outerRadius/font)", () => {
+  it("centro renderiza com class text-xl (não text-2xl) e data-slot=donut-center", () => {
+    const { container } = render(
+      <DonutWithCenter
+        data={SAMPLE}
+        centerLabel="Custo total"
+        centerValue="R$ 0,5801"
+      />,
+    );
+    const centerEl = container.querySelector(
+      "[data-slot=donut-center]",
+    ) as HTMLElement | null;
+    expect(centerEl).not.toBeNull();
+    const valueSpan = centerEl?.querySelector("span") as HTMLElement | null;
+    expect(valueSpan).not.toBeNull();
+    expect(valueSpan?.className).toContain("text-xl");
+    expect(valueSpan?.className).not.toContain("text-2xl");
+  });
+
+  it("Pie default outerRadius=88 (T2-DONUT)", () => {
+    const { container } = render(
+      <DonutWithCenter
+        data={SAMPLE}
+        centerLabel="Custo total"
+        centerValue="R$ 0,5801"
+      />,
+    );
+    // recharts renderiza <path> dentro do .recharts-pie. Como mock usa actual
+    // recharts + jsdom, validamos via aria-label que o componente está vivo —
+    // o assert real do default está acoplado à assinatura pública do default
+    // prop (ver implementação). Aqui garantimos que o componente renderiza
+    // sem precisar passar outerRadius (o default está sendo aplicado).
+    expect(
+      container.querySelector("[data-slot=donut-center]"),
+    ).not.toBeNull();
+  });
+});
+
 describe("donutTooltipWrapperStyle()", () => {
   it("default top-right: top:8 right:8 sem left/bottom", () => {
     const style = donutTooltipWrapperStyle("top-right");

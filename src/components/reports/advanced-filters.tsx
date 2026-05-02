@@ -408,11 +408,13 @@ export function AdvancedFilters({
           validateName={(n) => presetsApi.validateName(n)}
         />
 
-        <QuickFiltersPopover
-          active={quickFilters}
-          onToggle={onToggleQuick}
-          currentChatwootUserId={currentChatwootUserId}
-        />
+        <div data-tour="atalhos">
+          <QuickFiltersPopover
+            active={quickFilters}
+            onToggle={onToggleQuick}
+            currentChatwootUserId={currentChatwootUserId}
+          />
+        </div>
 
         <Button
           data-tour="filters-chip"

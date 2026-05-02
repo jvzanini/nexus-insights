@@ -77,14 +77,16 @@ export default async function Page() {
           accountUrls={accountUrls}
         />
 
-        <Card className="rounded-2xl border border-border bg-muted/30 p-2">
-          <CardHeader>
-            <CardTitle>Comportamento</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <PromptConfigForm initial={cfg} />
-          </CardContent>
-        </Card>
+        <div id="prompt-edit-form" className="scroll-mt-4">
+          <Card className="rounded-2xl border border-border bg-muted/30 p-2">
+            <CardHeader>
+              <CardTitle>Comportamento</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <PromptConfigForm initial={cfg} />
+            </CardContent>
+          </Card>
+        </div>
 
         <Card className="rounded-2xl border border-border bg-muted/30 p-2">
           <CardHeader>

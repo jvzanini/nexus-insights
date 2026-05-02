@@ -145,7 +145,7 @@ export function DonutWithCenter({
   centerValue,
   height = 320,
   innerRadius = 70,
-  outerRadius = 110,
+  outerRadius = 88,
   emptyMessage,
   emptyHint,
   formatValue,
@@ -251,8 +251,11 @@ export function DonutWithCenter({
           </Pie>
         </PieChart>
       </ResponsiveContainer>
-      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 text-center">
-        <span className="text-2xl font-bold tabular-nums text-foreground">
+      <div
+        data-slot="donut-center"
+        className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 text-center"
+      >
+        <span className="text-xl font-bold tabular-nums text-foreground">
           {centerValue}
         </span>
         <span className="max-w-[60%] text-xs uppercase tracking-wide text-muted-foreground">

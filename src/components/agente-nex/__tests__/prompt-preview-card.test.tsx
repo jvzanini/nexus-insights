@@ -70,16 +70,18 @@ describe("PromptPreviewCard", () => {
       />,
     );
 
-    // Botão do toggle deve dizer "Mostrar identidade fixa"
+    // Botão do toggle deve usar o novo label explicativo
     expect(
-      screen.getByRole("button", { name: /Mostrar identidade fixa/i }),
+      screen.getByRole("button", {
+        name: /Ver identidade fixa do agente \(somente leitura\)/i,
+      }),
     ).toBeInTheDocument();
 
     // Bloco em destaque com IDENTITY_BASE não está renderizado.
     expect(screen.queryByTestId("identity-base")).not.toBeInTheDocument();
   });
 
-  it("toggle revela e oculta IDENTITY_BASE em destaque", () => {
+  it("toggle revela e oculta IDENTITY_BASE em destaque com parágrafo explicativo", () => {
     render(
       <PromptPreviewCard
         config={baseConfig}
@@ -89,13 +91,20 @@ describe("PromptPreviewCard", () => {
     );
 
     const toggle = screen.getByRole("button", {
-      name: /Mostrar identidade fixa/i,
+      name: /Ver identidade fixa do agente \(somente leitura\)/i,
     });
     fireEvent.click(toggle);
 
     const identityEl = screen.getByTestId("identity-base");
     expect(identityEl).toBeInTheDocument();
     expect(identityEl.textContent).toContain(IDENTITY_BASE.slice(0, 40));
+
+    // Parágrafo explicativo aparece quando toggle aberto.
+    expect(
+      screen.getByText(
+        /Texto-base imutável que blinda a identidade do Agente Nex/i,
+      ),
+    ).toBeInTheDocument();
 
     // botão muda pra "Ocultar"
     expect(
@@ -107,6 +116,50 @@ describe("PromptPreviewCard", () => {
       screen.getByRole("button", { name: /Ocultar identidade fixa/i }),
     );
     expect(screen.queryByTestId("identity-base")).not.toBeInTheDocument();
+  });
+
+  it("renderiza banner read-only italic ANTES do preview", () => {
+    render(
+      <PromptPreviewCard
+        config={baseConfig}
+        kbDocs={baseDocs}
+        accountUrls={baseUrls}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        /Preview somente leitura\. Para editar, use os campos abaixo/i,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("Botão Editar do header chama scrollIntoView no #prompt-edit-form", () => {
+    render(
+      <>
+        <PromptPreviewCard
+          config={baseConfig}
+          kbDocs={baseDocs}
+          accountUrls={baseUrls}
+        />
+        <div id="prompt-edit-form" data-testid="edit-form-anchor" />
+      </>,
+    );
+
+    const target = document.getElementById("prompt-edit-form")!;
+    const scrollIntoViewMock = jest.fn();
+    target.scrollIntoView = scrollIntoViewMock;
+
+    const editBtn = screen.getByRole("button", {
+      name: /Ir para os campos de edição/i,
+    });
+    fireEvent.click(editBtn);
+
+    expect(scrollIntoViewMock).toHaveBeenCalledTimes(1);
+    expect(scrollIntoViewMock).toHaveBeenCalledWith({
+      behavior: "smooth",
+      block: "start",
+    });
   });
 
   it("Botão Copiar dispara navigator.clipboard.writeText e toast de sucesso", async () => {
@@ -160,7 +213,7 @@ describe("PromptPreviewCard", () => {
     expect(toastMock.error).toHaveBeenCalled();
   });
 
-  it("Botão Maximizar abre Sheet (dialog) com prompt", () => {
+  it("Botão Maximizar abre Dialog centralizado com prompt", () => {
     render(
       <PromptPreviewCard
         config={baseConfig}
@@ -176,5 +229,48 @@ describe("PromptPreviewCard", () => {
     const dialog = screen.getByRole("dialog");
     expect(dialog).toBeInTheDocument();
     expect(dialog.textContent).toContain("Personalidade: Direto");
+    // Título do Dialog (mesmo texto do card, então dois matches são esperados).
+    expect(
+      screen.getAllByText(/Prompt completo do Agente Nex/i).length,
+    ).toBeGreaterThanOrEqual(2);
+  });
+
+  it("Dialog maximizado tem botão 'Editar prompt' que fecha + scrolla", () => {
+    jest.useFakeTimers();
+    try {
+      render(
+        <>
+          <PromptPreviewCard
+            config={baseConfig}
+            kbDocs={baseDocs}
+            accountUrls={baseUrls}
+          />
+          <div id="prompt-edit-form" data-testid="edit-form-anchor" />
+        </>,
+      );
+
+      const target = document.getElementById("prompt-edit-form")!;
+      const scrollIntoViewMock = jest.fn();
+      target.scrollIntoView = scrollIntoViewMock;
+
+      fireEvent.click(screen.getByRole("button", { name: /Maximizar/i }));
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+      const editFromMaxBtn = screen.getByRole("button", {
+        name: /Editar prompt/i,
+      });
+      fireEvent.click(editFromMaxBtn);
+
+      // setTimeout(150) para esperar o close do dialog.
+      jest.advanceTimersByTime(200);
+
+      expect(scrollIntoViewMock).toHaveBeenCalledTimes(1);
+      expect(scrollIntoViewMock).toHaveBeenCalledWith({
+        behavior: "smooth",
+        block: "start",
+      });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
