@@ -1,7 +1,7 @@
 import type { TourConfig } from "@/components/tour/tour-provider";
 
 export const conversasTour: TourConfig = {
-  id: "conversas-v2", // bump pra forçar re-onboarding após revamp v0.17
+  id: "conversas-v3", // bump pra forçar re-onboarding após revamp v0.17
   title: "Tour do relatório de Conversas",
   steps: [
     {
@@ -33,6 +33,14 @@ export const conversasTour: TourConfig = {
       targetSelector: "[data-tour='sorting-chip']",
       title: "Ordenação",
       description: "Combine múltiplos critérios de ordenação em sequência.",
+      placement: "bottom",
+    },
+    {
+      id: "atalhos",
+      targetSelector: "[data-tour='atalhos']",
+      title: "Atalhos rápidos",
+      description:
+        "Filtros prontos do dia a dia: 'Sem resposta', 'Não atribuídas', 'Minhas'. Clica e aplica direto, combinando com qualquer outro filtro.",
       placement: "bottom",
     },
     {
