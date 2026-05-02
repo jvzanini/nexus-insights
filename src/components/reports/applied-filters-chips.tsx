@@ -2,6 +2,7 @@
 
 import { ArrowDown, ArrowUp, Trash2, X, Zap } from "lucide-react";
 
+import { FilterChipListPopover } from "@/components/reports/filter-chip-list-popover";
 import type { FilterState } from "@/lib/reports/filter-state";
 import type { MetaItem } from "@/lib/chatwoot/queries/meta-cache";
 import type {
@@ -46,6 +47,8 @@ interface Props {
   applied: FilterState;
   onRemove: (key: keyof FilterState) => void;
   onClearAll: () => void;
+  /** Remove individual de um id de um grupo (popover do chip +N). */
+  onRemoveOne?: (key: keyof FilterState, id: number) => void;
   /** Critérios de ordenação aplicados (opcional). */
   sortStack?: SortRule[];
   sortOptions?: SortRuleOption[];
@@ -87,11 +90,55 @@ function summarize(
   return `${label}: ${get(first)} +${ids.length - 1}`;
 }
 
+interface ResolvedItem {
+  id: number;
+  name: string;
+}
+
+function resolveItems(
+  key: keyof FilterState,
+  ids: number[],
+  meta: Meta,
+): ResolvedItem[] {
+  if (key === "inboxIds") {
+    return ids.map((id) => ({
+      id,
+      name: meta.inboxes.find((x) => x.id === id)?.name ?? `${id}`,
+    }));
+  }
+  if (key === "teamIds") {
+    return ids.map((id) => ({
+      id,
+      name: meta.teams.find((x) => x.id === id)?.name ?? `${id}`,
+    }));
+  }
+  if (key === "assigneeIds") {
+    return ids.map((id) => ({
+      id,
+      name: meta.assignees.find((x) => x.id === id)?.name ?? `${id}`,
+    }));
+  }
+  if (key === "labelIds") {
+    return ids.map((id) => ({
+      id,
+      name: meta.labels?.find((x) => x.id === id)?.name ?? `${id}`,
+    }));
+  }
+  if (key === "statuses") {
+    return ids.map((id) => ({ id, name: STATUS_LABELS[id] ?? `${id}` }));
+  }
+  if (key === "priorities") {
+    return ids.map((id) => ({ id, name: PRIORITY_LABELS[id] ?? `${id}` }));
+  }
+  return [];
+}
+
 export function AppliedFiltersChips({
   meta,
   applied,
   onRemove,
   onClearAll,
+  onRemoveOne,
   sortStack,
   sortOptions,
   onRemoveSort,
@@ -181,19 +228,52 @@ export function AppliedFiltersChips({
               type="button"
               onClick={() => onRemoveQuick(q.key)}
               aria-label={`Remover atalho ${q.label}`}
-              className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
             >
-              <X className="h-3 w-3" aria-hidden="true" />
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           ) : null}
         </span>
       ))}
 
       {chips.map((c) => {
-        const groupName = c.label.split(":")[0] ?? c.label;
+        const ids = (() => {
+          switch (c.key) {
+            case "inboxIds":
+              return applied.inboxIds;
+            case "teamIds":
+              return applied.teamIds;
+            case "assigneeIds":
+              return applied.assigneeIds;
+            case "statuses":
+              return applied.statuses;
+            case "priorities":
+              return applied.priorities;
+            case "labelIds":
+              return applied.labelIds;
+            default:
+              return [];
+          }
+        })();
+        const groupName = c.label.split(":")[0]?.trim() ?? c.label;
+
+        // 2+ items + onRemoveOne disponível: usa popover.
+        if (ids.length >= 2 && onRemoveOne) {
+          return (
+            <FilterChipListPopover
+              key={c.key as string}
+              groupLabel={groupName}
+              items={resolveItems(c.key, ids, meta)}
+              onRemoveOne={(id) => onRemoveOne(c.key, id)}
+              onRemoveAll={() => onRemove(c.key)}
+            />
+          );
+        }
+
+        // 1 item OR sem onRemoveOne: chip simples (X destrutivo).
         return (
           <span
-            key={c.key}
+            key={c.key as string}
             className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-border/60 bg-muted/40 px-2.5 py-1 text-xs text-foreground"
           >
             <span className="truncate">{c.label}</span>
@@ -201,9 +281,9 @@ export function AppliedFiltersChips({
               type="button"
               onClick={() => onRemove(c.key)}
               aria-label={`Remover ${groupName}`}
-              className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
             >
-              <X className="h-3 w-3" aria-hidden="true" />
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </span>
         );
@@ -228,9 +308,9 @@ export function AppliedFiltersChips({
               type="button"
               onClick={() => onRemoveSort(c.key)}
               aria-label={`Remover ordenação por ${c.label}`}
-              className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
             >
-              <X className="h-3 w-3" aria-hidden="true" />
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           ) : null}
         </span>
