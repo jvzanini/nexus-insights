@@ -1,5 +1,34 @@
 # Changelog
 
+## [v0.19.0] 2026-05-02 — Conversas Polish (paginação 1k + drill-down + filtros UX + calendar fix)
+
+> Pacote consolidado de polimento + hotfixes em /relatorios/conversas, derivado dos screenshots do super_admin. Workflow rigoroso (spec v1→v2→v3 com 30+18 achados de pente-fino + plan v1→v2→v3 com 20+33 achados + ui-ux-pro-max em todas as tasks UI). 8 ajustes diretos.
+
+### Implementação
+
+- **Paginação clássica numerada** (1.000-em-1.000) com indicador "Total: X conversas · página N de M". Substitui cursor pagination + banner amarelo "Mostrando primeiras 10.000" + bug `page.tsx` que não passava `limit` (caía em DEFAULT_LIMIT=50). URL ?page=N. Setinhas + páginas + elipsis automática (1 … 5 6 7 … 12). count(*) paralelo no backend.
+- **Drill-down visual mais limpo**: border-l violet sutil + animação fade-in 200ms + sempre todos atributos visíveis (cap defensivo 200 com nota "+N atributos não exibidos" no caso patológico). Remove botões "Ver mais"/"Recolher".
+- **Busca não dispara mais "filtro pendente" no draft**: banner pendente exclui search; hint sutil "Aperte Enter para buscar" abaixo do input quando há texto não aplicado.
+- **Skip-link "Pular para a tabela"** some visualmente (mantém anúncio screen reader via `sr-only`).
+- **Chips +N expansíveis**: chips com 2+ items (Caixa de entrada, Departamento, Atendente, Etiquetas, Status, Prioridade) viram Popover clicável com lista vertical + X individual + "Remover todos" + animação zoom-in 150ms + aria-haspopup="dialog".
+- **X dos chips mais destacado**: hover destrutivo (`bg-destructive/15 text-destructive`); ícone aumentado (h-3.5 w-3.5).
+- **Calendar `showOutsideDays={false}`** (fix do bug em PeriodPills) — afeta todas as 8+ telas que usam `<PeriodPills>` (conversas, agente-nex/consumo, distribuicao, equipe, origem-ia, performance, visao-geral, mensagens-nao-respondidas) — fix de plataforma.
+- **minDate reseta** quando troca conta no sidebar (re-fetch da primeira conversa da conta no próximo open do picker).
+- **Tour `conversas-v3`** ganha step "Atalhos rápidos" + bump de id (re-onboarding 1x).
+
+### Compat
+
+- `?page=N` na URL (omitido se 1).
+- `pageSize` fixo 1000 (não persiste).
+- Filtros mudam → reset page=1 (pushUrl zera page automaticamente).
+- Export ignora page (sempre exporta tudo, até 50k).
+- `conversasList(cursor: ...)` continua funcionando para `exportConversasAction` (modo cursor preservado).
+
+### Notas
+
+- count(*) com search ILIKE em 8+ colunas pode demorar 100-600ms em datasets típicos. TTL cache 30s mitiga refetches.
+- Cap defensivo 200 atributos no drill-down (caso patológico).
+
 ## [v0.18.0] 2026-05-01 — Integrações + Power BI (super_admin only)
 
 > Novo menu **Integrações** com primeira integração **Power BI**.

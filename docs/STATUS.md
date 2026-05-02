@@ -1,12 +1,16 @@
 # Status — Nexus Insights
 
-**Última atualização:** 2026-05-01
-**Versão atual em produção:** v0.18.0
+**Última atualização:** 2026-05-02
+**Versão atual em produção:** v0.19.0
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.18.0)
+## Em produção (v0.19.0)
+
+### Release v0.19.0 (2026-05-02) — Conversas Polish (paginação 1k + drill-down + filtros UX + calendar fix)
+
+Polimento + hotfixes do `/relatorios/conversas`: paginação clássica 1.000-em-1.000 com indicador total + páginas + elipsis substitui cursor pagination + banner amarelo + bug do `limit` faltando; drill-down visual minimal (border-l violet + animação fade-in + sempre todos atributos com cap defensivo 200); busca UX (banner pendente exclui search + hint sutil + skip-link sr-only puro); chips +N expansíveis em popover com X individual + "Remover todos"; X dos chips com hover destrutivo; calendar `showOutsideDays={false}` (fix do PeriodPills, propaga pra 8+ telas da plataforma); minDate reset por accountId; tour `conversas-v3` + step Atalhos. Spec v3 com 30+18 achados de pente-fino · plan v3 com 20+33 achados · ui-ux-pro-max em todas tasks UI.
 
 ### Release v0.18.0 (2026-05-01) — Integrações + Power BI (super_admin only)
 
