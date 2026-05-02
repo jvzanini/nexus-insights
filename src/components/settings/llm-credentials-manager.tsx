@@ -30,6 +30,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { getProviderIcon } from "@/components/icons/providers";
 import { PROVIDER_CATALOG } from "@/lib/llm/catalog";
 import type { CredentialSummary } from "@/lib/llm/credentials";
 import {
@@ -130,7 +131,7 @@ export function LlmCredentialsManager({ initial, activeCredentialId }: Props) {
       {PROVIDERS.map((p) => {
         const list = grouped[p] ?? [];
         const catalog = PROVIDER_CATALOG[p];
-        const initial = catalog.label.charAt(0);
+        const ProviderIcon = getProviderIcon(p);
         return (
           <section
             key={p}
@@ -141,9 +142,16 @@ export function LlmCredentialsManager({ initial, activeCredentialId }: Props) {
               <div className="flex min-w-0 items-center gap-3">
                 <span
                   aria-hidden
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-600/10 text-violet-500 dark:text-violet-400 text-sm font-semibold"
+                  data-testid={`provider-icon-${p}`}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-600/10 text-violet-500 dark:text-violet-400"
                 >
-                  {initial}
+                  {ProviderIcon ? (
+                    <ProviderIcon className="h-5 w-5" />
+                  ) : (
+                    <span className="text-sm font-semibold">
+                      {catalog.label.charAt(0)}
+                    </span>
+                  )}
                 </span>
                 <h3 className="truncate text-sm font-semibold text-foreground">
                   {catalog.label}
@@ -160,16 +168,20 @@ export function LlmCredentialsManager({ initial, activeCredentialId }: Props) {
                   <ExternalLink className="h-3.5 w-3.5" />
                   Criar API key
                 </a>
-                <Button
-                  size="sm"
-                  variant="default"
-                  className="cursor-pointer bg-gradient-to-br from-violet-600 to-violet-500 text-white shadow-sm hover:from-violet-700 hover:to-violet-600 dark:from-violet-500 dark:to-violet-400"
-                  onClick={() => setDialogState({ mode: "create", provider: p })}
-                  disabled={pending}
-                  aria-label={`Nova chave para ${catalog.label}`}
-                >
-                  <Plus className="mr-1 h-4 w-4" /> Nova chave
-                </Button>
+                {list.length > 0 ? (
+                  <Button
+                    size="sm"
+                    variant="default"
+                    className="cursor-pointer"
+                    onClick={() =>
+                      setDialogState({ mode: "create", provider: p })
+                    }
+                    disabled={pending}
+                    aria-label={`Nova chave para ${catalog.label}`}
+                  >
+                    <Plus className="mr-1 h-4 w-4" /> Nova chave
+                  </Button>
+                ) : null}
               </div>
             </header>
 
@@ -204,7 +216,7 @@ export function LlmCredentialsManager({ initial, activeCredentialId }: Props) {
                     size="sm"
                     variant="default"
                     data-testid={`credentials-empty-new-${p}`}
-                    className="cursor-pointer bg-gradient-to-br from-violet-600 to-violet-500 text-white shadow-sm hover:from-violet-700 hover:to-violet-600 dark:from-violet-500 dark:to-violet-400"
+                    className="cursor-pointer"
                     onClick={() =>
                       setDialogState({ mode: "create", provider: p })
                     }

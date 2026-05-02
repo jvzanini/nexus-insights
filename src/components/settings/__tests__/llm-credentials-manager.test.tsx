@@ -113,6 +113,70 @@ describe("LlmCredentialsManager", () => {
     ).toBeInTheDocument();
   });
 
+  it("C2: header NÃO mostra botão 'Nova chave' quando provider tem 0 credenciais", () => {
+    render(
+      <LlmCredentialsManager initial={[]} activeCredentialId={null} />,
+    );
+    // O botão dentro do empty state ainda existe (com testid próprio)
+    expect(
+      screen.getByTestId("credentials-empty-new-openai"),
+    ).toBeInTheDocument();
+    // Mas o botão do header (aria-label="Nova chave para OpenAI") NÃO deve existir
+    // como elemento separado. Como o empty state usa data-testid e NÃO o aria-label,
+    // queryByLabelText deve retornar null.
+    expect(
+      screen.queryByLabelText("Nova chave para OpenAI"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("C2: header MOSTRA botão 'Nova chave' quando provider tem ≥1 credencial", () => {
+    render(
+      <LlmCredentialsManager
+        initial={[cred({ id: "c1", label: "Atual", last4: "1234" })]}
+        activeCredentialId={null}
+      />,
+    );
+    expect(
+      screen.getByLabelText("Nova chave para OpenAI"),
+    ).toBeInTheDocument();
+  });
+
+  it("C1: botão 'Nova chave' NÃO usa gradient violet (variant default puro)", () => {
+    render(
+      <LlmCredentialsManager
+        initial={[cred({ id: "c1", label: "Atual", last4: "1234" })]}
+        activeCredentialId={null}
+      />,
+    );
+    const headerBtn = screen.getByLabelText("Nova chave para OpenAI");
+    expect(headerBtn.className).not.toMatch(/bg-gradient-to-br/);
+    expect(headerBtn.className).not.toMatch(/from-violet-600/);
+    expect(headerBtn.className).not.toMatch(/from-violet-500/);
+  });
+
+  it("C1: botão 'Nova chave' do empty state também NÃO usa gradient", () => {
+    render(
+      <LlmCredentialsManager initial={[]} activeCredentialId={null} />,
+    );
+    const emptyBtn = screen.getByTestId("credentials-empty-new-openai");
+    expect(emptyBtn.className).not.toMatch(/bg-gradient-to-br/);
+    expect(emptyBtn.className).not.toMatch(/from-violet-600/);
+    expect(emptyBtn.className).not.toMatch(/from-violet-500/);
+  });
+
+  it("C3: cada provider renderiza um SVG no slot do logo (provider-icon-{p})", () => {
+    render(
+      <LlmCredentialsManager initial={[]} activeCredentialId={null} />,
+    );
+    for (const p of ["openai", "anthropic", "gemini", "openrouter"]) {
+      const slot = screen.getByTestId(`provider-icon-${p}`);
+      expect(slot).toBeInTheDocument();
+      // O slot deve conter um <svg> renderizado pelo componente de ícone
+      const svg = slot.querySelector("svg");
+      expect(svg).not.toBeNull();
+    }
+  });
+
   it("ponto verde aparece somente na credencial ativa", () => {
     render(
       <LlmCredentialsManager
@@ -145,7 +209,9 @@ describe("LlmCredentialsManager", () => {
       <LlmCredentialsManager initial={[]} activeCredentialId={null} />,
     );
 
-    const novaBtn = screen.getByLabelText("Nova chave para OpenAI");
+    // Quando provider tem 0 credenciais, o botão "Nova chave" só existe no
+    // empty state (header esconde — C2 v0.20.0).
+    const novaBtn = screen.getByTestId("credentials-empty-new-openai");
     fireEvent.click(novaBtn);
 
     expect(
