@@ -59,6 +59,7 @@ export interface DrillDownConversationItem {
   displayId: number;
   contactName: string | null;
   inboxName: string | null;
+  teamName: string | null;
   assigneeName: string | null;
   status: number;
   lastActivityAt: string;
@@ -145,6 +146,7 @@ export interface NoResponseDrillDownItem {
   displayId: number;
   contactName: string | null;
   inboxName: string | null;
+  teamName: string | null;
   assigneeName: string | null;
   waitingSeconds: number;
   lastIncomingAt: string;
@@ -170,6 +172,7 @@ export interface ByTeamDrillDownItem {
   displayId: number;
   contactName: string | null;
   inboxName: string | null;
+  teamName: string | null;
   assigneeName: string | null;
   status: number;
   createdAt: string;
@@ -210,6 +213,7 @@ interface RowConversation {
   display_id: number;
   contact_name: string | null;
   inbox_name: string | null;
+  team_name: string | null;
   assignee_name: string | null;
   status: number;
   last_activity_at: Date;
@@ -264,7 +268,7 @@ export async function getReceivedDrillDown(
 
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-drill-received-v3",
+    name: "dashboard-drill-received-v4",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -342,12 +346,14 @@ export async function getReceivedDrillDown(
               c.id, c.display_id,
               ct.name AS contact_name,
               i.name AS inbox_name,
+              t.name AS team_name,
               u.name AS assignee_name,
               c.status,
               c.last_activity_at
             FROM conversations c
             LEFT JOIN contacts ct ON ct.id = c.contact_id
             LEFT JOIN inboxes i ON i.id = c.inbox_id
+            LEFT JOIN teams t ON t.id = c.team_id
             LEFT JOIN users u ON u.id = c.assignee_id
             WHERE c.account_id = $1
               AND c.created_at >= $2
@@ -395,6 +401,7 @@ export async function getReceivedDrillDown(
             displayId: r.display_id,
             contactName: r.contact_name,
             inboxName: r.inbox_name,
+            teamName: r.team_name,
             assigneeName: r.assignee_name,
             status: r.status,
             lastActivityAt: new Date(r.last_activity_at).toISOString(),
@@ -460,7 +467,7 @@ export async function getResolvedDrillDown(
 
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-drill-resolved-v3",
+    name: "dashboard-drill-resolved-v4",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -545,12 +552,14 @@ export async function getResolvedDrillDown(
               c.id, c.display_id,
               ct.name AS contact_name,
               i.name AS inbox_name,
+              t.name AS team_name,
               u.name AS assignee_name,
               c.status,
               c.last_activity_at
             FROM conversations c
             LEFT JOIN contacts ct ON ct.id = c.contact_id
             LEFT JOIN inboxes i ON i.id = c.inbox_id
+            LEFT JOIN teams t ON t.id = c.team_id
             LEFT JOIN users u ON u.id = c.assignee_id
             WHERE c.account_id = $1
               AND c.created_at >= $2
@@ -599,6 +608,7 @@ export async function getResolvedDrillDown(
             displayId: r.display_id,
             contactName: r.contact_name,
             inboxName: r.inbox_name,
+            teamName: r.team_name,
             assigneeName: r.assignee_name,
             status: r.status,
             lastActivityAt: new Date(r.last_activity_at).toISOString(),
@@ -673,7 +683,7 @@ export async function getStatusDrillDown(args: StatusDrillDownInput) {
   };
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-drill-status-v3",
+    name: "dashboard-drill-status-v4",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -716,12 +726,14 @@ export async function getStatusDrillDown(args: StatusDrillDownInput) {
               c.id, c.display_id,
               ct.name AS contact_name,
               i.name AS inbox_name,
+              t.name AS team_name,
               u.name AS assignee_name,
               c.status,
               c.last_activity_at
             FROM conversations c
             LEFT JOIN contacts ct ON ct.id = c.contact_id
             LEFT JOIN inboxes i ON i.id = c.inbox_id
+            LEFT JOIN teams t ON t.id = c.team_id
             LEFT JOIN users u ON u.id = c.assignee_id
             WHERE c.account_id = $1
               AND c.created_at >= $2 AND c.created_at < $3
@@ -760,6 +772,7 @@ export async function getStatusDrillDown(args: StatusDrillDownInput) {
               displayId: r.display_id,
               contactName: r.contact_name,
               inboxName: r.inbox_name,
+              teamName: r.team_name,
               assigneeName: r.assignee_name,
               status: r.status,
               lastActivityAt: new Date(r.last_activity_at).toISOString(),
@@ -1067,6 +1080,7 @@ interface RowNoResponseFull {
   display_id: number;
   contact_name: string | null;
   inbox_name: string | null;
+  team_name: string | null;
   assignee_name: string | null;
   waiting_seconds: number;
   last_incoming_at: Date;
@@ -1101,7 +1115,7 @@ export async function getNoResponseDrillDown(args: DrillDownPeriodInput) {
   };
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-drill-no-response",
+    name: "dashboard-drill-no-response-v2",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -1122,6 +1136,7 @@ export async function getNoResponseDrillDown(args: DrillDownPeriodInput) {
                 m.created_at,
                 m.message_type
               FROM messages m
+              WHERE m.message_type IN (0, 1)
               ORDER BY m.conversation_id, m.created_at DESC
             )
             SELECT
@@ -1132,8 +1147,8 @@ export async function getNoResponseDrillDown(args: DrillDownPeriodInput) {
               ON lm.conversation_id = c.id
              AND lm.message_type = 0
             WHERE c.account_id = $1
-              AND c.created_at >= $2
-              AND c.created_at < $3
+              AND c.last_activity_at >= $2
+              AND c.last_activity_at < $3
               AND c.status = 0
               ${matrixClause}
           `;
@@ -1146,6 +1161,7 @@ export async function getNoResponseDrillDown(args: DrillDownPeriodInput) {
                 m.message_type,
                 m.content
               FROM messages m
+              WHERE m.message_type IN (0, 1)
               ORDER BY m.conversation_id, m.created_at DESC
             )
             SELECT
@@ -1153,6 +1169,7 @@ export async function getNoResponseDrillDown(args: DrillDownPeriodInput) {
               c.display_id,
               ct.name AS contact_name,
               ix.name AS inbox_name,
+              t.name AS team_name,
               u.name AS assignee_name,
               EXTRACT(EPOCH FROM (NOW() - lm.created_at))::int AS waiting_seconds,
               lm.created_at AS last_incoming_at,
@@ -1163,10 +1180,11 @@ export async function getNoResponseDrillDown(args: DrillDownPeriodInput) {
              AND lm.message_type = 0
             LEFT JOIN contacts ct ON ct.id = c.contact_id
             LEFT JOIN inboxes ix ON ix.id = c.inbox_id
+            LEFT JOIN teams t ON t.id = c.team_id
             LEFT JOIN users u ON u.id = c.assignee_id
             WHERE c.account_id = $1
-              AND c.created_at >= $2
-              AND c.created_at < $3
+              AND c.last_activity_at >= $2
+              AND c.last_activity_at < $3
               AND c.status = 0
               ${matrixClause}
             ORDER BY waiting_seconds DESC
@@ -1179,6 +1197,7 @@ export async function getNoResponseDrillDown(args: DrillDownPeriodInput) {
                 m.conversation_id,
                 m.message_type
               FROM messages m
+              WHERE m.message_type IN (0, 1)
               ORDER BY m.conversation_id, m.created_at DESC
             )
             SELECT
@@ -1191,8 +1210,8 @@ export async function getNoResponseDrillDown(args: DrillDownPeriodInput) {
              AND lm.message_type = 0
             LEFT JOIN inboxes ix ON ix.id = c.inbox_id
             WHERE c.account_id = $1
-              AND c.created_at >= $2
-              AND c.created_at < $3
+              AND c.last_activity_at >= $2
+              AND c.last_activity_at < $3
               AND c.status = 0
               ${matrixClause}
             GROUP BY ix.id, ix.name
@@ -1205,6 +1224,7 @@ export async function getNoResponseDrillDown(args: DrillDownPeriodInput) {
                 m.conversation_id,
                 m.message_type
               FROM messages m
+              WHERE m.message_type IN (0, 1)
               ORDER BY m.conversation_id, m.created_at DESC
             )
             SELECT
@@ -1217,8 +1237,8 @@ export async function getNoResponseDrillDown(args: DrillDownPeriodInput) {
              AND lm.message_type = 0
             LEFT JOIN users u ON u.id = c.assignee_id
             WHERE c.account_id = $1
-              AND c.created_at >= $2
-              AND c.created_at < $3
+              AND c.last_activity_at >= $2
+              AND c.last_activity_at < $3
               AND c.status = 0
               ${matrixClause}
             GROUP BY u.id, u.name
@@ -1247,6 +1267,7 @@ export async function getNoResponseDrillDown(args: DrillDownPeriodInput) {
               displayId: r.display_id,
               contactName: r.contact_name,
               inboxName: r.inbox_name,
+              teamName: r.team_name,
               assigneeName: r.assignee_name,
               waitingSeconds: Number(r.waiting_seconds ?? 0),
               lastIncomingAt:
@@ -1279,6 +1300,7 @@ interface RowByTeamItem {
   display_id: number;
   contact_name: string | null;
   inbox_name: string | null;
+  team_name: string | null;
   assignee_name: string | null;
   status: number;
   created_at: Date;
@@ -1311,7 +1333,7 @@ export async function getByTeamDrillDown(args: {
   };
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-drill-by-team",
+    name: "dashboard-drill-by-team-v2",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -1369,6 +1391,7 @@ export async function getByTeamDrillDown(args: {
               c.id, c.display_id,
               ct.name AS contact_name,
               i.name AS inbox_name,
+              t.name AS team_name,
               u.name AS assignee_name,
               c.status,
               c.created_at,
@@ -1376,6 +1399,7 @@ export async function getByTeamDrillDown(args: {
             FROM conversations c
             LEFT JOIN contacts ct ON ct.id = c.contact_id
             LEFT JOIN inboxes i ON i.id = c.inbox_id
+            LEFT JOIN teams t ON t.id = c.team_id
             LEFT JOIN users u ON u.id = c.assignee_id
             WHERE c.account_id = $1
               AND c.created_at >= $2
@@ -1416,6 +1440,7 @@ export async function getByTeamDrillDown(args: {
               displayId: r.display_id,
               contactName: r.contact_name,
               inboxName: r.inbox_name,
+              teamName: r.team_name,
               assigneeName: r.assignee_name,
               status: r.status,
               createdAt: new Date(r.created_at).toISOString(),
