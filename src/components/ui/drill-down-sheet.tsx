@@ -168,7 +168,7 @@ export function DrillDownSection({
   children,
   className,
 }: {
-  title: string;
+  title: React.ReactNode;
   description?: string;
   action?: React.ReactNode;
   children: React.ReactNode;
@@ -183,7 +183,7 @@ export function DrillDownSection({
     >
       <header className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="font-heading text-sm font-semibold text-foreground">
+          <h3 className="font-heading text-sm font-semibold text-foreground inline-flex items-center gap-2 flex-wrap">
             {title}
           </h3>
           {description ? (

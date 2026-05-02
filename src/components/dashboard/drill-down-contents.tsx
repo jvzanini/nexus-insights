@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/drill-down-dialog";
 import { formatRelativeShort } from "@/lib/format/relative-time";
 import { DrillDownPagination } from "./drill-down-pagination";
+import { TotalBadge } from "./total-badge";
 import {
   getOpenDrillDownAction,
   getReceivedDrillDownAction,
@@ -85,6 +86,7 @@ function ConversationTable({
     displayId: number;
     contactName: string | null;
     inboxName: string | null;
+    teamName: string | null;
     assigneeName: string | null;
     status: number;
     lastActivityAt: string;
@@ -94,7 +96,7 @@ function ConversationTable({
 }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-border">
-      <Table className="min-w-[720px]">
+      <Table className="min-w-[820px]">
         <TableHeader>
           <TableRow className="border-border hover:bg-transparent">
             <TableHead className="h-9 text-xs font-medium text-muted-foreground">
@@ -104,7 +106,10 @@ function ConversationTable({
               Contato
             </TableHead>
             <TableHead className="h-9 text-xs font-medium text-muted-foreground">
-              Inbox
+              Estado
+            </TableHead>
+            <TableHead className="h-9 text-xs font-medium text-muted-foreground">
+              Departamento
             </TableHead>
             <TableHead className="h-9 text-xs font-medium text-muted-foreground">
               Atendente
@@ -121,7 +126,7 @@ function ConversationTable({
           {items.length === 0 ? (
             <TableRow>
               <TableCell
-                colSpan={6}
+                colSpan={7}
                 className="py-8 text-center text-sm text-muted-foreground"
               >
                 {emptyMessage}
@@ -133,14 +138,19 @@ function ConversationTable({
                 key={item.id}
                 className="border-border/50 transition-colors hover:bg-accent/30"
               >
-                <TableCell className="py-2.5 text-xs text-muted-foreground">
-                  {formatRelativeShort(item.lastActivityAt)}
+                <TableCell className="py-2.5">
+                  <span className="inline-block rounded-md bg-amber-500/10 px-2 py-1 text-xs font-semibold tabular-nums text-amber-400">
+                    {formatRelativeShort(item.lastActivityAt)}
+                  </span>
                 </TableCell>
                 <TableCell className="py-2.5 text-sm text-foreground">
                   {item.contactName ?? "—"}
                 </TableCell>
                 <TableCell className="py-2.5 text-sm text-muted-foreground">
                   {item.inboxName ?? "—"}
+                </TableCell>
+                <TableCell className="py-2.5 text-sm text-muted-foreground">
+                  {item.teamName ?? "—"}
                 </TableCell>
                 <TableCell className="py-2.5 text-sm text-muted-foreground">
                   {item.assigneeName ?? "—"}
@@ -237,10 +247,9 @@ export function ReceivedDrillDownContent({
     { key: "Conversas", label: "Conversas", color: CHART_COLORS.violet },
   ];
 
-  // Nome enriquecido com janela completa (ex: "14:00 – 14:59") — InteractiveAreaChart
-  // não aceita tooltip per-ponto, então enriquecemos o name diretamente.
+  // v0.22.0: name = "HH:00" apenas; description já comunica a janela completa.
   const byHourData = data.byHour.map((h) => ({
-    name: `${String(h.hour).padStart(2, "0")}:00 – ${String(h.hour).padStart(2, "0")}:59`,
+    name: `${String(h.hour).padStart(2, "0")}:00`,
     Conversas: h.count,
   }));
   const byHourSeries: AreaChartSeries[] = [
@@ -268,17 +277,17 @@ export function ReceivedDrillDownContent({
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <DrillDownSection
-          title="Distribuição por inbox"
-          description="Top 10 inboxes que receberam mais conversas"
+          title="Distribuição por estado"
+          description="Top 10 estados que receberam mais conversas"
         >
           <InteractiveBarChart
             data={byInboxData}
             series={byInboxSeries}
             layout="horizontal"
-            height={280}
+            height={Math.max(280, Math.min(480, byInboxData.length * 28 + 60))}
             showLegend={false}
-            yAxisWidth={120}
-            emptyMessage="Nenhuma inbox com volume no período"
+            yAxisWidth={160}
+            emptyMessage="Nenhum estado com volume no período"
           />
         </DrillDownSection>
         <DrillDownSection
@@ -296,7 +305,12 @@ export function ReceivedDrillDownContent({
       </div>
 
       <DrillDownSection
-        title={`Conversas recebidas — ${data.total.toLocaleString("pt-BR")} no total`}
+        title={
+          <>
+            Conversas recebidas
+            <TotalBadge n={data.total} />
+          </>
+        }
         description="Ordenadas por data de criação (mais recente primeiro)"
       >
         <ConversationTable
@@ -379,10 +393,9 @@ export function ResolvedDrillDownContent({
     { key: "Conversas", label: "Conversas", color: CHART_COLORS.emerald },
   ];
 
-  // Nome enriquecido com janela completa (ex: "14:00 – 14:59") — InteractiveAreaChart
-  // não aceita tooltip per-ponto, então enriquecemos o name diretamente.
+  // v0.22.0: name = "HH:00" apenas; description já comunica a janela completa.
   const byHourData = data.byHour.map((h) => ({
-    name: `${String(h.hour).padStart(2, "0")}:00 – ${String(h.hour).padStart(2, "0")}:59`,
+    name: `${String(h.hour).padStart(2, "0")}:00`,
     Conversas: h.count,
   }));
   const byHourSeries: AreaChartSeries[] = [
@@ -408,17 +421,17 @@ export function ResolvedDrillDownContent({
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <DrillDownSection
-          title="Distribuição por inbox"
-          description="Top 10 inboxes que mais resolveram"
+          title="Distribuição por estado"
+          description="Top 10 estados que mais resolveram"
         >
           <InteractiveBarChart
             data={byInboxData}
             series={byInboxSeries}
             layout="horizontal"
-            height={280}
+            height={Math.max(280, Math.min(480, byInboxData.length * 28 + 60))}
             showLegend={false}
-            yAxisWidth={120}
-            emptyMessage="Sem inboxes com resoluções"
+            yAxisWidth={160}
+            emptyMessage="Sem estados com resoluções"
           />
         </DrillDownSection>
         <DrillDownSection
@@ -436,7 +449,12 @@ export function ResolvedDrillDownContent({
       </div>
 
       <DrillDownSection
-        title={`Conversas resolvidas — ${data.total.toLocaleString("pt-BR")} no total`}
+        title={
+          <>
+            Conversas resolvidas
+            <TotalBadge n={data.total} />
+          </>
+        }
         description="Ordenadas pela data da resolução"
       >
         <ConversationTable
@@ -527,23 +545,28 @@ export function OpenDrillDownContent({
           />
         </DrillDownSection>
         <DrillDownSection
-          title="Inboxes com mais conversas em aberto"
+          title="Estados com mais conversas em aberto"
           description="Top 10 — snapshot agora"
         >
           <InteractiveBarChart
             data={byInboxData}
             series={byInboxSeries}
             layout="horizontal"
-            height={280}
+            height={Math.max(280, Math.min(480, byInboxData.length * 28 + 60))}
             showLegend={false}
-            yAxisWidth={120}
-            emptyMessage="Sem inboxes com conversas em aberto"
+            yAxisWidth={160}
+            emptyMessage="Sem estados com conversas em aberto"
           />
         </DrillDownSection>
       </div>
 
       <DrillDownSection
-        title="Conversas em aberto agora"
+        title={
+          <>
+            Conversas em aberto agora
+            <TotalBadge n={data.total} />
+          </>
+        }
         description="20 mais antigas (last activity ascendente) — possíveis prioridades"
       >
         <ConversationTable
@@ -635,23 +658,28 @@ export function StatusDrillDownContent({
           </div>
         </DrillDownSection>
         <DrillDownSection
-          title="Top inboxes"
-          description="10 inboxes com mais conversas neste status"
+          title="Top estados"
+          description="10 estados com mais conversas neste status"
         >
           <InteractiveBarChart
             data={byInboxData}
             series={byInboxSeries}
             layout="horizontal"
-            height={280}
+            height={Math.max(280, Math.min(480, byInboxData.length * 28 + 60))}
             showLegend={false}
-            yAxisWidth={120}
-            emptyMessage="Sem inboxes com conversas neste status"
+            yAxisWidth={160}
+            emptyMessage="Sem estados com conversas neste status"
           />
         </DrillDownSection>
       </div>
 
       <DrillDownSection
-        title={`Conversas em "${label}" (${data.total.toLocaleString("pt-BR")} no total)`}
+        title={
+          <>
+            {`Conversas em "${label}"`}
+            <TotalBadge n={data.total} />
+          </>
+        }
         description="Ordenadas por última atividade"
       >
         <ConversationTable
