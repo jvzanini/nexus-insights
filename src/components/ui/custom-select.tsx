@@ -25,6 +25,8 @@ interface CustomSelectProps {
   triggerClassName?: string;
   icon?: React.ReactNode;
   disabled?: boolean;
+  /** Label acessível para o trigger (lido por screen readers). */
+  "aria-label"?: string;
 }
 
 /**
@@ -44,6 +46,7 @@ export function CustomSelect({
   triggerClassName,
   icon,
   disabled = false,
+  "aria-label": ariaLabel,
 }: CustomSelectProps) {
   const [open, setOpen] = useState(false);
   const selected = options.find((o) => o.value === value);
@@ -56,6 +59,9 @@ export function CustomSelect({
             <button
               type="button"
               disabled={disabled}
+              aria-label={ariaLabel}
+              aria-haspopup="listbox"
+              aria-expanded={open}
               className={cn(
                 "flex w-full items-center justify-between rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground cursor-pointer transition-all duration-200 hover:border-muted-foreground/30 disabled:opacity-50 disabled:cursor-not-allowed",
                 triggerClassName,

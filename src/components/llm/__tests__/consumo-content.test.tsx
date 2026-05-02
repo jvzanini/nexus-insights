@@ -3,7 +3,7 @@
  */
 import "@testing-library/jest-dom";
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import type {
   UsageDetailsResult,
@@ -290,5 +290,100 @@ describe("ConsumoContent — refactor T6d v0.16.0", () => {
     expect(screen.getByText(/P[aá]gina \d+ de \d+/i)).toBeInTheDocument();
     // Zona 3: dropdown {n} por pagina
     expect(screen.getByText(/por p[aá]gina/i)).toBeInTheDocument();
+  });
+
+  // ----- T2-CONSUMO v0.20.0 ----------------------------------------------
+
+  it("A2: linha total renderiza com classe destaque violet + ícone Sigma + label uppercase", async () => {
+    const { container } = render(
+      <ConsumoContent minDate="2026-01-01T00:00:00.000Z" />,
+    );
+
+    await waitFor(() => expect(fetchUsageDetailsMock).toHaveBeenCalled());
+    await screen.findByText(/Hist[oó]rico de chamadas/i);
+
+    const totalLabel = await screen.findByText(/Total no filtro/i);
+    expect(totalLabel).toBeInTheDocument();
+    // O texto fica visualmente uppercase via classe `uppercase`.
+    expect(totalLabel.className).toMatch(/uppercase/);
+
+    // Linha do total tem bg-violet-500/15.
+    const totalRow = totalLabel.closest("tr");
+    expect(totalRow).not.toBeNull();
+    expect(totalRow!.className).toMatch(/bg-violet-500\/15/);
+    expect(totalRow!.className).toMatch(/font-bold/);
+
+    // Ícone Sigma (lucide) — render como svg com classe `lucide-sigma`.
+    const sigma = container.querySelector(".lucide-sigma");
+    expect(sigma).toBeInTheDocument();
+  });
+
+  it("3.G: pageSize usa CustomSelect (não <select> HTML nativo)", async () => {
+    fetchUsageDetailsMock.mockResolvedValue(makeDetails({ total: 120 }));
+
+    const { container } = render(
+      <ConsumoContent minDate="2026-01-01T00:00:00.000Z" />,
+    );
+
+    await waitFor(() => expect(fetchUsageDetailsMock).toHaveBeenCalled());
+    await screen.findByText(/Hist[oó]rico de chamadas/i);
+    await screen.findByText(/por p[aá]gina/i);
+
+    // Não deve haver mais o <select> HTML nativo na zona de paginação.
+    const nativeSelects = container.querySelectorAll("select");
+    expect(nativeSelects.length).toBe(0);
+
+    // CustomSelect renderiza <button> com aria-label "Itens por página".
+    expect(
+      screen.getByRole("button", { name: /Itens por p[aá]gina/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("3.F: filtro global de Provider visível com 'Todos os providers' como default", async () => {
+    render(<ConsumoContent minDate="2026-01-01T00:00:00.000Z" />);
+
+    await waitFor(() => expect(fetchUsageStatsMock).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(fetchDistinctProvidersInRangeMock).toHaveBeenCalled(),
+    );
+
+    // Há um botão CustomSelect com aria-label de filtro global.
+    const trigger = await screen.findByRole("button", {
+      name: /Filtrar por provider \(global\)/i,
+    });
+    expect(trigger).toBeInTheDocument();
+    // Default mostra "Todos os providers".
+    expect(trigger.textContent).toMatch(/Todos os providers/i);
+  });
+
+  it("3.F: stats é refeito com provider quando filtro global muda", async () => {
+    render(<ConsumoContent minDate="2026-01-01T00:00:00.000Z" />);
+
+    await waitFor(() => expect(fetchUsageStatsMock).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(fetchDistinctProvidersInRangeMock).toHaveBeenCalled(),
+    );
+
+    // Espera o popover hidratar com a lista de providers.
+    const trigger = await screen.findByRole("button", {
+      name: /Filtrar por provider \(global\)/i,
+    });
+    fetchUsageStatsMock.mockClear();
+
+    // Abre o popover.
+    fireEvent.click(trigger);
+
+    // Escolhe "OpenAI" no listbox.
+    const opt = await screen.findByRole("option", { name: /^OpenAI$/i });
+    fireEvent.click(opt);
+
+    await waitFor(() => {
+      expect(fetchUsageStatsMock).toHaveBeenCalled();
+    });
+    const lastCall =
+      fetchUsageStatsMock.mock.calls[
+        fetchUsageStatsMock.mock.calls.length - 1
+      ]?.[0];
+    expect(lastCall?.provider).toBe("openai");
   });
 });

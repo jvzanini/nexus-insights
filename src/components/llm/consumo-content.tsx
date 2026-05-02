@@ -19,6 +19,7 @@ import {
   Hash,
   History,
   Loader2,
+  Sigma,
   Sparkles,
   Zap,
 } from "lucide-react";
@@ -58,8 +59,10 @@ import {
 } from "@/lib/llm/queries/usage-stats";
 import { PROVIDER_LABELS } from "@/lib/llm/pricing";
 import { formatBrl4, formatUsd4 } from "@/lib/llm/format";
+import { formatDuration } from "@/lib/format/date";
 import { type PeriodKey as LegacyPeriodKey } from "@/lib/reports/period";
 import { getPeriodInTz, type PeriodKey } from "@/lib/datetime-core";
+import { CustomSelect } from "@/components/ui/custom-select";
 import { UsageDetailSheet } from "@/components/llm/usage-detail-sheet";
 import { UsageTableFilters } from "@/components/llm/usage-table-filters";
 
@@ -183,7 +186,21 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
   );
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState<PageSize>(DEFAULT_PAGE_SIZE);
-  const [filterProvider, setFilterProvider] = useState<string | undefined>();
+  // Filtro global de provider (afeta KPIs, charts e tabela). Sincroniza com URL.
+  const [globalProvider, setGlobalProvider] = useState<string | undefined>(
+    () => {
+      if (typeof window === "undefined") return undefined;
+      const params = new URLSearchParams(window.location.search);
+      return params.get("provider") ?? undefined;
+    },
+  );
+  const [filterProvider, setFilterProvider] = useState<string | undefined>(
+    () => {
+      if (typeof window === "undefined") return undefined;
+      const params = new URLSearchParams(window.location.search);
+      return params.get("provider") ?? undefined;
+    },
+  );
   const [filterModel, setFilterModel] = useState<string | undefined>();
   const [providers, setProviders] = useState<string[]>([]);
   const [modelsByProvider, setModelsByProvider] = useState<
@@ -202,7 +219,23 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
   // Reseta paginação ao trocar período / filtros / pageSize.
   useEffect(() => {
     setPage(0);
-  }, [pill, customRange, filterProvider, filterModel, pageSize]);
+  }, [pill, customRange, globalProvider, filterProvider, filterModel, pageSize]);
+
+  // Sincroniza filtro global com URL (?provider=...).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (globalProvider) url.searchParams.set("provider", globalProvider);
+    else url.searchParams.delete("provider");
+    window.history.replaceState({}, "", url.toString());
+  }, [globalProvider]);
+
+  // Quando o filtro global muda, espelha no filtro da tabela e reseta o modelo
+  // (evita estado inválido onde modelo pertence a outro provider).
+  useEffect(() => {
+    setFilterProvider(globalProvider);
+    setFilterModel(undefined);
+  }, [globalProvider]);
 
   // Fetch stats + first page de details.
   useEffect(() => {
@@ -213,7 +246,11 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
         const startIso = range.start.toISOString();
         const endIso = range.end.toISOString();
         const [s, d] = await Promise.all([
-          fetchUsageStats({ start: startIso, end: endIso }),
+          fetchUsageStats({
+            start: startIso,
+            end: endIso,
+            provider: globalProvider ?? null,
+          }),
           fetchUsageDetails({
             start: startIso,
             end: endIso,
@@ -239,7 +276,7 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [range.start.getTime(), range.end.getTime(), page, pageSize, filterProvider, filterModel]);
+  }, [range.start.getTime(), range.end.getTime(), page, pageSize, globalProvider, filterProvider, filterModel]);
 
   // Fetch lista de providers no range (para filtros cascade).
   useEffect(() => {
@@ -352,6 +389,15 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
     }));
   }, [stats]);
 
+  // Mapa modelo → provider (alimenta o sub-rótulo "(Provider)" do BarChart).
+  const providersByModel = useMemo<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    for (const m of stats?.byModel ?? []) {
+      map[m.model] = providerLabel(m.provider);
+    }
+    return map;
+  }, [stats]);
+
   const totalCostBrlFormatted = useMemo(
     () => (stats ? formatBrl4(stats.totalCostBrl) : "—"),
     [stats],
@@ -384,13 +430,30 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
       transition={{ duration: 0.2, ease: "easeOut" }}
       className="space-y-6"
     >
-      {/* Filtros — PeriodPills compartilhada */}
+      {/* Filtros — PeriodPills compartilhada + filtro global de Provider */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <PeriodPills
-          value={pill}
-          customRange={customRange}
-          onChange={handlePeriodChange}
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <PeriodPills
+            value={pill}
+            customRange={customRange}
+            onChange={handlePeriodChange}
+          />
+          <CustomSelect
+            value={globalProvider ?? "__all__"}
+            onChange={(v) =>
+              setGlobalProvider(v === "__all__" ? undefined : v)
+            }
+            options={[
+              { value: "__all__", label: "Todos os providers" },
+              ...providers.map((p) => ({
+                value: p,
+                label: providerLabel(p),
+              })),
+            ]}
+            triggerClassName="min-h-[36px] h-9 w-[200px]"
+            aria-label="Filtrar por provider (global)"
+          />
+        </div>
         {isPending ? (
           <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -560,6 +623,7 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
               xAxisFontSize={13}
               xAxisPadding={12}
               showLegend={false}
+              providersByModel={providersByModel}
               ariaLabel="Custo agrupado por modelo em BRL"
               emptyMessage="Sem chamadas por modelo no período"
             />
@@ -611,21 +675,26 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {/* Linha de TOTAL no topo */}
+                {/* Linha de TOTAL no topo — destaque visual violet */}
                 {detailsTotals && detailsTotals.count > 0 ? (
-                  <TableRow className="sticky top-0 z-[1] bg-muted/40 font-semibold">
-                    <TableCell className="whitespace-nowrap text-xs uppercase tracking-wide text-muted-foreground">
-                      Total ({numberFmt.format(detailsTotals.count)})
+                  <TableRow className="sticky top-0 z-[1] bg-violet-500/15 dark:bg-violet-500/10 border-y-2 border-violet-500/40 dark:border-violet-500/30 text-violet-700 dark:text-violet-300 font-bold tracking-wide">
+                    <TableCell colSpan={3} className="whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <Sigma className="h-4 w-4" aria-hidden="true" />
+                        <span className="uppercase text-xs tracking-wider">
+                          Total no filtro ({numberFmt.format(detailsTotals.count)})
+                        </span>
+                      </div>
                     </TableCell>
-                    <TableCell />
-                    <TableCell className="hidden md:table-cell" />
                     <TableCell className="text-right tabular-nums">
                       {numberFmt.format(detailsTotals.tokensInput)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {numberFmt.format(detailsTotals.tokensOutput)}
                     </TableCell>
-                    <TableCell className="hidden md:table-cell" />
+                    <TableCell className="hidden md:table-cell text-right tabular-nums">
+                      {formatDuration(detailsTotals.durationMsTotal)}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {formatUsdRaw(detailsTotals.costUsd)}
                     </TableCell>
@@ -734,28 +803,25 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
                 </button>
               </div>
 
-              {/* Zona 3: {n} por página */}
-              <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                <select
-                  value={pageSize}
-                  onChange={(e) => {
-                    const next = Number(e.currentTarget.value) as PageSize;
+              {/* Zona 3: {n} por página via CustomSelect */}
+              <div className="inline-flex items-center text-xs text-muted-foreground">
+                <CustomSelect
+                  value={String(pageSize)}
+                  onChange={(v) => {
+                    const next = Number(v) as PageSize;
                     if (PAGE_SIZE_OPTIONS.includes(next)) {
                       setPageSize(next);
                       // O reset de page já é tratado no useEffect dedicado.
                     }
                   }}
-                  className="h-8 rounded-md border border-border bg-card px-2 text-xs text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  options={PAGE_SIZE_OPTIONS.map((n) => ({
+                    value: String(n),
+                    label: `${n} por página`,
+                  }))}
+                  triggerClassName="h-8 min-h-[34px] w-[140px] text-xs"
                   aria-label="Itens por página"
-                >
-                  {PAGE_SIZE_OPTIONS.map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-                por página
-              </label>
+                />
+              </div>
             </div>
           ) : null}
         </CardContent>
