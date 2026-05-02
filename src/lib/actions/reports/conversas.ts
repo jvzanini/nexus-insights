@@ -9,19 +9,21 @@ import type { ReportFilters } from "@/lib/chatwoot/filters";
 import { getAccessibleTeamIds } from "@/lib/tenant";
 import type { AuthUser } from "@/lib/auth-helpers";
 
-const DEFAULT_ACCOUNT_ID = 9; // Matrix Fitness Group (single-tenant atualmente).
+const DEFAULT_ACCOUNT_ID = 9;
 
 export interface FetchConversasInput {
   filters: ReportFilters;
-  cursor?: string | null;
+  page?: number;
+  pageSize?: number;
   accountId?: number;
-  /** Page size. Default 50, máximo 10000. */
-  limit?: number;
 }
 
 export interface FetchConversasResult {
   rows: ConversaRow[];
-  nextCursor: string | null;
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
   stale: boolean;
   cached: boolean;
   cachedAt?: Date;
@@ -29,8 +31,11 @@ export interface FetchConversasResult {
 }
 
 /**
- * Busca conversas paginadas para o relatório.
+ * Busca conversas paginadas (page-based) para o relatório.
  * Aplica scope multi-tenant via getCurrentUser + getAccessibleTeamIds.
+ *
+ * exportConversasAction usa conversasList em modo cursor diretamente —
+ * essa Server Action é apenas pra UI paginada.
  */
 export async function fetchConversas(
   args: FetchConversasInput,
@@ -39,7 +44,10 @@ export async function fetchConversas(
   if (!user) {
     return {
       rows: [],
-      nextCursor: null,
+      total: 0,
+      page: 1,
+      pageSize: 1000,
+      totalPages: 0,
       stale: false,
       cached: false,
       error: "Não autenticado",
@@ -47,9 +55,9 @@ export async function fetchConversas(
   }
 
   const accountId = args.accountId ?? DEFAULT_ACCOUNT_ID;
+  const page = args.page ?? 1;
+  const pageSize = args.pageSize ?? 1000;
 
-  // Aplica scope de teams: se viewer/manager, força filtro pelos teams
-  // que o usuário tem acesso. Admin/super_admin veem tudo.
   const teamScope = await getAccessibleTeamIds(
     {
       id: user.id,
@@ -69,15 +77,16 @@ export async function fetchConversas(
   let scopedFilters: ReportFilters = { ...args.filters };
   if (teamScope !== "all") {
     if (teamScope.length === 0) {
-      // sem acesso a nenhum team — retorna vazio.
       return {
         rows: [],
-        nextCursor: null,
+        total: 0,
+        page,
+        pageSize,
+        totalPages: 0,
         stale: false,
         cached: false,
       };
     }
-    // intersecciona com teams já filtrados (se houver) ou aplica direto.
     if (scopedFilters.teamIds && scopedFilters.teamIds.length > 0) {
       scopedFilters.teamIds = scopedFilters.teamIds.filter((id) =>
         teamScope.includes(id),
@@ -85,7 +94,10 @@ export async function fetchConversas(
       if (scopedFilters.teamIds.length === 0) {
         return {
           rows: [],
-          nextCursor: null,
+          total: 0,
+          page,
+          pageSize,
+          totalPages: 0,
           stale: false,
           cached: false,
         };
@@ -99,13 +111,20 @@ export async function fetchConversas(
     const result = await conversasList({
       accountId,
       filters: scopedFilters,
-      cursor: args.cursor ?? null,
-      limit: args.limit,
+      page,
+      pageSize,
     });
+
+    const total = result.data.total;
+    const effectivePageSize = result.data.pageSize;
+    const totalPages = total > 0 ? Math.ceil(total / effectivePageSize) : 0;
 
     return {
       rows: result.data.rows,
-      nextCursor: result.data.nextCursor,
+      total,
+      page: result.data.page,
+      pageSize: effectivePageSize,
+      totalPages,
       stale: result.stale,
       cached: result.cached,
       cachedAt: result.cachedAt,
@@ -115,7 +134,10 @@ export async function fetchConversas(
     console.error("[fetchConversas]", err);
     return {
       rows: [],
-      nextCursor: null,
+      total: 0,
+      page: 1,
+      pageSize,
+      totalPages: 0,
       stale: true,
       cached: false,
       error: "Erro ao carregar conversas",
