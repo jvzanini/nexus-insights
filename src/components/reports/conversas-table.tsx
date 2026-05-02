@@ -41,6 +41,7 @@ import { StatusBadge } from "@/components/reports/status-badge";
 import { PriorityBadge } from "@/components/reports/priority-badge";
 import { LabelsChips } from "@/components/reports/labels-chips";
 import { ConversaDrillDown } from "@/components/reports/conversa-drill-down";
+import { ConversasPagination } from "@/components/reports/conversas-pagination";
 import { chatwootConversationUrl } from "@/lib/chatwoot/deep-link";
 import { formatPhone } from "@/lib/utils/format-phone";
 import { detectDocument } from "@/lib/utils/format-document";
@@ -61,12 +62,11 @@ import type { SortRule } from "@/components/reports/sorting-dialog";
 
 interface ConversasTableProps {
   initialRows: ConversaRow[];
-  /**
-   * Cursor da query inicial. Em v2 só serve como sinal de "backend cortou em
-   * MAX_TABLE_ROWS (10k)" — quando não-null, exibimos o banner amarelo
-   * sugerindo refinar filtros. A tabela não pagina mais (fetch único).
-   */
-  initialCursor: string | null;
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
   accountId: number;
   filters: FetchConversasInput["filters"];
   /** Stack de critérios de ordenação controlada pelo parent (toolbar). */
@@ -77,11 +77,6 @@ interface ConversasTableProps {
    * sobre as rows já carregadas (não vai ao banco).
    */
   conditionGroup?: ConditionGroup;
-  /**
-   * Notifica parent quando rows.length muda — usado pelo `<ExportButton>`
-   * no toolbar pra desabilitar quando a tabela está vazia.
-   */
-  onRowCountChange?: (n: number) => void;
 }
 
 type SortDirection = "asc" | "desc";
@@ -475,12 +470,15 @@ function SortHeaderIcon({ direction, index, total }: SortHeaderIconProps) {
 
 export function ConversasTable({
   initialRows,
-  initialCursor,
+  total,
+  page,
+  pageSize: _pageSize,
+  totalPages,
+  onPageChange,
   accountId,
   sortStack,
   onSortStackChange,
   conditionGroup,
-  onRowCountChange,
 }: ConversasTableProps) {
   const [rows, setRows] = useState<ConversaRow[]>(initialRows);
   const [pending] = useTransition();
@@ -503,12 +501,6 @@ export function ConversasTable({
     setRows(initialRows);
     setExpandedIds(new Set());
   }, [initialRows]);
-
-  // Notifica parent sempre que rows.length muda — ExportButton lê pra
-  // habilitar/desabilitar.
-  useEffect(() => {
-    onRowCountChange?.(rows.length);
-  }, [rows.length, onRowCountChange]);
 
   // Cleanup transparente: chave de page-size foi descontinuada na v0.17.0.
   // Removemos pra não acumular lixo no localStorage do usuário.
@@ -662,9 +654,17 @@ export function ConversasTable({
   const toolbar = (
     <div className="flex flex-col gap-3 border-b border-border bg-muted/10 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <span className="tabular-nums">
-          <span className="font-semibold text-foreground">{rows.length}</span>{" "}
-          conversa{rows.length === 1 ? "" : "s"}
+        <span className="text-xs text-muted-foreground tabular-nums">
+          Total:{" "}
+          <strong className="text-foreground">
+            {total.toLocaleString("pt-BR")}
+          </strong>{" "}
+          conversa{total === 1 ? "" : "s"}
+          {totalPages > 1 ? (
+            <span className="text-muted-foreground/70">
+              {" · "}página {page} de {totalPages}
+            </span>
+          ) : null}
         </span>
         {sortStack.length > 0 ? (
           <Button
@@ -695,18 +695,6 @@ export function ConversasTable({
     </div>
   );
 
-  // Banner de truncamento (10k) ---------------------------------------------
-  const truncatedBanner = initialCursor ? (
-    <div
-      role="status"
-      className="flex items-start gap-2 border-b border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300"
-    >
-      <span className="leading-snug">
-        Mostrando primeiras 10.000 conversas — refine os filtros para ver tudo.
-      </span>
-    </div>
-  ) : null;
-
   // Empty state -------------------------------------------------------------
   if (rows.length === 0) {
     const hasUrlFilters = currentSearchParams.toString().length > 0;
@@ -716,7 +704,6 @@ export function ConversasTable({
         className="rounded-2xl border border-border bg-card overflow-hidden"
       >
         {toolbar}
-        {truncatedBanner}
         <div className="bg-muted/20 p-12 text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-muted/40">
             <Inbox className="h-5 w-5 text-muted-foreground" />
@@ -748,7 +735,6 @@ export function ConversasTable({
       className="rounded-2xl border border-border bg-card overflow-hidden"
     >
       {toolbar}
-      {truncatedBanner}
 
       {/* Desktop / large: tabela virtualizada. Container com scroll interno
           (vertical + horizontal); thead sticky usa top:0 dentro DESTE
@@ -1011,6 +997,12 @@ export function ConversasTable({
           );
         })}
       </ul>
+
+      <ConversasPagination
+        page={page}
+        totalPages={totalPages}
+        onPageChange={onPageChange}
+      />
     </div>
   );
 }

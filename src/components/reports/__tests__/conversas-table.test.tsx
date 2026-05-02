@@ -45,17 +45,21 @@ const baseRow = (id: number, display: number): ConversaRow => ({
 
 const baseProps = {
   initialRows: [baseRow(1, 100)],
-  initialCursor: null as string | null,
+  total: 1,
+  page: 1,
+  pageSize: 1000,
+  totalPages: 1,
+  onPageChange: jest.fn(),
   accountId: 9,
   filters: { period: { start: new Date(), end: new Date() } } as any,
   sortStack: [],
   onSortStackChange: () => {},
-  onRowCountChange: () => {},
 };
 
-describe("ConversasTable v2", () => {
+describe("ConversasTable v3 (paginação)", () => {
   beforeEach(() => {
     localStorage.clear();
+    baseProps.onPageChange = jest.fn();
   });
 
   it("#ID renderiza como link clicável (a target=_blank)", () => {
@@ -87,21 +91,45 @@ describe("ConversasTable v2", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("notifica rowCount via onRowCountChange no mount + mudanças", () => {
-    const cb = jest.fn();
+  it("toolbar mostra 'Total: X conversas · página N de M'", () => {
     render(
       <ConversasTable
         {...baseProps}
         initialRows={[baseRow(1, 100), baseRow(2, 101)]}
-        onRowCountChange={cb}
+        total={1234}
+        page={2}
+        totalPages={3}
       />,
     );
-    expect(cb).toHaveBeenCalledWith(2);
+    expect(screen.getByText(/Total/)).toBeInTheDocument();
+    expect(screen.getByText(/1\.234/)).toBeInTheDocument();
+    expect(screen.getByText(/página 2 de 3/i)).toBeInTheDocument();
   });
 
-  it("banner amarelo quando initialCursor != null (truncado em 10k)", () => {
-    render(<ConversasTable {...baseProps} initialCursor="some-cursor" />);
-    expect(screen.getByText(/refine os filtros/i)).toBeInTheDocument();
+  it("não renderiza mais o banner amarelo 'Mostrando primeiras 10000'", () => {
+    render(<ConversasTable {...baseProps} totalPages={50} />);
+    expect(screen.queryByText(/refine os filtros/i)).not.toBeInTheDocument();
+  });
+
+  it("renderiza ConversasPagination quando totalPages > 1", () => {
+    render(<ConversasTable {...baseProps} totalPages={3} />);
+    expect(
+      screen.getByRole("navigation", { name: /paginação/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("não renderiza ConversasPagination quando totalPages <= 1", () => {
+    render(<ConversasTable {...baseProps} totalPages={1} />);
+    expect(
+      screen.queryByRole("navigation", { name: /paginação/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("click em página chama onPageChange", () => {
+    const cb = jest.fn();
+    render(<ConversasTable {...baseProps} totalPages={3} onPageChange={cb} />);
+    fireEvent.click(screen.getByRole("button", { name: /ir para página 2/i }));
+    expect(cb).toHaveBeenCalledWith(2);
   });
 
   it("limpa localStorage 'conversas-table-page-size' no mount", () => {
