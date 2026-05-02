@@ -29,6 +29,8 @@ export interface FilterState {
   mode: FilterMode;
   /** Só usado quando `mode === "advanced"`. Serializado em base64url no param `cg`. */
   conditionGroup?: ConditionGroup;
+  /** Página atual (1-based). Default 1 (não persiste em URL quando = 1). */
+  page?: number;
 }
 
 export const EMPTY_FILTER_STATE: FilterState = {
@@ -65,6 +67,7 @@ export function serializeFilterState(state: FilterState): URLSearchParams {
       if (encoded) p.set("cg", encoded);
     }
   }
+  if (state.page && state.page > 1) p.set("page", String(state.page));
   return p;
 }
 
@@ -104,6 +107,12 @@ export function deserializeFilterState(params: URLSearchParams): FilterState {
   const cg = params.get("cg");
   const conditionGroup = cg ? (decodeConditionGroup(cg) ?? undefined) : undefined;
 
+  const pageRaw = params.get("page");
+  const pageNum = pageRaw ? Number(pageRaw) : NaN;
+  const page = Number.isFinite(pageNum) && pageNum > 1
+    ? Math.floor(pageNum)
+    : undefined;
+
   return {
     period: validPeriod,
     customRange,
@@ -116,6 +125,7 @@ export function deserializeFilterState(params: URLSearchParams): FilterState {
     search: params.get("q") ?? undefined,
     mode,
     conditionGroup,
+    page,
   };
 }
 

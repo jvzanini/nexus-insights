@@ -380,3 +380,34 @@ describe("condition-group-codec", () => {
     expect(decodeConditionGroup(bad)).toBeNull();
   });
 });
+
+describe("filter-state — page", () => {
+  it("serializeFilterState({ page: 1 }) NÃO inclui ?page=", () => {
+    const s = { ...EMPTY_FILTER_STATE, page: 1 };
+    expect(serializeFilterState(s).has("page")).toBe(false);
+  });
+  it("serializeFilterState({ page: 5 }) inclui ?page=5", () => {
+    const s = { ...EMPTY_FILTER_STATE, page: 5 };
+    expect(serializeFilterState(s).get("page")).toBe("5");
+  });
+  it("serializeFilterState({ page: undefined }) NÃO inclui ?page=", () => {
+    const s = { ...EMPTY_FILTER_STATE, page: undefined };
+    expect(serializeFilterState(s).has("page")).toBe(false);
+  });
+  it("deserializeFilterState(?page=3) → state.page === 3", () => {
+    const r = deserializeFilterState(new URLSearchParams({ page: "3" }));
+    expect(r.page).toBe(3);
+  });
+  it("deserializeFilterState(?page=abc) → undefined", () => {
+    const r = deserializeFilterState(new URLSearchParams({ page: "abc" }));
+    expect(r.page).toBeUndefined();
+  });
+  it("deserializeFilterState(?page=-5) → undefined", () => {
+    const r = deserializeFilterState(new URLSearchParams({ page: "-5" }));
+    expect(r.page).toBeUndefined();
+  });
+  it("deserializeFilterState(?page=0) → undefined", () => {
+    const r = deserializeFilterState(new URLSearchParams({ page: "0" }));
+    expect(r.page).toBeUndefined();
+  });
+});
