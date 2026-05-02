@@ -3,7 +3,11 @@ import { DashboardContent } from "@/components/dashboard/dashboard-content";
 import { PageShell } from "@/components/layout/page-shell";
 import { getCurrentUser } from "@/lib/auth";
 import { getActiveAccountId } from "@/lib/reports/active-account";
-import { getKnownAccounts, getAccessibleAccountIds } from "@/lib/tenant";
+import {
+  getKnownAccounts,
+  getAccessibleAccountIds,
+  assertAccountAccess,
+} from "@/lib/tenant";
 import { getPlatformTz } from "@/lib/datetime";
 import type { AuthUser } from "@/lib/auth-helpers";
 
@@ -28,11 +32,14 @@ export default async function DashboardPage() {
   };
 
   const [activeAccountId, allAccounts, accessibleIds, tz] = await Promise.all([
-    getActiveAccountId(),
+    getActiveAccountId(authUser),
     getKnownAccounts(),
     getAccessibleAccountIds(authUser),
     getPlatformTz(),
   ]);
+
+  // Defense-in-depth: garante que a conta resolvida pertence ao escopo do user.
+  await assertAccountAccess(authUser, activeAccountId);
 
   const accounts = allAccounts.filter((a) => accessibleIds.includes(a.id));
 
