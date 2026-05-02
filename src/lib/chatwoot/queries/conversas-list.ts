@@ -75,6 +75,9 @@ export interface ConversaRow {
 export interface ConversasListResult {
   rows: ConversaRow[];
   nextCursor: string | null;
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 export interface ConversasListCursor {
@@ -147,19 +150,31 @@ export async function conversasList(args: {
   filters: ReportFilters;
   limit?: number;
   cursor?: string | null;
+  page?: number;
+  pageSize?: number;
   /** Define TTL e nomeação de cache. */
   cacheScope?: "live" | "historical";
   ttlSeconds?: number;
 }) {
-  const limit = Math.min(Math.max(args.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
-  const cursor = args.cursor ? decodeCursor(args.cursor) : null;
+  const useOffset = args.page != null;
+  const effectivePage = useOffset ? Math.max(1, args.page!) : 1;
+  const effectivePageSize = useOffset
+    ? Math.min(Math.max(args.pageSize ?? 1000, 10), 5000)
+    : 0;
+  const offset = useOffset ? (effectivePage - 1) * effectivePageSize : 0;
+  const cursor = !useOffset && args.cursor ? decodeCursor(args.cursor) : null;
   const cacheScope = args.cacheScope ?? "live";
   const ttl =
     args.ttlSeconds ?? (cacheScope === "live" ? DEFAULT_TTL_SECONDS : 300);
+  const limit = useOffset
+    ? effectivePageSize
+    : Math.min(Math.max(args.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
 
   const key = cacheKey({
     scope: "report",
-    name: `conversas-list-${cacheScope}-${limit}-${cursor ? `${cursor.lastActivityAt}-${cursor.id}` : "first"}`,
+    name: useOffset
+      ? `conversas-list-${cacheScope}-p${effectivePage}s${effectivePageSize}`
+      : `conversas-list-${cacheScope}-${limit}-${cursor ? `${cursor.lastActivityAt}-${cursor.id}` : "first"}`,
     accountId: args.accountId,
     filtersHash: hashFilters(args.filters),
   });
@@ -185,19 +200,27 @@ export async function conversasList(args: {
             params.push(...searchClause.params);
           }
 
-          const cursorClause = cursor
-            ? ` AND (
-                c.last_activity_at < $${++p}
-                OR (c.last_activity_at = $${p} AND c.id < $${++p})
-              )`
-            : "";
-          if (cursor) {
+          // Snapshot dos params base+search (antes de cursor/offset/limit) — usado pra count.
+          const baseAndSearchParams: unknown[] = [...params];
+
+          let cursorClause = "";
+          if (!useOffset && cursor) {
+            cursorClause = ` AND (
+              c.last_activity_at < $${++p}
+              OR (c.last_activity_at = $${p} AND c.id < $${++p})
+            )`;
             params.push(cursor.lastActivityAt);
             params.push(cursor.id);
           }
 
+          let offsetClause = "";
+          if (useOffset) {
+            params.push(offset);
+            offsetClause = ` OFFSET $${++p}`;
+          }
+
           const limitParamIdx = ++p;
-          params.push(limit + 1); // pega 1 a mais para detectar nextCursor.
+          params.push(useOffset ? limit : limit + 1);
 
           const sql = `
             SELECT
@@ -310,11 +333,29 @@ export async function conversasList(args: {
             LEFT JOIN users u ON u.id = c.assignee_id
             WHERE ${base.whereSql}${searchClause.sql ? ` AND ${searchClause.sql}` : ""}${cursorClause}
             ORDER BY c.last_activity_at DESC NULLS LAST, c.id DESC
+            ${offsetClause}
             LIMIT $${limitParamIdx}
           `;
 
-          const result = await pool.query<RawRow>(sql, params);
-          const hasMore = result.rows.length > limit;
+          const countSql = useOffset
+            ? `
+            SELECT COUNT(*)::text AS total
+            FROM conversations c
+            LEFT JOIN contacts ct ON ct.id = c.contact_id
+            LEFT JOIN inboxes ix ON ix.id = c.inbox_id
+            LEFT JOIN teams tm ON tm.id = c.team_id
+            LEFT JOIN users u ON u.id = c.assignee_id
+            WHERE ${base.whereSql}${searchClause.sql ? ` AND ${searchClause.sql}` : ""}
+          `
+            : null;
+
+          const [result, countResult] = useOffset
+            ? await Promise.all([
+                pool.query<RawRow>(sql, params),
+                pool.query<{ total: string }>(countSql!, baseAndSearchParams),
+              ])
+            : ([await pool.query<RawRow>(sql, params), null] as const);
+          const hasMore = !useOffset && result.rows.length > limit;
           const sliced = hasMore ? result.rows.slice(0, limit) : result.rows;
 
           const rows: ConversaRow[] = sliced.map((r) => ({
@@ -365,7 +406,18 @@ export async function conversasList(args: {
             }
           }
 
-          return { rows, nextCursor };
+          const total =
+            useOffset && countResult
+              ? Number(countResult.rows[0]?.total ?? "0")
+              : 0;
+
+          return {
+            rows,
+            nextCursor,
+            total,
+            page: effectivePage,
+            pageSize: effectivePageSize,
+          };
         },
         { fallbackKey: key },
       ),
