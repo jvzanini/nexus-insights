@@ -293,27 +293,16 @@ describe("KbSection", () => {
     expect(uploadKbDocumentAction).not.toHaveBeenCalled();
   });
 
-  it("clicar em 'Adicionar API Chatwoot (sugerida)' abre dialog na aba URL pré-preenchida", async () => {
+  it("NÃO renderiza mais o atalho 'Adicionar API Chatwoot (sugerida)'", () => {
     render(<KbSection initial={[]} />);
-
-    const suggestionBtn = screen.getByRole("button", {
-      name: /Adicionar API Chatwoot \(sugerida\)/i,
-    });
-    await act(async () => {
-      fireEvent.click(suggestionBtn);
-    });
-
-    // Dialog aberto + form URL com nome + url pré-preenchidos.
-    await waitFor(() => {
-      const nameInput = document.getElementById(
-        "kb-url-name",
-      ) as HTMLInputElement | null;
-      expect(nameInput?.value).toBe("Chatwoot API Reference");
-    });
-    const urlInput = document.getElementById(
-      "kb-url-input",
-    ) as HTMLInputElement | null;
-    expect(urlInput?.value).toBe("https://www.chatwoot.com/developers/api/");
+    expect(
+      screen.queryByRole("button", {
+        name: /Adicionar API Chatwoot \(sugerida\)/i,
+      }),
+    ).toBeNull();
+    expect(
+      screen.queryByText(/Adicionar API Chatwoot/i),
+    ).toBeNull();
   });
 
   it("clicar em 'Atualizar conteúdo' em URL doc dispara refreshKbUrlAction + toast + refresh", async () => {

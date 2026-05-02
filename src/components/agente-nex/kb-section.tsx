@@ -13,9 +13,8 @@
  *   ação Excluir (com `<AlertDialog>` do design system; substitui o
  *   `window.confirm` nativo a partir de v0.16.0).
  * - Empty state amigável.
- * - Botão "Adicionar documento" → abre `<KbUploadDialog>`.
- * - Atalho "Adicionar API Chatwoot (sugerida)" — abre o mesmo dialog na aba
- *   URL pré-preenchida com a documentação pública da API Chatwoot.
+ * - Botão "Adicionar documento" → abre `<KbUploadDialog>` (suporta abas File e
+ *   URL — usuário adiciona URL manualmente pela aba URL do dialog).
  * - Para docs com `kind === "URL"`: ícone Link, URL clicável (target=_blank,
  *   `rel="noopener noreferrer"`), e ação extra "Atualizar conteúdo" que
  *   dispara `refreshKbUrlAction`.
@@ -32,7 +31,6 @@ import {
   Loader2,
   Plus,
   RefreshCw,
-  Sparkles,
   Trash2,
   TriangleAlert,
 } from "lucide-react";
@@ -61,13 +59,6 @@ import { KbUploadDialog, formatFileSize } from "./kb-upload-dialog";
 const KB_TOTAL_CAP = 30_000;
 const KB_WARN_THRESHOLD = 25_000;
 
-const CHATWOOT_SUGGESTED_NAME = "Chatwoot API Reference";
-const CHATWOOT_SUGGESTED_URL = "https://www.chatwoot.com/developers/api/";
-
-type UploadDialogState =
-  | { open: false }
-  | { open: true; tab: "file" | "url"; urlName?: string; urlValue?: string };
-
 interface KbSectionProps {
   initial: KbSummary[];
 }
@@ -83,9 +74,7 @@ function safeHostname(url: string | null): string | null {
 
 export function KbSection({ initial }: KbSectionProps) {
   const router = useRouter();
-  const [uploadDialog, setUploadDialog] = useState<UploadDialogState>({
-    open: false,
-  });
+  const [uploadOpen, setUploadOpen] = useState<boolean>(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<KbSummary | null>(null);
@@ -132,19 +121,6 @@ export function KbSection({ initial }: KbSectionProps) {
       }
       toast.success("Conteúdo atualizado");
       router.refresh();
-    });
-  }
-
-  function openAddDocument() {
-    setUploadDialog({ open: true, tab: "file" });
-  }
-
-  function openAddChatwootSuggestion() {
-    setUploadDialog({
-      open: true,
-      tab: "url",
-      urlName: CHATWOOT_SUGGESTED_NAME,
-      urlValue: CHATWOOT_SUGGESTED_URL,
     });
   }
 
@@ -348,21 +324,11 @@ export function KbSection({ initial }: KbSectionProps) {
       )}
 
       {/* Adicionar documento */}
-      <div className="flex flex-col-reverse items-stretch justify-end gap-2 sm:flex-row sm:items-center">
+      <div className="flex justify-end">
         <Button
           type="button"
           variant="outline"
-          size="sm"
-          onClick={openAddChatwootSuggestion}
-          className="border-border text-muted-foreground hover:text-foreground"
-        >
-          <Sparkles className="h-4 w-4" aria-hidden="true" />
-          Adicionar API Chatwoot (sugerida)
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={openAddDocument}
+          onClick={() => setUploadOpen(true)}
           className="border-border"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
@@ -370,16 +336,7 @@ export function KbSection({ initial }: KbSectionProps) {
         </Button>
       </div>
 
-      <KbUploadDialog
-        open={uploadDialog.open}
-        onOpenChange={(next) => {
-          if (next) return; // abertura é controlada pelos botões
-          setUploadDialog({ open: false });
-        }}
-        initialTab={uploadDialog.open ? uploadDialog.tab : "file"}
-        initialUrlName={uploadDialog.open ? uploadDialog.urlName : undefined}
-        initialUrlValue={uploadDialog.open ? uploadDialog.urlValue : undefined}
-      />
+      <KbUploadDialog open={uploadOpen} onOpenChange={setUploadOpen} />
 
       {/* AlertDialog de confirmação de exclusão (substitui window.confirm) */}
       <AlertDialog
