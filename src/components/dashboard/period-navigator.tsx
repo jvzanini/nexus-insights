@@ -91,9 +91,9 @@ export function PeriodNavigator({
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-0.5 rounded-md border bg-violet-500/5 px-0.5 py-0.5",
-        "border-violet-500/50 shadow-[0_0_0_1px_rgba(139,92,246,0.1)] transition-all duration-150",
-        "hover:border-violet-500 hover:bg-violet-500/10 hover:shadow-[0_0_0_2px_rgba(139,92,246,0.2)]",
+        "inline-flex items-center gap-1 rounded-lg border bg-violet-500/5 px-2 py-1.5",
+        "border-violet-500/30 transition-all duration-150",
+        "hover:border-violet-500/60 hover:bg-violet-500/10",
       )}
       role="group"
       aria-label={`Navegação de ${period}`}
@@ -102,15 +102,15 @@ export function PeriodNavigator({
         type="button"
         onClick={handlePrev}
         className={cn(
-          "inline-flex h-5 w-5 items-center justify-center rounded transition-colors duration-150",
-          "text-violet-300 hover:bg-violet-500/25 hover:text-white cursor-pointer",
+          "inline-flex h-7 w-7 items-center justify-center rounded transition-colors duration-150",
+          "text-violet-300 hover:bg-violet-500/25 hover:text-violet-100 cursor-pointer",
           "focus-visible:outline-none focus-visible:bg-violet-500/30",
         )}
         aria-label="Período anterior"
       >
-        <ChevronLeft className="h-3 w-3" aria-hidden />
+        <ChevronLeft className="h-4 w-4" aria-hidden />
       </button>
-      <span className="px-1.5 text-[11px] font-semibold tabular-nums text-violet-100 select-none whitespace-nowrap leading-none">
+      <span className="px-2 text-sm font-medium tabular-nums text-violet-100 select-none whitespace-nowrap leading-none">
         {label}
       </span>
       <button
@@ -118,14 +118,14 @@ export function PeriodNavigator({
         onClick={handleNext}
         disabled={!nextAvailable}
         className={cn(
-          "inline-flex h-5 w-5 items-center justify-center rounded transition-colors duration-150",
+          "inline-flex h-7 w-7 items-center justify-center rounded transition-colors duration-150",
           nextAvailable
-            ? "text-violet-300 hover:bg-violet-500/25 hover:text-white cursor-pointer focus-visible:outline-none focus-visible:bg-violet-500/30"
-            : "text-violet-300/20 cursor-not-allowed",
+            ? "text-violet-300 hover:bg-violet-500/25 hover:text-violet-100 cursor-pointer focus-visible:outline-none focus-visible:bg-violet-500/30"
+            : "text-violet-300/30 cursor-not-allowed",
         )}
         aria-label="Próximo período"
       >
-        <ChevronRight className="h-3 w-3" aria-hidden />
+        <ChevronRight className="h-4 w-4" aria-hidden />
       </button>
     </div>
   );
