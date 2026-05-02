@@ -202,7 +202,6 @@ function PickerPanel({
         locale={ptBR}
         numberOfMonths={isMobile ? 1 : 2}
         defaultMonth={range?.from ?? minDate}
-        showOutsideDays
         disabled={disabledMatcher}
         startMonth={minDate}
         endMonth={today}
@@ -257,6 +256,12 @@ export function PeriodPills({
   const isMobile = useIsMobile();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [minDate, setMinDate] = useState<Date | undefined>(undefined);
+
+  // v0.19 T14: reset minDate quando accountId muda — força re-fetch
+  // da primeira conversa da nova conta no próximo open do picker.
+  useEffect(() => {
+    setMinDate(undefined);
+  }, [accountId]);
 
   // Fetch lazy: só busca a data mínima quando o picker é aberto pela primeira vez.
   useEffect(() => {
