@@ -15,6 +15,7 @@
 
 import { auth } from "@/auth";
 import { pgPool } from "@/lib/pg-pool";
+import { ensureIntegrationsTables } from "@/lib/integrations/ensure-tables";
 
 export interface ActionResult<T = undefined> {
   ok: boolean;
@@ -79,6 +80,8 @@ export async function getAvailableAccountsForFilterAction(): Promise<
     const guard = await requireSuperAdmin();
     if (!guard.ok) return { ok: false, error: guard.error };
 
+    await ensureIntegrationsTables();
+
     let result;
     try {
       result = await pgPool.query<{ account_id: number; name: string }>(
@@ -115,6 +118,8 @@ export async function getAvailableTeamsForFilterAction(
   return safeAction(async () => {
     const guard = await requireSuperAdmin();
     if (!guard.ok) return { ok: false, error: guard.error };
+
+    await ensureIntegrationsTables();
 
     const hasFilter =
       Array.isArray(accountIdFilter) && accountIdFilter.length > 0;

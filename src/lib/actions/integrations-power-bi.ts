@@ -49,6 +49,7 @@ import {
 import { buildAlterUserPasswordSql } from "@/lib/integrations/power-bi/sql-builders";
 import { getIntegrationAdminPool } from "@/lib/integrations/power-bi/admin-pool";
 import { integrationsRefreshDimQueue } from "@/lib/integrations/queue";
+import { ensureIntegrationsTables } from "@/lib/integrations/ensure-tables";
 
 // -------------------- Envelope + guard --------------------
 
@@ -244,6 +245,8 @@ export async function listProfilesAction(): Promise<
     const guard = await requireSuperAdmin();
     if (!guard.ok) return { ok: false, error: guard.error };
 
+    await ensureIntegrationsTables();
+
     const rows = await prisma.integrationProfile.findMany({
       where: { kind: "power_bi", deletedAt: null },
       orderBy: { createdAt: "desc" },
@@ -279,6 +282,8 @@ export async function getProfileByIdAction(
   return safeAction(async () => {
     const guard = await requireSuperAdmin();
     if (!guard.ok) return { ok: false, error: guard.error };
+
+    await ensureIntegrationsTables();
 
     const row = await prisma.integrationProfile.findFirst({
       where: { id, kind: "power_bi", deletedAt: null },
@@ -350,6 +355,8 @@ export async function createProfileAction(
   return safeAction(async () => {
     const guard = await requireSuperAdmin();
     if (!guard.ok) return { ok: false, error: guard.error };
+
+    await ensureIntegrationsTables();
 
     const input = parseProfileInput(rawInput);
     validateAllowedTables(input.allowedTables);
@@ -508,6 +515,8 @@ export async function updateProfileAction(
     const guard = await requireSuperAdmin();
     if (!guard.ok) return { ok: false, error: guard.error };
 
+    await ensureIntegrationsTables();
+
     const current = await prisma.integrationProfile.findUnique({
       where: { id },
       select: {
@@ -651,6 +660,8 @@ export async function revealPasswordAction(
     const guard = await requireSuperAdmin();
     if (!guard.ok) return { ok: false, error: guard.error };
 
+    await ensureIntegrationsTables();
+
     const key = `integ:reveal:${id}:${dayKey()}`;
     const count = await redis.incr(key);
     if (count === 1) {
@@ -700,6 +711,8 @@ export async function rotatePasswordAction(
   return safeAction(async () => {
     const guard = await requireSuperAdmin();
     if (!guard.ok) return { ok: false, error: guard.error };
+
+    await ensureIntegrationsTables();
 
     const key = `integ:rotate:${id}:${dayKey()}`;
     const count = await redis.incr(key);
@@ -768,6 +781,8 @@ export async function disableProfileAction(
     const guard = await requireSuperAdmin();
     if (!guard.ok) return { ok: false, error: guard.error };
 
+    await ensureIntegrationsTables();
+
     const current = await prisma.integrationProfile.findFirst({
       where: { id, deletedAt: null },
       select: { pgUsername: true },
@@ -829,6 +844,8 @@ export async function reactivateProfileAction(
   return safeAction(async () => {
     const guard = await requireSuperAdmin();
     if (!guard.ok) return { ok: false, error: guard.error };
+
+    await ensureIntegrationsTables();
 
     const current = await prisma.integrationProfile.findFirst({
       where: { id, deletedAt: null },
@@ -892,6 +909,8 @@ export async function deleteProfileAction(
     const guard = await requireSuperAdmin();
     if (!guard.ok) return { ok: false, error: guard.error };
 
+    await ensureIntegrationsTables();
+
     const current = await prisma.integrationProfile.findFirst({
       where: { id, deletedAt: null },
       select: { pgUsername: true, name: true },
@@ -938,6 +957,8 @@ export async function triggerDimSyncAction(): Promise<
   return safeAction(async () => {
     const guard = await requireSuperAdmin();
     if (!guard.ok) return { ok: false, error: guard.error };
+
+    await ensureIntegrationsTables();
 
     await integrationsRefreshDimQueue.add("manual-trigger", { trigger: "ui" });
 

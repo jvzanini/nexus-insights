@@ -15,6 +15,7 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { pgPool } from "@/lib/pg-pool";
+import { ensureIntegrationsTables } from "@/lib/integrations/ensure-tables";
 
 export interface ActionResult<T = undefined> {
   ok: boolean;
@@ -68,6 +69,8 @@ export async function getIntegrationsSummaryAction(): Promise<
     const guard = await requireSuperAdmin();
     if (!guard.ok) return { ok: false, error: guard.error };
 
+    await ensureIntegrationsTables();
+
     const [active, disabled, errored] = await Promise.all([
       prisma.integrationProfile.count({
         where: { kind: "power_bi", status: "active", deletedAt: null },
@@ -97,6 +100,8 @@ export async function getDimSnapshotFreshnessAction(): Promise<
   return safeAction(async () => {
     const guard = await requireSuperAdmin();
     if (!guard.ok) return { ok: false, error: guard.error };
+
+    await ensureIntegrationsTables();
 
     const result = await pgPool.query<{ dim: string; max_refreshed: Date | null }>(
       `SELECT 'accounts' AS dim, MAX(refreshed_at) AS max_refreshed FROM powerbi.dim_accounts_snapshot
