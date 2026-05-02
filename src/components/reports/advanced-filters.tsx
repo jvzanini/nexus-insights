@@ -164,11 +164,18 @@ export function AdvancedFilters({
     return () => ro.disconnect();
   }, []);
 
-  const pendingDiff = useMemo(
-    () => diffFilterStates(draft, applied),
+  // v0.19: separa search do "pending banner". Banner conta apenas filtros
+  // não-search; search vira "pending" via hint sutil abaixo do input.
+  const withoutSearch = (s: FilterState): FilterState => ({
+    ...s,
+    search: undefined,
+  });
+  const pendingDiffExSearch = useMemo(
+    () => diffFilterStates(withoutSearch(draft), withoutSearch(applied)),
     [draft, applied],
   );
-  const hasPending = pendingDiff > 0;
+  const hasPendingNonSearch = pendingDiffExSearch > 0;
+  const searchPending = (draft.search ?? "") !== (applied.search ?? "");
 
   const appliedCount = useMemo(
     () =>
@@ -348,6 +355,15 @@ export function AdvancedFilters({
             aria-label="Buscar conversas"
             className="h-10 pl-9"
           />
+          {searchPending ? (
+            <span
+              role="status"
+              aria-live="polite"
+              className="mt-1 block px-1 text-[11px] text-muted-foreground/70"
+            >
+              Aperte Enter para buscar
+            </span>
+          ) : null}
         </div>
 
         <PresetsPopover
@@ -389,7 +405,7 @@ export function AdvancedFilters({
               {appliedCount}
             </Badge>
           ) : null}
-          {hasPending ? (
+          {hasPendingNonSearch ? (
             <span
               aria-hidden="true"
               className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-primary ring-2 ring-card"
@@ -446,8 +462,8 @@ export function AdvancedFilters({
         onRemoveQuick={onRemoveQuick}
       />
 
-      {/* Linha 4 — Banner pending (condicional) */}
-      {hasPending ? (
+      {/* Linha 4 — Banner pending (condicional, exclui search) */}
+      {hasPendingNonSearch ? (
         <div
           role="status"
           aria-live="polite"
@@ -455,8 +471,10 @@ export function AdvancedFilters({
         >
           <Filter className="h-4 w-4 text-primary" aria-hidden="true" />
           <span className="text-foreground">
-            <strong className="font-semibold">{pendingDiff}</strong>{" "}
-            {pendingDiff === 1 ? "filtro pendente" : "filtros pendentes"}
+            <strong className="font-semibold">{pendingDiffExSearch}</strong>{" "}
+            {pendingDiffExSearch === 1
+              ? "filtro pendente"
+              : "filtros pendentes"}
           </span>
           <Button
             type="button"
