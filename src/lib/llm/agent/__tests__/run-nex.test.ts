@@ -136,6 +136,7 @@ describe("runNexAgent", () => {
       { status: 0 },
       9,
       false, // excludeMatrixIA — mock retorna false (não exclui)
+      null, // platformRole — não passado neste cenário
     );
     expect(result.ok).toBe(true);
     if (result.ok) {

@@ -181,6 +181,7 @@ export async function runNexAgent(args: RunNexInput): Promise<RunNexResult> {
         (tc.arguments ?? {}) as Record<string, unknown>,
         args.accountId,
         excludeMatrixIA,
+        args.platformRole ?? null,
       );
       conversation.push({
         role: "tool",

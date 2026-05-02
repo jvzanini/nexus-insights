@@ -50,7 +50,13 @@ export async function executeTool(
   args: Record<string, unknown>,
   accountId: number,
   excludeMatrixIA: boolean = true,
+  platformRole: string | null = null,
 ): Promise<ToolExecutionResult> {
+  // platformRole reservado para tools introspectivas (get_active_company,
+  // get_integrations_status, get_nex_config_summary). As tools de Chatwoot
+  // já recebem `excludeMatrixIA` resolvido no caller, então o parâmetro
+  // serve apenas para gating das tools novas (T8/T9/T10).
+  void platformRole;
   try {
     switch (name) {
       case "query_conversations":
