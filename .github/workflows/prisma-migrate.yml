@@ -1,0 +1,131 @@
+name: Prisma migrate (prod)
+
+# Workflow manual para aplicar migrations Prisma pendentes em produção
+# via Portainer API (Docker exec no container do app).
+#
+# Como rodar:
+#   gh workflow run prisma-migrate.yml
+#
+# Idempotente — Prisma só aplica migrations marcadas como pendentes.
+# Atualizado para v0.18.0 (Integrações Power BI: schema isolado powerbi
+# + integration_profiles + integration_audit_logs).
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: "Comando Prisma a executar"
+        required: true
+        type: choice
+        default: "migrate-deploy"
+        options:
+          - migrate-deploy
+          - migrate-status
+          - generate
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+      PORTAINER_TOKEN: ${{ secrets.PORTAINER_TOKEN }}
+      PORTAINER_ENDPOINT_ID: ${{ secrets.PORTAINER_ENDPOINT_ID }}
+      PORTAINER_STACK_ID: ${{ secrets.PORTAINER_STACK_ID }}
+      ACTION: ${{ inputs.command }}
+    steps:
+      - name: Sanity
+        run: |
+          set -e
+          : "${PORTAINER_URL:?PORTAINER_URL não configurado}"
+          : "${PORTAINER_TOKEN:?PORTAINER_TOKEN não configurado}"
+          : "${PORTAINER_ENDPOINT_ID:?PORTAINER_ENDPOINT_ID não configurado}"
+          : "${PORTAINER_STACK_ID:?PORTAINER_STACK_ID não configurado}"
+
+      - name: Resolve stack + container do app
+        id: resolve
+        run: |
+          set -e
+          STACK_NAME=$(curl --silent --insecure -H "X-API-Key: $PORTAINER_TOKEN" \
+            "$PORTAINER_URL/api/stacks/$PORTAINER_STACK_ID" | jq -r '.Name')
+          SERVICE_NAME="${STACK_NAME}_app"
+          echo "Stack: $STACK_NAME, service: $SERVICE_NAME"
+
+          # Pegar lista de tasks do service e descobrir o container running
+          curl --silent --insecure -H "X-API-Key: $PORTAINER_TOKEN" \
+            "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/tasks?filters=%7B%22service%22%3A%5B%22${SERVICE_NAME}%22%5D%2C%22desired-state%22%3A%5B%22running%22%5D%7D" > /tmp/tasks.json
+
+          CONTAINER_ID=$(jq -r '[.[] | select(.Status.State=="running")][0].Status.ContainerStatus.ContainerID // empty' /tmp/tasks.json)
+          if [ -z "$CONTAINER_ID" ]; then
+            echo "Não encontrei container running para o service $SERVICE_NAME"
+            cat /tmp/tasks.json | jq '[.[] | {state: .Status.State, container: .Status.ContainerStatus.ContainerID}]'
+            exit 1
+          fi
+          echo "Container ID: $CONTAINER_ID"
+          echo "container_id=$CONTAINER_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Build cmd array
+        id: cmd
+        run: |
+          set -e
+          case "$ACTION" in
+            migrate-deploy)
+              CMD='["npx","prisma","migrate","deploy"]'
+              ;;
+            migrate-status)
+              CMD='["npx","prisma","migrate","status"]'
+              ;;
+            generate)
+              CMD='["npx","prisma","generate"]'
+              ;;
+            *)
+              echo "Ação desconhecida: $ACTION"; exit 1
+              ;;
+          esac
+          echo "cmd=$CMD" >> "$GITHUB_OUTPUT"
+          echo "Comando: $CMD"
+
+      - name: Exec via Portainer
+        run: |
+          set -e
+          CONTAINER_ID="${{ steps.resolve.outputs.container_id }}"
+          CMD='${{ steps.cmd.outputs.cmd }}'
+          PAYLOAD=$(jq -n --argjson cmd "$CMD" '{AttachStdout: true, AttachStderr: true, Tty: false, Cmd: $cmd}')
+
+          echo "=== Criando exec ==="
+          EXEC_RESP=$(curl --silent --insecure -X POST \
+            -H "X-API-Key: $PORTAINER_TOKEN" \
+            -H "Content-Type: application/json" \
+            "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/containers/$CONTAINER_ID/exec" \
+            -d "$PAYLOAD")
+          echo "$EXEC_RESP" | head -c 500
+          echo ""
+          EXEC_ID=$(echo "$EXEC_RESP" | jq -r '.Id // empty')
+          if [ -z "$EXEC_ID" ]; then
+            echo "Falha ao criar exec. Resposta:"
+            echo "$EXEC_RESP"
+            exit 1
+          fi
+          echo "Exec ID: $EXEC_ID"
+
+          echo "=== Iniciando exec ==="
+          curl --silent --insecure -X POST \
+            -H "X-API-Key: $PORTAINER_TOKEN" \
+            -H "Content-Type: application/json" \
+            "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/exec/$EXEC_ID/start" \
+            -d '{"Detach": false, "Tty": false}' \
+            | sed 's/[\x00-\x07\x0e-\x1f]//g' || true
+          echo ""
+
+          echo "=== Inspecionando exit code ==="
+          INSPECT=$(curl --silent --insecure -H "X-API-Key: $PORTAINER_TOKEN" \
+            "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/exec/$EXEC_ID/json")
+          EXIT_CODE=$(echo "$INSPECT" | jq -r '.ExitCode')
+          echo "Exit code: $EXIT_CODE"
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "Comando falhou."
+            echo "$INSPECT" | jq .
+            exit 1
+          fi
+          echo "Sucesso ✅"
