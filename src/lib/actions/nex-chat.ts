@@ -1,9 +1,14 @@
 "use server";
 
 import { auth } from "@/auth";
+import { getCurrentUser } from "@/lib/auth";
 import { runNexAgent } from "@/lib/llm/agent/run-nex";
 import type { ChatMessage } from "@/lib/llm/types";
-import { getActiveAccountId } from "@/lib/reports/active-account";
+import {
+  getActiveAccountId,
+  NoAccessibleAccountError,
+} from "@/lib/reports/active-account";
+import type { AuthUser } from "@/lib/auth-helpers";
 import { getKbDocsForPrompt } from "@/lib/nex/kb";
 import { composeSystemPrompt, type NexPromptConfig } from "@/lib/nex/prompt";
 
@@ -37,9 +42,22 @@ export async function sendNexMessage(
     return { ok: false, error: "Nenhuma mensagem para enviar" };
   }
 
-  const accountId = await getActiveAccountId();
-  const userId = (session.user as { id?: string }).id;
-  const platformRole = (session.user as { platformRole?: string }).platformRole;
+  const authUser = await getCurrentUser();
+  if (!authUser) {
+    return { ok: false, error: "Não autenticado" };
+  }
+
+  let accountId: number;
+  try {
+    accountId = await getActiveAccountId(authUser as AuthUser);
+  } catch (err) {
+    if (err instanceof NoAccessibleAccountError) {
+      return { ok: false, error: "Sem acesso a nenhuma conta" };
+    }
+    throw err;
+  }
+  const userId = authUser.id;
+  const platformRole = authUser.platformRole;
 
   const result = await runNexAgent({
     messages: filtered,
@@ -84,9 +102,22 @@ export async function testNexPromptAction(
   const kbDocs = cfg.kbEnabled ? await getKbDocsForPrompt() : [];
   const composed = composeSystemPrompt(cfg, kbDocs);
 
-  const accountId = await getActiveAccountId();
-  const userId = (session.user as { id?: string }).id;
-  const platformRole = (session.user as { platformRole?: string }).platformRole;
+  const authUser = await getCurrentUser();
+  if (!authUser) {
+    return { ok: false, error: "Não autenticado" };
+  }
+
+  let accountId: number;
+  try {
+    accountId = await getActiveAccountId(authUser as AuthUser);
+  } catch (err) {
+    if (err instanceof NoAccessibleAccountError) {
+      return { ok: false, error: "Sem acesso a nenhuma conta" };
+    }
+    throw err;
+  }
+  const userId = authUser.id;
+  const platformRole = authUser.platformRole;
 
   const result = await runNexAgent({
     messages: [{ role: "user", content: text }],
