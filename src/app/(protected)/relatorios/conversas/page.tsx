@@ -80,7 +80,12 @@ export default async function ConversasPage({ searchParams }: PageProps) {
     getTeams(accountId).catch(() => null),
     getUsers(accountId).catch(() => null),
     getLabels(accountId).catch(() => null),
-    fetchConversas({ filters: reportFilters, accountId }),
+    fetchConversas({
+      filters: reportFilters,
+      accountId,
+      page: filterState.page ?? 1,
+      pageSize: 1000,
+    }),
   ]);
 
   const inboxes = inboxesResult?.data ?? [];
@@ -95,12 +100,14 @@ export default async function ConversasPage({ searchParams }: PageProps) {
     Boolean(usersResult?.stale) ||
     Boolean(labelsResult?.stale);
 
+  const conversasTotal = conversasResult.total ?? 0;
+  const conversasPage = conversasResult.page ?? 1;
+  const conversasPageSize = conversasResult.pageSize ?? 1000;
+  const conversasTotalPages = conversasResult.totalPages ?? 0;
+
   return (
     <>
-      <a
-        href="#conversas-table"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-card focus:px-3 focus:py-2 focus:text-sm focus:shadow-md"
-      >
+      <a href="#conversas-table" className="sr-only">
         Pular para a tabela de conversas
       </a>
       <PageShell variant="wide">
@@ -131,7 +138,10 @@ export default async function ConversasPage({ searchParams }: PageProps) {
             filterState={filterState}
             accountId={accountId}
             initialRows={conversasResult.rows}
-            initialCursor={conversasResult.nextCursor}
+            total={conversasTotal}
+            page={conversasPage}
+            pageSize={conversasPageSize}
+            totalPages={conversasTotalPages}
             reportFilters={reportFilters}
             conditionGroup={
               filterState.mode === "advanced"
