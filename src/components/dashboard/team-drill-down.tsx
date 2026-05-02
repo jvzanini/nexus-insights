@@ -7,6 +7,7 @@ import { ptBR } from "date-fns/locale";
 import { DonutWithCenter } from "@/components/charts";
 import { CHART_COLORS } from "@/lib/charts/colors";
 import { StatusBadge } from "@/components/reports/status-badge";
+import { TotalBadge } from "./total-badge";
 import {
   Table,
   TableBody,
@@ -113,7 +114,7 @@ export function TeamDrillDownContent({
       </DrillDownSection>
 
       <DrillDownSection
-        title={`Conversas (${data.items.length})`}
+        title={<>Conversas <TotalBadge n={data.items.length} /></>}
         description="Ordenadas por última atividade"
       >
         <div className="overflow-x-auto rounded-lg border border-border">
@@ -127,7 +128,7 @@ export function TeamDrillDownContent({
                   Contato
                 </TableHead>
                 <TableHead className="h-9 text-xs font-medium text-muted-foreground">
-                  Inbox
+                  Estado
                 </TableHead>
                 <TableHead className="h-9 text-xs font-medium text-muted-foreground">
                   Atendente
@@ -156,11 +157,13 @@ export function TeamDrillDownContent({
                     key={item.id}
                     className="border-border/50 transition-colors hover:bg-accent/30"
                   >
-                    <TableCell className="py-2.5 text-xs text-muted-foreground">
-                      {formatDistanceToNow(new Date(item.lastActivityAt), {
-                        addSuffix: true,
-                        locale: ptBR,
-                      })}
+                    <TableCell className="py-2.5">
+                      <span className="inline-block rounded-md bg-amber-500/10 px-2 py-1 text-xs font-semibold tabular-nums text-amber-400">
+                        {formatDistanceToNow(new Date(item.lastActivityAt), {
+                          addSuffix: true,
+                          locale: ptBR,
+                        })}
+                      </span>
                     </TableCell>
                     <TableCell className="py-2.5 text-sm text-foreground">
                       {item.contactName ?? "—"}
