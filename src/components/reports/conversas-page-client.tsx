@@ -18,6 +18,7 @@
 // dedicada — fora do contrato de `ReportFilters`.
 
 import { useCallback, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { AdvancedFilters } from "@/components/reports/advanced-filters";
 import { ConversasTable } from "@/components/reports/conversas-table";
@@ -25,6 +26,7 @@ import { ContentLoadingWrapper } from "@/components/reports/content-loading-wrap
 import { PresetsDialog } from "@/components/reports/presets-dialog";
 import type { SortRule } from "@/components/reports/sorting-dialog";
 import type { FilterState } from "@/lib/reports/filter-state";
+import { serializeFilterState } from "@/lib/reports/filter-state";
 import { useLocalStorageState } from "@/lib/hooks/use-local-storage-state";
 import {
   useFilterPresets,
@@ -50,7 +52,10 @@ interface Props {
   filterState: FilterState;
   accountId: number;
   initialRows: ConversaRow[];
-  initialCursor: string | null;
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
   reportFilters: FetchConversasInput["filters"];
   /**
    * Grupo de condições do modo Avançado dos filtros — vem do filterState
@@ -72,7 +77,10 @@ export function ConversasPageClient({
   filterState,
   accountId,
   initialRows,
-  initialCursor,
+  total,
+  page,
+  pageSize,
+  totalPages,
   reportFilters,
   conditionGroup,
   currentChatwootUserId,
@@ -123,6 +131,18 @@ export function ConversasPageClient({
   // bidirecional `onRowCountChange` quando filtros client-side reduzirem.
   const [tableRowCount, setTableRowCount] = useState(initialRows.length);
 
+  // ---- Paginação -----
+  const router = useRouter();
+
+  const handlePageChange = useCallback(
+    (newPage: number) => {
+      const next = { ...filterState, page: newPage > 1 ? newPage : undefined };
+      const qs = serializeFilterState(next).toString();
+      router.push(qs ? `?${qs}` : "?");
+    },
+    [filterState, router],
+  );
+
   const handleApplyPreset = useCallback(
     (preset: FilterPreset) => {
       setSortStack(preset.sortStack);
@@ -150,7 +170,7 @@ export function ConversasPageClient({
           onApplyPreset={handleApplyPreset}
           onOpenPresetsManager={() => setPresetsDialogOpen(true)}
           appliedReportFilters={reportFilters}
-          tableRowCount={tableRowCount}
+          tableRowCount={total}
         />
       </div>
 
@@ -158,13 +178,16 @@ export function ConversasPageClient({
         <div data-tour="table">
           <ConversasTable
             initialRows={initialRows}
-            initialCursor={initialCursor}
+            total={total}
+            page={page}
+            pageSize={pageSize}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
             accountId={accountId}
             filters={reportFilters}
             sortStack={sortStack}
             onSortStackChange={setSortStack}
             conditionGroup={composedConditionGroup}
-            onRowCountChange={setTableRowCount}
           />
         </div>
       </ContentLoadingWrapper>
