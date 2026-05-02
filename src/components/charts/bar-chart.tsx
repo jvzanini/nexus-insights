@@ -19,6 +19,7 @@ import {
 } from "@/components/charts/chart-tooltip";
 import { EmptyChartState } from "@/components/charts/empty-chart-state";
 import { getColorByIndex } from "@/lib/charts/colors";
+import { PROVIDER_LABELS } from "@/lib/llm/pricing";
 
 export interface BarChartData {
   name: string;
@@ -72,6 +73,13 @@ export interface InteractiveBarChartProps {
    * Margem entre os ticks e o eixo X — aplicado como `tickMargin` (default 12).
    */
   xAxisPadding?: number;
+  /**
+   * Mapa modelo → providerKey. Quando fornecido, o XAxis renderiza um custom
+   * tick em 2 linhas: nome do modelo (truncado em 24 chars) + "(Provider)" em
+   * fonte menor / opacity reduzida. Aumenta a altura reservada do eixo.
+   * Aplica-se apenas ao layout vertical (XAxis categórico).
+   */
+  providersByModel?: Record<string, string>;
 }
 
 const defaultFormat = (v: number) =>
@@ -103,6 +111,56 @@ function makeYAxisFormatter(
 }
 
 /**
+ * Cria um custom tick para o XAxis categórico que renderiza:
+ * 1) nome do modelo (truncado em 24 chars com ellipsis se necessário);
+ * 2) "(Provider)" em fonte menor com opacity 0.6 (apenas se mapeado).
+ */
+function makeCustomBarTick(providersByModel?: Record<string, string>) {
+  return function CustomBarTick(tickProps: {
+    x?: string | number;
+    y?: string | number;
+    payload?: { value?: string | number };
+  }) {
+    const { x = 0, y = 0, payload } = tickProps;
+    const numX = typeof x === "number" ? x : Number(x) || 0;
+    const numY = typeof y === "number" ? y : Number(y) || 0;
+    const value = String(payload?.value ?? "");
+    const truncated = value.length > 24 ? `${value.slice(0, 21)}…` : value;
+    const provider = providersByModel?.[value];
+    const providerLabel = provider
+      ? `(${PROVIDER_LABELS[provider as keyof typeof PROVIDER_LABELS] ?? provider})`
+      : "";
+    return (
+      <g transform={`translate(${numX},${numY})`}>
+        <text
+          x={0}
+          y={0}
+          dy={16}
+          textAnchor="middle"
+          fontSize={13}
+          fill="currentColor"
+        >
+          {truncated}
+        </text>
+        {providerLabel ? (
+          <text
+            x={0}
+            y={0}
+            dy={32}
+            textAnchor="middle"
+            fontSize={10}
+            fill="currentColor"
+            opacity={0.6}
+          >
+            {providerLabel}
+          </text>
+        ) : null}
+      </g>
+    );
+  };
+}
+
+/**
  * Bar chart interativo (vertical/horizontal, agrupado/empilhado) com:
  * - animação Recharts 800ms + Framer Motion fade/scale 200ms;
  * - hover: outras séries reduzidas a opacity 0.45;
@@ -129,10 +187,24 @@ export function InteractiveBarChart({
   yAxisCurrency,
   xAxisFontSize = 13,
   xAxisPadding = 12,
+  providersByModel,
 }: InteractiveBarChartProps) {
   const prefersReducedMotion = useReducedMotion();
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const numericTickFormatter = makeYAxisFormatter(yAxisCurrency, formatValue);
+
+  // Modo "subcent": valores positivos < R$ 0,01 — eixo numérico mostra apenas
+  // 2 ticks (0 e 0.01) com label "< R$ 0,01" no topo. Tooltip preserva real.
+  const maxValue = Math.max(
+    0,
+    ...data.flatMap((d) => series.map((s) => Number(d[s.key]) || 0)),
+  );
+  const isSubCent =
+    yAxisCurrency !== undefined && maxValue > 0 && maxValue < 0.01;
+  const subCentTickFormatter = (v: number) => {
+    if (v === 0) return yAxisCurrency === "BRL" ? "R$ 0,00" : "$0.00";
+    return yAxisCurrency === "BRL" ? "< R$ 0,01" : "< $0.01";
+  };
 
   const hasData =
     data.length > 0 &&
@@ -171,7 +243,11 @@ export function InteractiveBarChart({
         <BarChart
           data={data}
           layout={isHorizontal ? "vertical" : "horizontal"}
-          margin={{ top: 8, right: 16, left: 0, bottom: 4 }}
+          margin={
+            providersByModel && !isHorizontal
+              ? { top: 8, right: 16, left: 0, bottom: 20 }
+              : { top: 8, right: 16, left: 0, bottom: 4 }
+          }
         >
           {showGrid ? (
             <CartesianGrid
@@ -193,7 +269,13 @@ export function InteractiveBarChart({
                 tick={{ fill: "currentColor", fontSize: xAxisFontSize }}
                 fontSize={xAxisFontSize}
                 tickMargin={xAxisPadding}
-                tickFormatter={(v) => numericTickFormatter(Number(v))}
+                domain={isSubCent ? [0, 0.01] : undefined}
+                ticks={isSubCent ? [0, 0.01] : undefined}
+                tickFormatter={
+                  isSubCent
+                    ? subCentTickFormatter
+                    : (v) => numericTickFormatter(Number(v))
+                }
               />
               <YAxis
                 type="category"
@@ -215,9 +297,14 @@ export function InteractiveBarChart({
                 axisLine={false}
                 stroke="currentColor"
                 className="text-xs text-muted-foreground"
-                tick={{ fill: "currentColor", fontSize: xAxisFontSize }}
+                tick={
+                  providersByModel
+                    ? makeCustomBarTick(providersByModel)
+                    : { fill: "currentColor", fontSize: xAxisFontSize }
+                }
                 fontSize={xAxisFontSize}
                 tickMargin={xAxisPadding}
+                height={providersByModel ? 50 : undefined}
               />
               <YAxis
                 tickLine={false}
@@ -228,7 +315,13 @@ export function InteractiveBarChart({
                 tick={{ fill: "currentColor", fontSize: 13 }}
                 fontSize={13}
                 width={yAxisCurrency ? 72 : 48}
-                tickFormatter={(v) => numericTickFormatter(Number(v))}
+                domain={isSubCent ? [0, 0.01] : undefined}
+                ticks={isSubCent ? [0, 0.01] : undefined}
+                tickFormatter={
+                  isSubCent
+                    ? subCentTickFormatter
+                    : (v) => numericTickFormatter(Number(v))
+                }
               />
             </>
           )}

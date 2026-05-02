@@ -117,6 +117,21 @@ export function InteractiveAreaChart({
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const yTickFormatter = makeYAxisFormatter(yAxisCurrency, formatValue);
 
+  // Modo "subcent": quando todos os valores são positivos e < R$ 0,01,
+  // o eixo Y normal mostraria apenas zeros; preferimos 2 ticks fixos
+  // (0 e 0.01) com label "< R$ 0,01" no topo, preservando o tooltip
+  // com o valor real.
+  const maxValue = Math.max(
+    0,
+    ...data.flatMap((d) => series.map((s) => Number(d[s.key]) || 0)),
+  );
+  const isSubCent =
+    yAxisCurrency !== undefined && maxValue > 0 && maxValue < 0.01;
+  const subCentTickFormatter = (v: number) => {
+    if (v === 0) return yAxisCurrency === "BRL" ? "R$ 0,00" : "$0.00";
+    return yAxisCurrency === "BRL" ? "< R$ 0,01" : "< $0.01";
+  };
+
   const hasData =
     data.length > 0 &&
     series.length > 0 &&
@@ -197,7 +212,13 @@ export function InteractiveAreaChart({
             tick={{ fill: "currentColor", fontSize: 13 }}
             fontSize={13}
             width={yAxisCurrency ? 72 : 48}
-            tickFormatter={(v) => yTickFormatter(Number(v))}
+            domain={isSubCent ? [0, 0.01] : undefined}
+            ticks={isSubCent ? [0, 0.01] : undefined}
+            tickFormatter={
+              isSubCent
+                ? subCentTickFormatter
+                : (v) => yTickFormatter(Number(v))
+            }
           />
           <Tooltip
             cursor={{ stroke: "currentColor", strokeOpacity: 0.2 }}
