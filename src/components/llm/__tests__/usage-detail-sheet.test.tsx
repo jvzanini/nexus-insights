@@ -108,7 +108,7 @@ describe("UsageDetailSheet", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("Whisper (whisper-1): tokens '—' + nota informativa", () => {
+  it("Whisper (whisper-1): tokens '—' + nota informativa (legado)", () => {
     render(
       <UsageDetailSheet
         open
@@ -120,6 +120,39 @@ describe("UsageDetailSheet", () => {
     const dashes = screen.getAllByText("—");
     expect(dashes.length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText(/cobrado por minuto/i)).toBeInTheDocument();
+    expect(screen.getByText(/legado/i)).toBeInTheDocument();
+  });
+
+  it("gpt-4o-mini-transcribe: tokens reais aparecem sem nota especial (v0.20+)", () => {
+    render(
+      <UsageDetailSheet
+        open
+        onOpenChange={jest.fn()}
+        row={makeRow({
+          model: "gpt-4o-mini-transcribe",
+          tokensInput: 150,
+          tokensOutput: 80,
+        })}
+      />,
+    );
+    // Tokens reais renderizam (não "—" para entrada/saída)
+    expect(screen.getByText("150")).toBeInTheDocument();
+    expect(screen.getByText("80")).toBeInTheDocument();
+    // NÃO deve haver nota sobre Whisper/cobrança por minuto
+    expect(screen.queryByText(/cobrado por minuto/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/legado/i)).not.toBeInTheDocument();
+  });
+
+  it("modelo de chat (gpt-5.4-nano): tokens reais sem nota Whisper", () => {
+    render(
+      <UsageDetailSheet
+        open
+        onOpenChange={jest.fn()}
+        row={makeRow({ model: "gpt-5.4-nano" })}
+      />,
+    );
+    expect(screen.queryByText(/cobrado por minuto/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/legado/i)).not.toBeInTheDocument();
   });
 
   it("errorMessage não-null: mostra alert vermelho com a mensagem", () => {

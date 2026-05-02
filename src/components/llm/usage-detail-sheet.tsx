@@ -21,8 +21,10 @@ import { cn } from "@/lib/utils";
  * Comportamento:
  * - Drawer lateral direito (`w-[520px]`; `w-full` em < 640 px) com 5 seções:
  *   Identificação → Tokens → Duração → Custo → Erro (condicional).
- * - Whisper (`whisper-1`): tokens substituídos por "—" + nota explicativa
- *   ("cobrado por minuto"), pois o billing não usa tokens.
+ * - Whisper legado (`whisper-1`): tokens substituídos por "—" + nota explicativa
+ *   ("cobrado por minuto, legado"), pois o billing não usa tokens. Para o
+ *   default v0.20+ (`gpt-4o-mini-transcribe`), tokens reais são exibidos
+ *   normalmente — sem nota especial.
  * - Cotação USD→BRL: exibe o valor armazenado na linha (`usdToBrlRate`); quando
  *   `null` (chamadas anteriores à v0.10), mostra mensagem informativa em vez do
  *   valor. `currentSpread` é informativo (spread atual aplicado nas próximas
@@ -235,9 +237,10 @@ function TokensSection({ row }: { row: UsageDetailRow }) {
         }
         mono={row.responseChars != null}
       />
-      {isWhisper ? (
-        <p className="col-span-full text-xs text-muted-foreground">
-          Whisper é cobrado por minuto. Tokens não se aplicam.
+      {row.model === "whisper-1" ? (
+        <p className="col-span-full text-xs italic text-muted-foreground">
+          Whisper é cobrado por minuto. Tokens não se aplicam a chamadas de
+          áudio (legado).
         </p>
       ) : null}
     </Section>
