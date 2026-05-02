@@ -7,9 +7,17 @@ export const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 
 const WHISPER_URL = "https://api.openai.com/v1/audio/transcriptions";
 
-export interface TranscribeResult {
-  text: string;
-  durationSeconds: number;
+interface TranscribeUsage {
+  type?: string;
+  input_tokens?: number;
+  input_token_details?: { text_tokens?: number; audio_tokens?: number };
+  output_tokens?: number;
+  total_tokens?: number;
+}
+
+interface GptTranscribeJsonResponse {
+  text?: string;
+  usage?: TranscribeUsage;
 }
 
 interface WhisperVerboseJsonResponse {
@@ -17,12 +25,21 @@ interface WhisperVerboseJsonResponse {
   duration?: number;
 }
 
+export interface TranscribeResult {
+  text: string;
+  durationSeconds: number;
+  inputTokens: number;
+  outputTokens: number;
+  modelUsed: "gpt-4o-mini-transcribe" | "whisper-1";
+}
+
 /**
- * Transcreve um áudio usando Whisper (OpenAI) e retorna texto + duração.
+ * Transcreve um áudio usando primeiro `gpt-4o-mini-transcribe` (token-based, ~50%
+ * mais barato e retorna `usage` com tokens reais) e cai pra `whisper-1` (cobrança
+ * por minuto, sem tokens) em qualquer 4xx/5xx ou exception.
  *
- * Requer que a config LLM ativa seja do provider `openai` (Whisper hoje só
- * existe na OpenAI). Erros são propagados como `Error` com mensagem clara em
- * português pra UI mostrar via toast.
+ * Requer config LLM ativa do provider `openai`. Erros do whisper-1 são propagados
+ * como `Error` com mensagem clara em português pra UI mostrar via toast.
  */
 export async function transcribeAudio(
   audio: Blob,
@@ -44,35 +61,86 @@ export async function transcribeAudio(
     );
   }
 
-  const form = new FormData();
-  form.append("file", audio, "audio.webm");
-  form.append("model", "whisper-1");
-  form.append("response_format", "verbose_json");
-  form.append("language", language);
+  const start = Date.now();
 
-  const response = await fetch(WHISPER_URL, {
+  // Tentativa 1: gpt-4o-mini-transcribe (token-based, retorna usage)
+  try {
+    const form = new FormData();
+    form.append("file", audio, "audio.webm");
+    form.append("model", "gpt-4o-mini-transcribe");
+    form.append("response_format", "json");
+    form.append("language", language);
+
+    const response = await fetch(WHISPER_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: form,
+    });
+
+    if (response.ok) {
+      const data = (await response.json()) as GptTranscribeJsonResponse;
+      const usage = data.usage;
+      const audioTokens = usage?.input_token_details?.audio_tokens ?? 0;
+      const textTokens = usage?.input_token_details?.text_tokens ?? 0;
+      const detailSum = audioTokens + textTokens;
+      const inputTokens = detailSum > 0 ? detailSum : usage?.input_tokens ?? 0;
+      return {
+        text: data.text ?? "",
+        durationSeconds: (Date.now() - start) / 1000,
+        inputTokens,
+        outputTokens: usage?.output_tokens ?? 0,
+        modelUsed: "gpt-4o-mini-transcribe",
+      };
+    }
+
+    console.warn(
+      `[transcribe] gpt-4o-mini-transcribe ${response.status} — fallback whisper-1`,
+    );
+  } catch (err) {
+    console.warn(
+      "[transcribe] gpt-4o-mini-transcribe falhou — fallback whisper-1:",
+      err,
+    );
+  }
+
+  // Fallback: whisper-1 (cobrança por minuto, sem tokens)
+  const formW = new FormData();
+  formW.append("file", audio, "audio.webm");
+  formW.append("model", "whisper-1");
+  formW.append("response_format", "verbose_json");
+  formW.append("language", language);
+
+  const responseW = await fetch(WHISPER_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
     },
-    body: form,
+    body: formW,
   });
 
-  if (!response.ok) {
+  if (!responseW.ok) {
     let errorBody = "";
     try {
-      errorBody = await response.text();
+      errorBody = await responseW.text();
     } catch {
       errorBody = "";
     }
     throw new Error(
-      `Whisper ${response.status}: ${errorBody || response.statusText}`,
+      `Whisper ${responseW.status}: ${errorBody || responseW.statusText}`,
     );
   }
 
-  const data = (await response.json()) as WhisperVerboseJsonResponse;
+  const dataW = (await responseW.json()) as WhisperVerboseJsonResponse;
   return {
-    text: data.text ?? "",
-    durationSeconds: typeof data.duration === "number" ? data.duration : 0,
+    text: dataW.text ?? "",
+    durationSeconds:
+      typeof dataW.duration === "number"
+        ? dataW.duration
+        : (Date.now() - start) / 1000,
+    inputTokens: 0,
+    outputTokens: 0,
+    modelUsed: "whisper-1",
   };
 }
