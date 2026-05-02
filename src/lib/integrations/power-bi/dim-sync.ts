@@ -15,7 +15,6 @@
  * Cron 30 min via BullMQ scheduler.
  */
 
-import format from "pg-format";
 import { chatwootQuery } from "@/lib/chatwoot/pool";
 import { pgPool } from "@/lib/pg-pool";
 
@@ -25,6 +24,23 @@ export interface SnapshotResult {
   errors: string[];
 }
 
+/** Quote identifier (sempre com aspas duplas + escape). */
+function quoteIdent(name: string): string {
+  return `"${name.replace(/"/g, '""')}"`;
+}
+
+/** Quote literal Postgres (escape de aspas; null vira NULL). */
+function quoteLiteralOrNull(value: unknown): string {
+  if (value === null || value === undefined) return "NULL";
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value === "boolean") return value ? "TRUE" : "FALSE";
+  const str = String(value);
+  if (str.indexOf("\0") !== -1) {
+    throw new Error("Literal contém NUL byte (não permitido em strings Postgres)");
+  }
+  return `'${str.replace(/'/g, "''")}'`;
+}
+
 async function upsertDim(
   table: string,
   pkColumns: string[],
@@ -32,37 +48,28 @@ async function upsertDim(
   cols: string[],
 ): Promise<void> {
   if (rows.length === 0) return;
+  const tableQ = quoteIdent(table);
   const tuples = rows.map((r) => {
-    const values = cols.map((c) => r[c]);
-    return format(
-      `(${values.map(() => "%L").join(", ")}, now())`,
-      ...values,
-    );
+    const literals = cols.map((c) => quoteLiteralOrNull(r[c]));
+    return `(${literals.join(", ")}, now())`;
   });
-  const colsList = cols.map((c) => format("%I", c)).join(", ");
+  const colsList = cols.map((c) => quoteIdent(c)).join(", ");
   const updateSet = cols
     .filter((c) => !pkColumns.includes(c))
-    .map((c) => format("%I = EXCLUDED.%I", c, c))
-    .concat([format("%I = EXCLUDED.%I", "refreshed_at", "refreshed_at")])
+    .map((c) => `${quoteIdent(c)} = EXCLUDED.${quoteIdent(c)}`)
+    .concat([`${quoteIdent("refreshed_at")} = EXCLUDED.${quoteIdent("refreshed_at")}`])
     .join(", ");
-  const conflictTarget = pkColumns.map((c) => format("%I", c)).join(", ");
-  const sql = format(
-    `INSERT INTO powerbi.%I (${colsList}, refreshed_at)
-     VALUES %s
-     ON CONFLICT (${conflictTarget}) DO UPDATE SET ${updateSet}`,
-    table,
-    tuples.join(", "),
-  );
+  const conflictTarget = pkColumns.map((c) => quoteIdent(c)).join(", ");
+  const sql = `INSERT INTO powerbi.${tableQ} (${colsList}, ${quoteIdent("refreshed_at")})
+VALUES ${tuples.join(", ")}
+ON CONFLICT (${conflictTarget}) DO UPDATE SET ${updateSet}`;
 
   const client = await pgPool.connect();
   try {
     await client.query("BEGIN");
     await client.query(sql);
     await client.query(
-      format(
-        "DELETE FROM powerbi.%I WHERE refreshed_at < now() - INTERVAL '1 hour'",
-        table,
-      ),
+      `DELETE FROM powerbi.${tableQ} WHERE refreshed_at < now() - INTERVAL '1 hour'`,
     );
     await client.query("COMMIT");
   } catch (err) {
