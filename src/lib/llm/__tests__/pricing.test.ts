@@ -64,6 +64,26 @@ describe("calculateCost", () => {
       6,
     );
   });
+
+  it("calculateCost gpt-4o-mini-transcribe usa token-based ($3/M input + $5/M output)", () => {
+    expect(
+      calculateCost("gpt-4o-mini-transcribe", 1_000_000, 100_000, {}),
+    ).toBeCloseTo(3.5, 4);
+  });
+
+  it("calculateCost gpt-4o-mini-transcribe ignora durationMs (token-based)", () => {
+    // perMinuteUsd não definido → cálculo por tokens
+    expect(
+      calculateCost("gpt-4o-mini-transcribe", 0, 0, { durationMs: 60000 }),
+    ).toBe(0);
+  });
+
+  it("whisper-1 mantém perMinuteUsd 0.006", () => {
+    expect(calculateCost("whisper-1", 0, 0, { durationMs: 60000 })).toBeCloseTo(
+      0.006,
+      6,
+    );
+  });
 });
 
 describe("PROVIDER_MODELS", () => {

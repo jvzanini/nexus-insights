@@ -59,6 +59,11 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
     outputPerMillion: 0,
     perMinuteUsd: 0.006,
   },
+  // gpt-4o-mini-transcribe — cobrado por tokens ($3/M input + $5/M output).
+  "gpt-4o-mini-transcribe": {
+    inputPerMillion: 3.0,
+    outputPerMillion: 5.0,
+  },
 
   // ---------------------------------------------------------------------
   // Anthropic — Claude 4.x family (abril/2026)
