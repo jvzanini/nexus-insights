@@ -189,7 +189,10 @@ export function AdvancedFilters({
 
   const pushUrl = useCallback(
     (state: FilterState) => {
-      const qs = serializeFilterState(state).toString();
+      // Filtros mudaram — sempre voltar pra página 1.
+      // (T8 v0.19: page só é preservada via handlePageChange em ConversasPageClient.)
+      const stateWithoutPage: FilterState = { ...state, page: undefined };
+      const qs = serializeFilterState(stateWithoutPage).toString();
       startTransition(() => {
         router.push(qs ? `?${qs}` : "?");
       });
