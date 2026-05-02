@@ -1,42 +1,41 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { auth } from "@/auth";
 import { Sidebar } from "@/components/layout/sidebar";
 import { NexBubble } from "@/components/nex/nex-bubble";
 import { TourProvider } from "@/components/tour/tour-provider";
 import { PLATFORM_ROLE_LABELS } from "@/lib/constants/roles";
+import { getCurrentUser } from "@/lib/auth";
 import { getKnownAccounts } from "@/lib/tenant";
 import { prisma } from "@/lib/prisma";
+import {
+  getActiveAccountId,
+  NoAccessibleAccountError,
+} from "@/lib/reports/active-account";
+import type { AuthUser } from "@/lib/auth-helpers";
 import { getVisibleReportKeys } from "@/lib/reports/visibility";
 import { isNexBubbleEnabled } from "@/lib/llm/get-nex-bubble-enabled";
 import { getNexPromptConfig } from "@/lib/nex/prompt";
 import { getActiveLlmConfig } from "@/lib/llm/get-active-config";
-
-const ACCOUNT_COOKIE = "nexus_active_account";
-const DEFAULT_ACCOUNT_ID = 9; // Matrix Fitness Group
 
 export default async function ProtectedLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const session = await auth();
+  const authUser = await getCurrentUser();
 
-  if (!session?.user) {
+  if (!authUser) {
     redirect("/login");
   }
 
-  const platformRole =
-    ((session.user as any)?.platformRole as keyof typeof PLATFORM_ROLE_LABELS) ??
-    "viewer";
-  const isOwner = (session.user as any)?.isOwner ?? false;
-  const avatarUrl = (session.user as any)?.avatarUrl ?? null;
-  const userId = ((session.user as any)?.id as string) ?? "";
+  const platformRole = authUser.platformRole;
+  const isOwner = authUser.isOwner;
+  const avatarUrl = authUser.avatarUrl;
+  const userId = authUser.id;
 
   const user = {
     id: userId,
-    name: session.user.name || session.user.email || "Usuário",
-    email: session.user.email || "",
+    name: authUser.name || authUser.email || "Usuário",
+    email: authUser.email || "",
     role: PLATFORM_ROLE_LABELS[platformRole] || "Usuário",
     platformRole,
     isOwner,
@@ -63,23 +62,16 @@ export default async function ProtectedLayout({
     );
   }
 
-  const allowedIds = new Set(availableAccounts.map((a) => a.id));
-
-  const cookieStore = await cookies();
-  const cookieRaw = cookieStore.get(ACCOUNT_COOKIE)?.value;
-  const cookieParsed = cookieRaw ? Number.parseInt(cookieRaw, 10) : Number.NaN;
-  const cookieAccountId =
-    Number.isFinite(cookieParsed) && cookieParsed > 0 ? cookieParsed : null;
-
+  // Resolve a conta ativa pelo helper canônico (fonte ÚNICA — mesma usada
+  // pelas pages). Se o user não tem acesso a nenhuma conta → redirect /login.
   let activeAccountId: number;
-  if (cookieAccountId && allowedIds.has(cookieAccountId)) {
-    activeAccountId = cookieAccountId;
-  } else if (allowedIds.has(DEFAULT_ACCOUNT_ID)) {
-    activeAccountId = DEFAULT_ACCOUNT_ID;
-  } else if (availableAccounts[0]) {
-    activeAccountId = availableAccounts[0].id;
-  } else {
-    activeAccountId = DEFAULT_ACCOUNT_ID;
+  try {
+    activeAccountId = await getActiveAccountId(authUser as AuthUser);
+  } catch (err) {
+    if (err instanceof NoAccessibleAccountError) {
+      redirect("/login?reason=no-access");
+    }
+    throw err;
   }
 
   const enabledReportKeys = Array.from(await getVisibleReportKeys(platformRole));
