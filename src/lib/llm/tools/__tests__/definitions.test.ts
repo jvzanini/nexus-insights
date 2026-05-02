@@ -1,8 +1,8 @@
 import { NEX_TOOLS } from "@/lib/llm/tools/definitions";
 
 describe("NEX_TOOLS", () => {
-  it("expõe exatamente 7 tools", () => {
-    expect(NEX_TOOLS).toHaveLength(7);
+  it("expõe exatamente 10 tools", () => {
+    expect(NEX_TOOLS).toHaveLength(10);
   });
 
   it("cada tool tem name, description e parameters", () => {
@@ -21,7 +21,10 @@ describe("NEX_TOOLS", () => {
     expect(names).toEqual(
       [
         "aggregate_conversations",
+        "get_active_company",
         "get_dashboard_summary",
+        "get_integrations_status",
+        "get_nex_config_summary",
         "get_top_agents",
         "query_contacts",
         "query_conversations",

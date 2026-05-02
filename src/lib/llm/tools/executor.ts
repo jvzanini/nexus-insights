@@ -19,6 +19,13 @@ import "server-only";
 
 import { chatwootQuery } from "@/lib/chatwoot/pool";
 import { getPlatformTz, getPeriodInTz, type PeriodKey } from "@/lib/datetime";
+import { getKnownAccounts } from "@/lib/tenant";
+import { prisma } from "@/lib/prisma";
+import { getActiveLlmConfig } from "@/lib/llm/get-active-config";
+import { getNexPromptConfig } from "@/lib/nex/prompt";
+import { getKbDocsForPrompt } from "@/lib/nex/kb";
+import { isNexBubbleEnabled } from "@/lib/llm/get-nex-bubble-enabled";
+import { getVisibleReportKeys } from "@/lib/reports/visibility";
 
 const MATRIX_IA_INBOX_ID = 31;
 const HARD_MAX_LIMIT = 200;
@@ -52,11 +59,9 @@ export async function executeTool(
   excludeMatrixIA: boolean = true,
   platformRole: string | null = null,
 ): Promise<ToolExecutionResult> {
-  // platformRole reservado para tools introspectivas (get_active_company,
-  // get_integrations_status, get_nex_config_summary). As tools de Chatwoot
-  // já recebem `excludeMatrixIA` resolvido no caller, então o parâmetro
-  // serve apenas para gating das tools novas (T8/T9/T10).
-  void platformRole;
+  // platformRole é usado pelas tools introspectivas T8/T9/T10. As tools de
+  // Chatwoot já recebem `excludeMatrixIA` resolvido no caller; o parâmetro
+  // serve para gating das tools novas (ex.: lastSyncAt só p/ super_admin).
   try {
     switch (name) {
       case "query_conversations":
@@ -73,6 +78,12 @@ export async function executeTool(
         return { result: await getTopAgents(args, accountId, excludeMatrixIA) };
       case "get_dashboard_summary":
         return { result: await getDashboardSummary(args, accountId, excludeMatrixIA) };
+      case "get_active_company":
+        return { result: await getActiveCompany(accountId, platformRole) };
+      case "get_integrations_status":
+        return { result: await getIntegrationsStatus(accountId, platformRole) };
+      case "get_nex_config_summary":
+        return { result: await getNexConfigSummary(platformRole) };
       default:
         return { result: null, error: `Ferramenta desconhecida: ${name}` };
     }
@@ -785,5 +796,160 @@ async function getDashboardSummary(
     period: period
       ? { start: period.start.toISOString(), end: period.end.toISOString() }
       : null,
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Tools introspectivas (T8/T9/T10) — não tocam Chatwoot                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * T8 — Identidade da empresa ativa + role do user corrente.
+ * Falha gracioso: se `getKnownAccounts` lançar, devolve "Empresa #N".
+ *
+ * Nota v0.21: `companyRole` e `isOwner` ficam fixos (null/false) porque
+ * `UserCompanyMembership` ainda não está no schema. Follow-up.
+ */
+async function getActiveCompany(
+  accountId: number,
+  platformRole: string | null,
+): Promise<{
+  id: number;
+  name: string;
+  platformRole: string;
+  companyRole: string | null;
+  isOwner: boolean;
+}> {
+  let name = `Empresa #${accountId}`;
+  try {
+    const known = await getKnownAccounts();
+    const match = known.find((a) => a.id === accountId);
+    if (match) name = match.name;
+  } catch {
+    /* fallback */
+  }
+  return {
+    id: accountId,
+    name,
+    platformRole: platformRole ?? "viewer",
+    companyRole: null,
+    isOwner: false,
+  };
+}
+
+interface KindCounter {
+  total: number;
+  active: number;
+  errored: number;
+  disabled: number;
+  /** Apenas super_admin enxerga timestamp operacional. */
+  lastSyncAt?: string | null;
+}
+
+/**
+ * T9 — Conta IntegrationProfiles agrupados por `kind`. Filtra pelo
+ * `accountIdFilter` da row (null = profile cobre todas as empresas).
+ * `lastSyncAt` só é incluído quando `platformRole === "super_admin"`.
+ */
+async function getIntegrationsStatus(
+  accountId: number,
+  platformRole: string | null,
+): Promise<{ kindCounts: Record<string, KindCounter> }> {
+  const profiles = await prisma.integrationProfile.findMany({
+    select: {
+      kind: true,
+      status: true,
+      accountIdFilter: true,
+      lastProvisionedAt: true,
+    },
+  });
+
+  const filtered = (
+    profiles as unknown as Array<{
+      kind: string;
+      status: string;
+      accountIdFilter: number[] | null;
+      lastProvisionedAt: Date | null;
+    }>
+  ).filter((p) => {
+    const filter = p.accountIdFilter;
+    return !filter || filter.includes(accountId);
+  });
+
+  const includeOps = platformRole === "super_admin";
+  const kindCounts: Record<string, KindCounter> = {};
+
+  for (const p of filtered) {
+    const k = p.kind;
+    if (!kindCounts[k]) {
+      kindCounts[k] = { total: 0, active: 0, errored: 0, disabled: 0 };
+      if (includeOps) kindCounts[k].lastSyncAt = null;
+    }
+    const c = kindCounts[k];
+    c.total += 1;
+    // Status comparado como string (Prisma enum vem como string).
+    if (p.status === "active") c.active += 1;
+    if (p.status === "errored") c.errored += 1;
+    if (p.status === "disabled") c.disabled += 1;
+    if (includeOps && p.lastProvisionedAt) {
+      const candidate = p.lastProvisionedAt.toISOString();
+      if (!c.lastSyncAt || candidate > c.lastSyncAt) c.lastSyncAt = candidate;
+    }
+  }
+
+  return { kindCounts };
+}
+
+/**
+ * T10 — Resumo da config do Nex e da plataforma. NÃO retorna secrets.
+ *  - provider/model do LLM ativo
+ *  - kbEnabled + kbDocsCount
+ *  - audioInputEnabled + audioEffectivelyEnabled (depende do provider ser openai)
+ *  - bubbleEnabled (flag global)
+ *  - reportsVisibility por relatório (resolvido para o role do user)
+ */
+async function getNexConfigSummary(platformRole: string | null): Promise<{
+  provider: string | null;
+  model: string | null;
+  kbEnabled: boolean;
+  kbDocsCount: number;
+  audioInputEnabled: boolean;
+  audioEffectivelyEnabled: boolean;
+  bubbleEnabled: boolean;
+  nexBubbleVisibility: string;
+  reportsVisibility: Record<string, boolean>;
+}> {
+  const role = platformRole ?? "viewer";
+  const [llm, nex, kbDocs, bubbleEnabled, visibleKeys] = await Promise.all([
+    getActiveLlmConfig().catch(() => null),
+    getNexPromptConfig().catch(() => null),
+    getKbDocsForPrompt().catch(() => [] as unknown[]),
+    isNexBubbleEnabled().catch(() => false),
+    getVisibleReportKeys(role).catch(() => new Set<string>()),
+  ]);
+
+  const reportsVisibility = {
+    dashboard: visibleKeys.has("dashboard"),
+    conversas: visibleKeys.has("conversas"),
+    distribuicao: visibleKeys.has("distribuicao"),
+    equipe: visibleKeys.has("equipe"),
+    mensagensNaoRespondidas: visibleKeys.has("mensagens_nao_respondidas"),
+    origemIa: visibleKeys.has("origem_ia"),
+    performance: visibleKeys.has("performance"),
+    visaoGeral: visibleKeys.has("visao_geral"),
+  };
+
+  return {
+    provider: llm?.provider ?? null,
+    model: llm?.model ?? null,
+    kbEnabled: nex?.kbEnabled ?? false,
+    kbDocsCount: kbDocs.length,
+    audioInputEnabled: nex?.audioInputEnabled ?? false,
+    audioEffectivelyEnabled:
+      (nex?.audioInputEnabled ?? false) && llm?.provider === "openai",
+    bubbleEnabled,
+    // v0.21 simplificação — refinar quando expor visibility por role.
+    nexBubbleVisibility: "all_users",
+    reportsVisibility,
   };
 }

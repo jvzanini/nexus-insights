@@ -154,4 +154,22 @@ export const NEX_TOOLS: ToolDefinition[] = [
       },
     },
   },
+  {
+    name: "get_active_company",
+    description:
+      "Devolve a empresa (account Chatwoot) ativa para o usuário corrente, junto com role da plataforma. Use sempre que o usuário perguntar 'em qual empresa estou?', 'quem sou eu aqui?', 'qual conta?'.",
+    parameters: { type: "object", properties: {} },
+  },
+  {
+    name: "get_integrations_status",
+    description:
+      "Lista integrações configuradas para a empresa ativa (Power BI, futuras), com contadores de profiles ativos/com erro. Use quando o usuário perguntar sobre integrações, Power BI, dashboards externos.",
+    parameters: { type: "object", properties: {} },
+  },
+  {
+    name: "get_nex_config_summary",
+    description:
+      "Resumo da configuração do Agente Nex e da plataforma: provedor/modelo de IA ativo, KB ligada, áudio, visibilidades de bubble e relatórios. NÃO retorna chaves nem segredos.",
+    parameters: { type: "object", properties: {} },
+  },
 ];
