@@ -15,10 +15,12 @@ import { getTeams, getUsers, getLabels } from "@/lib/chatwoot/queries/meta-cache
 import { getInboxesForUser } from "@/lib/chatwoot/queries/meta-cache-for-user";
 import { fetchConversas } from "@/lib/actions/reports/conversas";
 import { getActiveAccountId } from "@/lib/reports/active-account";
+import { assertAccountAccess } from "@/lib/tenant";
 import { resolvePeriod } from "@/lib/reports/resolve-period";
 import { shouldExcludeMatrixIA } from "@/lib/reports/exclude-matrix-ia";
 import { deserializeFilterState } from "@/lib/reports/filter-state";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
+import type { AuthUser } from "@/lib/auth-helpers";
 
 export const metadata = { title: "Conversas | Nexus Insights" };
 export const dynamic = "force-dynamic";
@@ -34,7 +36,8 @@ export default async function ConversasPage({ searchParams }: PageProps) {
   const visible = await isReportVisibleForUser("conversas", user.platformRole);
   if (!visible) redirect("/dashboard");
 
-  const accountId = await getActiveAccountId();
+  const accountId = await getActiveAccountId(user as AuthUser);
+  await assertAccountAccess(user as AuthUser, accountId);
   const sp = await searchParams;
 
   const params = new URLSearchParams();
