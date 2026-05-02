@@ -67,6 +67,101 @@ describe("getUsageStats", () => {
     expect(result.byProvider).toEqual([]);
   });
 
+  it("sem provider: passa null para todas as 4 queries (não-breaking)", async () => {
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            total_cost: 0,
+            total_cost_brl: 0,
+            total_tokens_input: 0,
+            total_tokens_output: 0,
+            total_calls: 0,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    await getUsageStats({
+      start: new Date("2026-04-01T00:00:00Z"),
+      end: new Date("2026-04-30T23:59:59Z"),
+    });
+
+    // Ordem do Promise.all: [summary, byModel, byDay, byProvider]
+    const summaryCall = mockQuery.mock.calls[0] as [string, unknown[]];
+    const modelCall = mockQuery.mock.calls[1] as [string, unknown[]];
+    const dayCall = mockQuery.mock.calls[2] as [string, unknown[]];
+    const providerCall = mockQuery.mock.calls[3] as [string, unknown[]];
+    // summary/byModel/byProvider: params [start, end, provider]
+    expect(summaryCall[1][2]).toBeNull();
+    expect(modelCall[1][2]).toBeNull();
+    expect(providerCall[1][2]).toBeNull();
+    // byDay: params [start, end, TZ, provider]
+    expect(dayCall[1][3]).toBeNull();
+  });
+
+  it("com provider='openai': passa o filtro para todas as 4 queries", async () => {
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            total_cost: 0,
+            total_cost_brl: 0,
+            total_tokens_input: 0,
+            total_tokens_output: 0,
+            total_calls: 0,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    await getUsageStats({
+      start: new Date("2026-04-01T00:00:00Z"),
+      end: new Date("2026-04-30T23:59:59Z"),
+      provider: "openai",
+    });
+
+    const summaryCall = mockQuery.mock.calls[0] as [string, unknown[]];
+    const modelCall = mockQuery.mock.calls[1] as [string, unknown[]];
+    const dayCall = mockQuery.mock.calls[2] as [string, unknown[]];
+    const providerCall = mockQuery.mock.calls[3] as [string, unknown[]];
+    expect(summaryCall[1][2]).toBe("openai");
+    expect(modelCall[1][2]).toBe("openai");
+    expect(providerCall[1][2]).toBe("openai");
+    expect(dayCall[1][3]).toBe("openai");
+  });
+
+  it("com provider='' (string vazia): trata como sem filtro (null)", async () => {
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            total_cost: 0,
+            total_cost_brl: 0,
+            total_tokens_input: 0,
+            total_tokens_output: 0,
+            total_calls: 0,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    await getUsageStats({
+      start: new Date("2026-04-01T00:00:00Z"),
+      end: new Date("2026-04-30T23:59:59Z"),
+      provider: "",
+    });
+
+    const summaryCall = mockQuery.mock.calls[0] as [string, unknown[]];
+    expect(summaryCall[1][2]).toBeNull();
+  });
+
   it("converte strings numéricas do Postgres para number", async () => {
     mockQuery
       .mockResolvedValueOnce({

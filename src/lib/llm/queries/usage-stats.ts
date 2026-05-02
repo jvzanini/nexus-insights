@@ -95,13 +95,19 @@ function toIsoDay(v: unknown): string {
  * - `byDay` agrega por dia local em America/Sao_Paulo (timezone padrão da
  *   plataforma). Aceita chamadas com 0 registros e retorna zeros.
  * - Todas as queries rodam em paralelo após `ensureLlmTables`.
+ * - `provider` é opcional; quando informado (string não vazia) filtra todas
+ *   as 4 queries internas via predicado `($N::text IS NULL OR provider = $N)`.
+ *   Quando `null`/`undefined`/`""`, mantém o comportamento original.
  */
 export async function getUsageStats(args: {
   start: Date;
   end: Date;
+  provider?: string | null;
 }): Promise<UsageSummary> {
   await ensureLlmTables();
   const { start, end } = args;
+  const provider =
+    args.provider != null && args.provider !== "" ? args.provider : null;
 
   const [summaryRes, modelRes, dayRes, providerRes] = await Promise.all([
     pgPool.query<SummaryRow>(
@@ -112,8 +118,9 @@ export async function getUsageStats(args: {
          COALESCE(SUM(tokens_output), 0) AS total_tokens_output,
          COUNT(*) AS total_calls
        FROM llm_usage
-       WHERE created_at >= $1 AND created_at < $2`,
-      [start, end],
+       WHERE created_at >= $1 AND created_at < $2
+         AND ($3::text IS NULL OR provider = $3)`,
+      [start, end, provider],
     ),
     pgPool.query<ModelRow>(
       `SELECT
@@ -126,9 +133,10 @@ export async function getUsageStats(args: {
          COUNT(*) AS calls
        FROM llm_usage
        WHERE created_at >= $1 AND created_at < $2
+         AND ($3::text IS NULL OR provider = $3)
        GROUP BY provider, model
        ORDER BY cost DESC, calls DESC`,
-      [start, end],
+      [start, end, provider],
     ),
     pgPool.query<DayRow>(
       `SELECT
@@ -139,9 +147,10 @@ export async function getUsageStats(args: {
          COUNT(*) AS calls
        FROM llm_usage
        WHERE created_at >= $1 AND created_at < $2
+         AND ($4::text IS NULL OR provider = $4)
        GROUP BY day
        ORDER BY day ASC`,
-      [start, end, TZ],
+      [start, end, TZ, provider],
     ),
     pgPool.query<ProviderRow>(
       `SELECT
@@ -151,9 +160,10 @@ export async function getUsageStats(args: {
          COUNT(*) AS calls
        FROM llm_usage
        WHERE created_at >= $1 AND created_at < $2
+         AND ($3::text IS NULL OR provider = $3)
        GROUP BY provider
        ORDER BY cost DESC`,
-      [start, end],
+      [start, end, provider],
     ),
   ]);
 

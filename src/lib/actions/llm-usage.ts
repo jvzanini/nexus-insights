@@ -30,11 +30,13 @@ function parseDate(value: string, label: string): Date {
 export async function fetchUsageStats(args: {
   start: string;
   end: string;
+  provider?: string | null;
 }): Promise<UsageSummary> {
   await ensureSuperAdmin();
   return getUsageStats({
     start: parseDate(args.start, "start"),
     end: parseDate(args.end, "end"),
+    provider: args.provider,
   });
 }
 
