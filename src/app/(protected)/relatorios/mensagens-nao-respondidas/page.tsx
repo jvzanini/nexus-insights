@@ -21,9 +21,11 @@ import { getTeams, getUsers } from "@/lib/chatwoot/queries/meta-cache";
 import { getInboxesForUser } from "@/lib/chatwoot/queries/meta-cache-for-user";
 import { fetchMensagensNaoRespondidas } from "@/lib/actions/reports/mensagens-nao-respondidas";
 import { getActiveAccountId } from "@/lib/reports/active-account";
+import { assertAccountAccess } from "@/lib/tenant";
 import { shouldExcludeMatrixIA } from "@/lib/reports/exclude-matrix-ia";
 import { formatDuration } from "@/lib/utils/format-time";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
+import type { AuthUser } from "@/lib/auth-helpers";
 
 export const metadata = {
   title: "Mensagens não respondidas | Nexus Insights",
@@ -51,7 +53,8 @@ export default async function MensagensNaoRespondidasPage({
   const visible = await isReportVisibleForUser("mensagens-nao-respondidas", user.platformRole);
   if (!visible) redirect("/dashboard");
 
-  const accountId = await getActiveAccountId();
+  const accountId = await getActiveAccountId(user as AuthUser);
+  await assertAccountAccess(user as AuthUser, accountId);
   const sp = await searchParams;
 
   const inboxRaw = typeof sp.inbox === "string" ? sp.inbox : undefined;

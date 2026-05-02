@@ -20,12 +20,14 @@ import { TourButton } from "@/components/tour/tour-button";
 import { origemIaTour } from "@/lib/tours/origem-ia-tour";
 import { getCurrentUser } from "@/lib/auth";
 import { getActiveAccountId } from "@/lib/reports/active-account";
+import { assertAccountAccess } from "@/lib/tenant";
 import { parseReportSearchParams } from "@/lib/reports/parse-search-params";
 import {
   isMatrixIAVisibleForUser,
   isReportVisibleForUser,
 } from "@/lib/reports/visibility";
 import type { Granularity } from "@/lib/chatwoot/queries/leads-recebidos";
+import type { AuthUser } from "@/lib/auth-helpers";
 
 export const metadata = { title: "Origem & IA | Nexus Insights" };
 export const dynamic = "force-dynamic";
@@ -63,7 +65,8 @@ export default async function Page({ searchParams }: PageProps) {
 
   const sp = await searchParams;
   const { period, customStart, customEnd, tab } = parseReportSearchParams(sp);
-  const accountId = await getActiveAccountId();
+  const accountId = await getActiveAccountId(user as AuthUser);
+  await assertAccountAccess(user as AuthUser, accountId);
 
   const granRaw = typeof sp.granularity === "string" ? sp.granularity : null;
   const granularity: Granularity =

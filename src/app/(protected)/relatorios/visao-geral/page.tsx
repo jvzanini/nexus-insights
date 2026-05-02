@@ -17,8 +17,10 @@ import { VolumetriaContent } from "@/components/reports/dashboards/volumetria-co
 import { ChartSkeleton, CardSkeleton } from "@/components/ui/skeleton";
 import { getCurrentUser } from "@/lib/auth";
 import { getActiveAccountId } from "@/lib/reports/active-account";
+import { assertAccountAccess } from "@/lib/tenant";
 import { parseReportSearchParams } from "@/lib/reports/parse-search-params";
 import { isReportVisibleForUser } from "@/lib/reports/visibility";
+import type { AuthUser } from "@/lib/auth-helpers";
 
 export const metadata = { title: "Visão Geral | Nexus Insights" };
 export const dynamic = "force-dynamic";
@@ -54,7 +56,8 @@ export default async function Page({ searchParams }: PageProps) {
 
   const sp = await searchParams;
   const { period, customStart, customEnd, tab } = parseReportSearchParams(sp);
-  const accountId = await getActiveAccountId();
+  const accountId = await getActiveAccountId(user as AuthUser);
+  await assertAccountAccess(user as AuthUser, accountId);
 
   const contentProps = { accountId, period, customStart, customEnd };
 
