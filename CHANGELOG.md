@@ -1,5 +1,61 @@
 # Changelog
 
+## [v0.22.0] 2026-05-02 — Dashboard Polish
+
+> Pacote consolidado de polish do `/dashboard` dirigido por feedback visual + bugs reais de dados. Workflow rigoroso (spec v1→v2→v3 com 22 achados em 2 pente-finos + plan v1→v2→v3 com 18 achados + subagent-driven-development com TDD por task + ui-ux-pro-max em todas as tasks UI). 9 commits granulares · 34 testes novos · typecheck verde · suite com 1284 passing (20 falhas pré-existentes em `integrations-power-bi.test.ts` — escopo do agente paralelo).
+
+### A. PeriodNavigator tag-style (G1)
+
+- **Tipografia maior**: `text-[11px]` → `text-sm font-medium`, igualando padding e fonte das checkboxes Recebidas/Abertas/Resolvidas/Pendentes.
+- **Botões maiores**: `h-5 w-5` → `h-7 w-7`; chevrons `h-3 w-3` → `h-4 w-4`.
+- **Container**: `px-0.5 py-0.5` → `px-2 py-1.5 rounded-lg`. Border violet 50% → 30% (mais sutil, hover compensa).
+- **Acessibilidade**: roles, aria-labels, focus-visible mantidos.
+
+### B. KPIs do topo no padrão consumo (G3, G4)
+
+- **Layout reorganizado** (`KpiClickableCard`): label UPPERCASE em cima (era pequeno embaixo do valor), valor `text-2xl` → `text-3xl font-bold tabular-nums`, trend abaixo do valor (era top-right), subtitle "no período" muted abaixo do trend, ícone top-right (era top-left). Sparkline + hover "ver detalhes" + click handler preservados.
+- **min-h** `7rem` → `8rem` (acomoda label+valor+trend+subtitle+sparkline).
+- **Prop nova `subtitle`**; legacy `sublabel` mantida como fallback (compat).
+- **`dashboard-content.tsx`**: 4 KPIs migrados para `subtitle="no período"`.
+
+### C. Drill-downs alinhados (G4, G8)
+
+- **Renomear "Inbox" → "Estado"** em headers/títulos/descrições da UI (Recebidas, Resolvidas, Status, By-Team, Sem-resposta). Campos internos (`inboxName`, `byInbox`) mantidos por escopo — refactor server-side seria over-engineering.
+- **Coluna "Departamento"** adicionada entre "Estado" e "Atendente" em todas as tabelas de drill-down (5 contextos). Backend ganha JOIN: `LEFT JOIN teams t ON t.id = c.team_id`. Tipos `DrillDownConversationItem`, `NoResponseDrillDownItem`, `ByTeamDrillDownItem` ganham `teamName: string | null`.
+- **Tag âmbar pill** na coluna "Quando" / "Esperando há" / "Última atividade" (consistência com `no-response-card`).
+- **`<TotalBadge n>`** novo (`src/components/dashboard/total-badge.tsx`) — pill violeta com número formatado pt-BR. Usado nos títulos das seções de tabela em todos os drill-downs (substitui "X no total" cosmético e "(N)" entre parênteses).
+- **Distribuição por estado**: `yAxisWidth` 120 → 160 e altura proporcional `Math.max(280, Math.min(480, count * 28 + 60))` — todos os labels visíveis sem pular.
+- **Distribuição por hora**: labels do XAxis viram só "HH:00" (sem "HH:00 – HH:59" no name; janela completa fica documentada na description).
+- **`min-w` da tabela**: 720px → 820px (acomoda nova coluna).
+- **`DrillDownSection.title`** estendido para aceitar `ReactNode` (era `string`) — permite TotalBadge inline no título.
+
+### D. Drill-down "Conversas sem resposta" (G5, G6, G7)
+
+- **Faixa de espera** (G6): `<WaitingBucketsDonut>` novo substitui o card "Resumo / Snapshot atual". 4 buckets fixos (0–4h yellow, 4–24h amber, 1–3 dias orange, mais de 3 dias red) calculados client-side a partir de `items[].waitingSeconds`. Centro mostra `total`, abaixo "Mais antiga há …" condicional.
+- **Bugfix de contagem (G5)**: widget mostrava 31 conversas e drill-down mostrava 11 — divergência de definição. `getNoResponseDrillDown` passa a usar `c.last_activity_at` ∈ período + filtro `WHERE m.message_type IN (0, 1)` no `last_msg` CTE, alinhando exatamente com `dashboardData.noResponse`. Cache key bumpada (`-v2`).
+- **Tabela** (G7): coluna "Última msg" removida (redundante com "Esperando há"); coluna "Departamento" adicionada; "Inbox" → "Estado"; tag âmbar pill em "Esperando há"; toggle Inbox/Atendente → Estado/Atendente (state interna `groupBy` preservada por compat).
+
+### E. Investigação G2 (chart Semana/Mês inconsistente com Dia)
+
+- **Sanity tests** (`fill-buckets.test.ts`): 7 testes provam que matching de bucket key entre SQL UTC (`date_trunc … AT TIME ZONE`) e cliente (`Intl.DateTimeFormat en-CA timeZone tz`) é correto pra granularity=hour e =day em America/Sao_Paulo. **INVARIANT**: soma horária == agregado diário (12 conversas distribuídas em 12 horas == 1 bucket diário com 12).
+- **Diagnostic logging** server-side em `dashboardData()`: captura `accountId`, `granularity`, `range`, `chartLen`, primeiro/último bucket, soma de received, KPI received. Persiste em produção pra futuro diagnóstico.
+- **Conclusão honesta**: sem acesso ao banco real, análise estática + 7 sanity tests indicam que client-side é matemático correto. Se a divergência persistir em produção, o bug é server-side (cache stale ou query SQL diferente). **Hotfix v0.22.1** após análise dos logs em produção.
+
+### F. Cache keys bumpadas
+
+- `dashboard-drill-received-v3` → `-v4`
+- `dashboard-drill-resolved-v3` → `-v4`
+- `dashboard-drill-status-v3` → `-v4`
+- `dashboard-drill-no-response` → `-v2`
+- `dashboard-drill-by-team` → `-v2`
+
+### Notas técnicas
+
+- **Sem schema change** (apenas JOINs adicionais sobre tabelas existentes em SELECT).
+- **34 testes novos**: 4 (TotalBadge) + 4 (WaitingBucketsDonut) + 4 (PeriodNavigator) + 6 (KpiClickableCard) + 4 (drill-down-contents smoke) + 5 (no-response-drill-down) + 7 (fill-buckets sanity).
+- **Coordenação multi-agente**: zero conflito com `claude-empresa-ativa-global` (v0.21.0 LIVE) e `claude-nex-suite-polish-v020` (v0.20.0 LIVE). Não toquei `dashboard/page.tsx`, `src/components/charts/*`, `src/components/agente-nex/*`, `src/lib/nex/prompt.ts`. Bump intencional 0.20 → 0.22 (pulo v0.21).
+- **Coordenação dentro da release**: 9 subagents fresh em sequência (T1 → T2 ‖ T3 ‖ T5 → T4 → T6 ‖ T7 ‖ T8 → T9), TDD por task, `ui-ux-pro-max` invocada antes de cada task UI.
+
 ## [v0.21.0] 2026-05-02 — Empresa Ativa Global (auditoria + 3 tools Nex + contexto)
 
 > Tornar o `AccountSwitcher` do sidebar a fonte ÚNICA e GLOBAL de escopo. Workflow rigoroso (spec v1→v2→v3 com 13+12 achados em 2 pente-finos + plan v1→v2→v3 com 15 achados + subagent-driven-development com TDD). 11 commits granulares · 15 testes novos · typecheck verde · code review autônomo APROVADO.

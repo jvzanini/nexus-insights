@@ -1,12 +1,30 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-05-02
-**Versão atual em produção:** v0.21.0
+**Versão atual em produção:** v0.22.0
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.21.0)
+## Em produção (v0.22.0)
+
+### Release v0.22.0 (2026-05-02) — Dashboard Polish
+
+Pacote de polish do `/dashboard` dirigido por feedback visual e bugs reais. Workflow rigoroso (spec v3 com 22 achados de pente-fino + plan v3 com 18 achados + subagent-driven-development com TDD por task + ui-ux-pro-max em UI). 9 commits granulares · 34 testes novos · typecheck verde.
+
+**A. PeriodNavigator tag-style (G1)** — text-sm font-medium + h-7 botões + chevrons h-4 + padding generoso (px-2 py-1.5 rounded-lg). Mesma fonte/altura das checkboxes Recebidas/Abertas/Resolvidas/Pendentes.
+
+**B. KPIs do topo no padrão consumo (G3, G4)** — `KpiClickableCard` reorganizado: label UPPERCASE em cima, valor 3xl bold, trend abaixo, subtitle "no período" muted, ícone top-right; sparkline e hover "ver detalhes" preservados. min-h 8rem.
+
+**C. Drill-downs alinhados (G4, G8)** — "Inbox" → "Estado" em UI; coluna **Departamento** adicionada (JOIN teams); tag âmbar pill em "Quando"; `<TotalBadge n>` violeta nos títulos das seções; Distribuição por estado com yAxisWidth 160 + altura proporcional (todos os labels visíveis); Distribuição por hora labels HH:00. `DrillDownSection.title` aceita ReactNode.
+
+**D. Drill-down "Conversas sem resposta" (G5, G6, G7)** — `<WaitingBucketsDonut>` substitui "Resumo / Snapshot atual" com 4 buckets (0–4h, 4–24h, 1–3d, >3d); **bugfix de contagem 31 vs 11**: `getNoResponseDrillDown` alinhado ao widget (`last_activity_at` + `message_type IN (0,1)` no `last_msg`); tabela perde "Última msg" (redundante) e ganha Departamento + tag âmbar em "Esperando há".
+
+**E. Investigação G2 (chart Semana/Mês ≠ Dia)** — 7 sanity tests provam invariant client-side (soma horária == agregado diário). Diagnostic logging server-side em `dashboardData()`. Hotfix v0.22.1 após análise de logs em produção, se persistir.
+
+**F. Cache keys bumpadas** — received-v4, resolved-v4, status-v4, no-response-v2, by-team-v2.
+
+**Notas:** sem schema change · 34 testes novos · coordenação multi-agente respeitada (não tocou `dashboard/page.tsx`, charts genéricos, `agente-nex/*`, `prompt.ts`).
 
 ### Release v0.21.0 (2026-05-02) — Empresa Ativa Global (auditoria + 3 tools Nex + contexto)
 
