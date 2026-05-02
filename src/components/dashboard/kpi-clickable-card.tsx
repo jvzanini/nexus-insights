@@ -20,7 +20,9 @@ export interface KpiClickableCardProps {
   iconColor?: string;
   iconBg?: string;
   label: string;
+  /** @deprecated use `subtitle`. Mantido por compat. */
   sublabel?: string;
+  subtitle?: string;
   value: string;
   trend?: KpiTrend | null;
   badge?: string;
@@ -36,6 +38,15 @@ export interface KpiClickableCardProps {
 /**
  * Card pequeno e clicável para KPIs do dashboard. Abre drill-down ao clicar.
  *
+ * Layout (v0.22.0 — alinhado ao KpiCard de /agente-nex/consumo):
+ * - Linha 1: label UPPERCASE pequeno (esq.) + badge (opc.) + ícone top-right.
+ * - Linha 2 (hover): hint "ver detalhes" alinhado à direita.
+ * - Linha 3: valor 3xl bold tabular-nums.
+ * - Linha 4 (opcional): trend com cor up/down/flat.
+ * - Linha 5 (opcional): subtitle muted (fallback para legacy `sublabel`).
+ * - Linha 6 (opcional): sparkline.
+ *
+ * Acessibilidade & motion:
  * - Touch target generoso (>= 44px) cumprido pelo card inteiro.
  * - Hover: ring violeta sutil + leve scale (1.01) + cursor pointer.
  * - Press: scale 0.98 (cumpre `scale-feedback`).
@@ -53,6 +64,7 @@ export function KpiClickableCard({
   iconBg = "bg-violet-500/10",
   label,
   sublabel,
+  subtitle,
   value,
   trend,
   badge,
@@ -62,6 +74,8 @@ export function KpiClickableCard({
   className,
 }: KpiClickableCardProps) {
   const prefersReducedMotion = useReducedMotion();
+  const effectiveSubtitle = subtitle ?? sublabel;
+
   const trendIsGood =
     trend && trend.direction !== "flat"
       ? trend.invert
@@ -95,10 +109,13 @@ export function KpiClickableCard({
       whileHover={prefersReducedMotion ? undefined : { scale: 1.01 }}
       whileTap={prefersReducedMotion ? undefined : { scale: 0.98 }}
       transition={{ type: "spring", stiffness: 400, damping: 28 }}
-      aria-label={ariaLabel ?? `${label}: ${value}. Clique para ver detalhes.`}
+      aria-label={
+        ariaLabel ??
+        `${label}: ${value}.${effectiveSubtitle ? ` ${effectiveSubtitle}.` : ""} Clique para ver detalhes.`
+      }
       className={cn(
         "group relative flex w-full flex-col rounded-xl border border-border bg-card p-5 text-left",
-        "min-h-[7rem] cursor-pointer outline-none",
+        "min-h-[8rem] cursor-pointer outline-none",
         "transition-[border-color,box-shadow] duration-200",
         "hover:border-violet-500/30 hover:shadow-lg hover:shadow-violet-500/5",
         "focus-visible:border-violet-500/40 focus-visible:ring-2 focus-visible:ring-violet-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
@@ -106,17 +123,14 @@ export function KpiClickableCard({
         className,
       )}
     >
-      {/* Linha topo: ícone + trend */}
-      <div className="flex items-start justify-between">
-        <div
-          className={cn(
-            "flex h-10 w-10 items-center justify-center rounded-lg",
-            iconBg,
-          )}
-        >
-          <Icon className={cn("h-5 w-5", iconColor)} aria-hidden />
+      {/* Linha topo: label (esq.) + badge + ícone (top-right) */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+            {label}
+          </p>
         </div>
-        <div className="flex items-center gap-1 text-xs font-medium">
+        <div className="flex items-start gap-2">
           {badge ? (
             <Badge
               variant="outline"
@@ -124,16 +138,19 @@ export function KpiClickableCard({
             >
               {badge}
             </Badge>
-          ) : trend ? (
-            <span className={cn("inline-flex items-center gap-0.5", trendClass)}>
-              <TrendIcon className="h-3.5 w-3.5" aria-hidden />
-              {trend.value}
-            </span>
           ) : null}
+          <div
+            className={cn(
+              "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+              iconBg,
+            )}
+          >
+            <Icon className={cn("h-5 w-5", iconColor)} aria-hidden />
+          </div>
         </div>
       </div>
 
-      {/* Hint "ver detalhes" — discreto, alinhado à direita, abaixo do trend */}
+      {/* Hint "ver detalhes" — discreto, alinhado à direita, abaixo da linha topo */}
       <span
         aria-hidden
         className="mt-1 self-end inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-violet-400/80 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100"
@@ -142,15 +159,27 @@ export function KpiClickableCard({
         <ArrowRight className="h-3 w-3" />
       </span>
 
-      {/* Valor + label */}
+      {/* Valor + trend + subtitle */}
       <div className="mt-3">
-        <p className="font-heading text-2xl font-bold tabular-nums text-foreground">
+        <p className="font-heading text-3xl font-bold tracking-tight tabular-nums text-foreground">
           {value}
         </p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {label}
-          {sublabel ? <span className="ml-1">{sublabel}</span> : null}
-        </p>
+        {trend ? (
+          <p
+            className={cn(
+              "mt-1 inline-flex items-center gap-1 text-xs font-medium",
+              trendClass,
+            )}
+          >
+            <TrendIcon className="h-3.5 w-3.5" aria-hidden />
+            {trend.value}
+          </p>
+        ) : null}
+        {effectiveSubtitle ? (
+          <p className="mt-0.5 text-xs text-muted-foreground/80">
+            {effectiveSubtitle}
+          </p>
+        ) : null}
       </div>
 
       {/* Sparkline — ocupa o final do card sem competir com texto */}
