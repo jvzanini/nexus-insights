@@ -304,6 +304,39 @@ export function AdvancedFilters({
     [applied, pushUrl],
   );
 
+  // v0.19 T12: remove individual via popover de chip +N.
+  const handleRemoveOne = useCallback(
+    (key: keyof FilterState, id: number) => {
+      const next: FilterState = { ...applied };
+      switch (key) {
+        case "inboxIds":
+          next.inboxIds = applied.inboxIds.filter((x) => x !== id);
+          break;
+        case "teamIds":
+          next.teamIds = applied.teamIds.filter((x) => x !== id);
+          break;
+        case "assigneeIds":
+          next.assigneeIds = applied.assigneeIds.filter((x) => x !== id);
+          break;
+        case "labelIds":
+          next.labelIds = applied.labelIds.filter((x) => x !== id);
+          break;
+        case "statuses":
+          next.statuses = applied.statuses.filter((x) => x !== id);
+          break;
+        case "priorities":
+          next.priorities = applied.priorities.filter((x) => x !== id);
+          break;
+        default:
+          return;
+      }
+      setApplied(next);
+      setDraft(next);
+      pushUrl(next);
+    },
+    [applied, pushUrl],
+  );
+
   const updateSearch = (value: string) => {
     setDraft((prev) => ({ ...prev, search: value || undefined }));
   };
@@ -451,6 +484,7 @@ export function AdvancedFilters({
         meta={{ inboxes, teams, assignees, labels }}
         applied={applied}
         onRemove={handleRemoveGroup}
+        onRemoveOne={handleRemoveOne}
         onClearAll={handleReset}
         sortStack={sortStack}
         sortOptions={SORT_OPTIONS}
