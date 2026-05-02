@@ -41,6 +41,12 @@ jest.mock("@/lib/nex/kb", () => ({
   getKbDocsForPrompt: jest.fn(async () => []),
 }));
 
+// T6: run-nex importa buildActiveCompanyContext que vai em @/lib/tenant
+// (Prisma). Mockamos para isolar.
+jest.mock("@/lib/llm/agent/active-company-context", () => ({
+  buildActiveCompanyContext: jest.fn(async () => "CTX"),
+}));
+
 import { runNexAgent } from "@/lib/llm/agent/run-nex";
 import { executeTool } from "@/lib/llm/tools/executor";
 import { logUsage } from "@/lib/llm/agent/usage-logger";
@@ -206,6 +212,7 @@ describe("runNexAgent", () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(capturedSystem).toBe("CUSTOM");
+    // T6: agora é baseSystemPrompt + "\n\n" + companyContext.
+    expect(capturedSystem).toBe("CUSTOM\n\nCTX");
   });
 });

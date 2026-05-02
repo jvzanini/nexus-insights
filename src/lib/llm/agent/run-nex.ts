@@ -27,6 +27,7 @@ import { NEX_TOOLS } from "../tools/definitions";
 import { executeTool } from "../tools/executor";
 import type { ChatMessage, ChatUsage, ProviderClient } from "../types";
 
+import { buildActiveCompanyContext } from "./active-company-context";
 import { logUsage } from "./usage-logger";
 
 const MAX_ITERATIONS = 5;
@@ -63,6 +64,8 @@ export interface RunNexInput {
   messages: ChatMessage[];
   accountId: number;
   userId?: string;
+  /** Nome do usuário corrente — usado em `buildActiveCompanyContext`. */
+  userName?: string | null;
   /** Role do usuário corrente — propagado para `shouldExcludeMatrixIAForRole`. */
   platformRole?: string | null;
   /** Injeção opcional para testes — quando ausente, usa `getActiveLlmClient()`. */
@@ -91,7 +94,15 @@ export async function runNexAgent(args: RunNexInput): Promise<RunNexResult> {
     };
   }
 
-  const systemPrompt = await resolveSystemPrompt(args.promptOverride);
+  const baseSystemPrompt = await resolveSystemPrompt(args.promptOverride);
+  const companyContext = await buildActiveCompanyContext(
+    args.accountId,
+    args.userId
+      ? { name: args.userName ?? null, platformRole: args.platformRole ?? null }
+      : undefined,
+  );
+  const systemPrompt = baseSystemPrompt + "\n\n" + companyContext;
+
   const conversation: ChatMessage[] = [
     { role: "system", content: systemPrompt },
     ...args.messages,

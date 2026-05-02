@@ -63,6 +63,7 @@ export async function sendNexMessage(
     messages: filtered,
     accountId,
     userId,
+    userName: authUser.name ?? null,
     platformRole,
   });
 
@@ -123,6 +124,7 @@ export async function testNexPromptAction(
     messages: [{ role: "user", content: text }],
     accountId,
     userId,
+    userName: authUser.name ?? null,
     platformRole,
     promptOverride: composed,
     isPlayground: true,
