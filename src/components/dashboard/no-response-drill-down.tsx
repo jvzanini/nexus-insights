@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { formatDistanceToNow } from "date-fns";
-import { ptBR } from "date-fns/locale";
 
 import {
   InteractiveBarChart,
@@ -27,6 +25,8 @@ import {
   type DashboardPeriod,
 } from "@/lib/actions/dashboard-drill-down";
 import type { NoResponseDrillDownData } from "@/lib/chatwoot/queries/dashboard-drill-down";
+import { TotalBadge } from "./total-badge";
+import { WaitingBucketsDonut } from "./waiting-buckets-donut";
 
 interface Props {
   accountId: number;
@@ -99,30 +99,19 @@ export function NoResponseDrillDownContent({
     <div className="space-y-5">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <DrillDownSection
-          title="Resumo"
-          description="Snapshot atual"
+          title="Faixa de espera"
+          description="Quanto tempo cada conversa está aguardando agora"
         >
-          <div className="space-y-1">
-            <p className="text-3xl font-bold tabular-nums text-foreground">
-              {data.total.toLocaleString("pt-BR")}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              aguardando resposta
-            </p>
-            {data.oldestSeconds > 0 ? (
-              <p className="mt-2 text-xs text-amber-400">
-                Mais antiga há{" "}
-                <span className="font-semibold">
-                  {formatWaiting(data.oldestSeconds)}
-                </span>
-              </p>
-            ) : null}
-          </div>
+          <WaitingBucketsDonut
+            items={data.items}
+            total={data.total}
+            oldestSeconds={data.oldestSeconds}
+          />
         </DrillDownSection>
 
         <DrillDownSection
           title="Distribuição"
-          description="Veja por inbox ou por atendente"
+          description="Veja por estado ou por atendente"
           action={
             <div
               role="radiogroup"
@@ -140,7 +129,7 @@ export function NoResponseDrillDownContent({
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                Inbox
+                Estado
               </button>
               <button
                 type="button"
@@ -162,20 +151,25 @@ export function NoResponseDrillDownContent({
             data={chartData}
             series={series}
             layout="horizontal"
-            height={Math.max(220, chartData.length * 32 + 40)}
+            height={Math.max(220, Math.min(480, chartData.length * 28 + 40))}
             showLegend={false}
-            yAxisWidth={140}
+            yAxisWidth={160}
             emptyMessage="Sem dados para agrupar"
           />
         </DrillDownSection>
       </div>
 
       <DrillDownSection
-        title={`Conversas sem resposta (${data.items.length})`}
+        title={
+          <>
+            Conversas sem resposta
+            <TotalBadge n={data.items.length} />
+          </>
+        }
         description="Ordenadas pelo tempo de espera"
       >
         <div className="overflow-x-auto rounded-lg border border-border">
-          <Table className="min-w-[720px]">
+          <Table className="min-w-[820px]">
             <TableHeader>
               <TableRow className="border-border hover:bg-transparent">
                 <TableHead className="h-9 text-xs font-medium text-muted-foreground">
@@ -185,13 +179,13 @@ export function NoResponseDrillDownContent({
                   Contato
                 </TableHead>
                 <TableHead className="h-9 text-xs font-medium text-muted-foreground">
-                  Inbox
+                  Estado
+                </TableHead>
+                <TableHead className="h-9 text-xs font-medium text-muted-foreground">
+                  Departamento
                 </TableHead>
                 <TableHead className="h-9 text-xs font-medium text-muted-foreground">
                   Atendente
-                </TableHead>
-                <TableHead className="h-9 text-xs font-medium text-muted-foreground">
-                  Última msg
                 </TableHead>
                 <TableHead className="h-9 text-xs font-medium text-muted-foreground">
                   Ação
@@ -214,8 +208,10 @@ export function NoResponseDrillDownContent({
                     key={item.id}
                     className="border-border/50 transition-colors hover:bg-accent/30"
                   >
-                    <TableCell className="py-2.5 text-xs font-semibold tabular-nums text-amber-400">
-                      {formatWaiting(item.waitingSeconds)}
+                    <TableCell className="py-2.5">
+                      <span className="inline-block rounded-md bg-amber-500/10 px-2 py-1 text-xs font-semibold tabular-nums text-amber-400">
+                        {formatWaiting(item.waitingSeconds)}
+                      </span>
                     </TableCell>
                     <TableCell className="py-2.5 text-sm text-foreground">
                       {item.contactName ?? "—"}
@@ -224,13 +220,10 @@ export function NoResponseDrillDownContent({
                       {item.inboxName ?? "—"}
                     </TableCell>
                     <TableCell className="py-2.5 text-sm text-muted-foreground">
-                      {item.assigneeName ?? "Sem atendente"}
+                      {item.teamName ?? "—"}
                     </TableCell>
-                    <TableCell className="py-2.5 text-xs text-muted-foreground">
-                      {formatDistanceToNow(new Date(item.lastIncomingAt), {
-                        addSuffix: true,
-                        locale: ptBR,
-                      })}
+                    <TableCell className="py-2.5 text-sm text-muted-foreground">
+                      {item.assigneeName ?? "Sem atendente"}
                     </TableCell>
                     <TableCell className="py-2.5">
                       <OpenInChatwoot
