@@ -42,14 +42,14 @@ export async function POST(req: Request): Promise<Response> {
   try {
     const start = Date.now();
     const r = await transcribeAudio(audio, language);
-    const cost = calculateCost("whisper-1", 0, 0, {
+    const cost = calculateCost(r.modelUsed, r.inputTokens, r.outputTokens, {
       durationMs: r.durationSeconds * 1000,
     });
     void logUsage({
       provider: "openai",
-      model: "whisper-1",
-      tokensInput: 0,
-      tokensOutput: 0,
+      model: r.modelUsed,
+      tokensInput: r.inputTokens,
+      tokensOutput: r.outputTokens,
       costUsd: cost,
       promptChars: 0,
       responseChars: r.text.length,
