@@ -90,4 +90,57 @@ describe("ConversaDrillDown — 3 seções inline", () => {
     );
     expect(screen.getByText(/sem atributos/i)).toBeInTheDocument();
   });
+
+  it("Mostra TODOS atributos quando entries.length <= 200", () => {
+    const attrs: Record<string, string> = {};
+    for (let i = 0; i < 50; i++) attrs[`k${i}`] = `v${i}`;
+    render(
+      <ConversaDrillDown
+        row={{ ...baseRow, custom_attributes: attrs } as ConversaRow}
+        accountId={9}
+      />,
+    );
+    for (let i = 0; i < 50; i++) {
+      expect(screen.getByText(`k${i}:`)).toBeInTheDocument();
+    }
+  });
+
+  it("Cap defensivo 200: mostra primeiros 200 + nota '+N atributos não exibidos'", () => {
+    const attrs: Record<string, string> = {};
+    for (let i = 0; i < 250; i++) attrs[`k${i}`] = `v${i}`;
+    render(
+      <ConversaDrillDown
+        row={{ ...baseRow, custom_attributes: attrs } as ConversaRow}
+        accountId={9}
+      />,
+    );
+    expect(screen.getByText(/\+50 atributos não exibidos/)).toBeInTheDocument();
+  });
+
+  it("não renderiza botão 'Ver mais' nem 'Recolher'", () => {
+    const attrs: Record<string, string> = {};
+    for (let i = 0; i < 50; i++) attrs[`k${i}`] = `v${i}`;
+    render(
+      <ConversaDrillDown
+        row={{ ...baseRow, custom_attributes: attrs } as ConversaRow}
+        accountId={9}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: /ver mais/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /recolher/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("container tem border-l violet sutil + animação fade-in", () => {
+    const { container } = render(
+      <ConversaDrillDown row={baseRow} accountId={9} />,
+    );
+    const region = container.querySelector('[role="region"]');
+    expect(region).toHaveClass(/border-l/);
+    expect(region?.className).toMatch(/violet/);
+    expect(region?.className).toMatch(/fade-in/);
+  });
 });
