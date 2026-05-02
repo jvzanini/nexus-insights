@@ -1,5 +1,35 @@
 # Changelog
 
+## [v0.21.0] 2026-05-02 — Empresa Ativa Global (auditoria + 3 tools Nex + contexto)
+
+> Tornar o `AccountSwitcher` do sidebar a fonte ÚNICA e GLOBAL de escopo. Workflow rigoroso (spec v1→v2→v3 com 13+12 achados em 2 pente-finos + plan v1→v2→v3 com 15 achados + subagent-driven-development com TDD). 11 commits granulares · 15 testes novos · typecheck verde · code review autônomo APROVADO.
+
+### A. Hardening do helper `getActiveAccountId`
+
+- **`getActiveAccountId(user)`** — assinatura nova, recebe `AuthUser`, valida via `getAccessibleAccountIds`, devolve a **primeira conta permitida** (fail-closed) em vez do antigo `DEFAULT_ACCOUNT_ID=9` hardcoded. Lança `NoAccessibleAccountError` quando o user não tem nenhuma conta acessível. Envolto em `cache()` do React → dedupe por request RSC.
+- **Layout DRY** — `(protected)/layout.tsx` deixa de duplicar a lógica de fallback (cookie → DEFAULT 9 → first → 9) e passa a chamar o mesmo helper das pages. Captura `NoAccessibleAccountError` → `redirect("/login?reason=no-access")`.
+- **`assertAccountAccess` em todas as 8 pages** que leem o helper (dashboard + 7 relatórios) — defense in depth: 5 camadas (cookie HttpOnly + helper + assertAccountAccess + WHERE account_id + chatwoot_readonly somente SELECT).
+
+### B. Tools introspectivas do Agente Nex (read-only, sem secrets)
+
+- **`get_active_company`** — devolve `{ id, name, platformRole, companyRole, isOwner }` da empresa ativa. Fallback gracioso "Empresa #N" quando o ID não é conhecido.
+- **`get_integrations_status`** — devolve `{ kindCounts: { power_bi: { total, active, errored, disabled, lastSyncAt? } } }` filtrado por `accountIdFilter`. **Gating**: `lastSyncAt` só populado para `super_admin` (managers/viewers só veem contadores agregados).
+- **`get_nex_config_summary`** — devolve `{ provider, model, kbEnabled, kbDocsCount, audioInputEnabled, audioEffectivelyEnabled, bubbleEnabled, nexBubbleVisibility, reportsVisibility }`. **NÃO** retorna chaves, tokens ou URLs internas.
+- **`buildActiveCompanyContext`** — novo helper em `src/lib/llm/agent/active-company-context.ts` injeta bloco "═══ CONTEXTO ATIVO ═══" no system prompt do Nex via `run-nex.ts` (não toca `prompt.ts` — coordenação multi-agente com `claude-nex-suite-polish-v020`). Inclui nome da empresa + accountId + identidade do user (se passada) + inventário das 3 tools novas.
+- **Executor com `platformRole`** — assinatura `executeTool(name, args, accountId, excludeMatrixIA, platformRole)` propagada de `runNexAgent` para habilitar gating por role nas tools novas.
+
+### C. Documentação canônica
+
+- **Runbook `docs/runbooks/escopo-por-empresa.md`** — tabela das 22 surfaces (per-company / global / super_admin / per-user), invariantes para qualquer novo caller (`getCurrentUser → getActiveAccountId → assertAccountAccess → query`), comando de auditoria contínua (`comm -23 ...`), inventário das 3 tools introspectivas, follow-ups identificados no code review (companyRole/isOwner/nexBubbleVisibility stubs, errorCode em nex-chat).
+- **Spec + plan + pente-finos** — `docs/superpowers/specs/2026-05-02-empresa-ativa-global-design.md` (v3), `docs/superpowers/plans/2026-05-02-empresa-ativa-global.md` (v3) com versões intermediárias commitadas para auditoria.
+
+### Notas técnicas
+
+- **Sem schema change**. Cookie `nexus_active_account` mantido (mesmo nome, mesmo shape).
+- **15 testes novos** — 5 cenários de `getActiveAccountId` (cookie ausente/válido/inválido/proibido/sem-conta); 4 cenários de `buildActiveCompanyContext` (nome+ID, fallback, user line, falha graciosa); 6 cenários das tools (shape, gating super_admin, sem secrets, audio condicional).
+- **Coordenação multi-agente** — `claude-nex-suite-polish-v020` (v0.20.0 LIVE) tocou `prompt.ts` + `prisma/schema.prisma`; eu evitei esses arquivos. `claude-conversas-v019` (v0.19.0 LIVE) tocou `relatorios/conversas/page.tsx`; toquei só ao fim depois de >30min sem atividade. `claude-dashboard-polish-v022` (v0.22.0 em curso) declarou compatibilidade.
+- **Code review autônomo APROVADO** — 11/12 itens da spec entregues; 12º (release C2) é a própria entrega. 0 BLOCKING, 3 IMPORTANT (limitações de schema documentadas como follow-ups), 7 NIT.
+
 ## [v0.20.0] 2026-05-02 — Suite Agente Nex Polish
 
 > Polish dirigido por feedback do super_admin (após v0.16.0 LIVE): Whisper tokens reais via gpt-4o-mini-transcribe, gráficos com modo "menor que zero", linha total destaque, prompt menos prolixo, Maximize via Dialog, chaves com logos SVG e botão limpo, filtro global de Provider em Consumo. Spec v3 (49 achados pente-fino) + plan v3 (14 tasks TDD) + ui-ux-pro-max em todas tasks UI.

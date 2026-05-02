@@ -1,12 +1,26 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-05-02
-**Versão atual em produção:** v0.20.0
+**Versão atual em produção:** v0.21.0
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.20.0)
+## Em produção (v0.21.0)
+
+### Release v0.21.0 (2026-05-02) — Empresa Ativa Global (auditoria + 3 tools Nex + contexto)
+
+Tornar o `AccountSwitcher` do sidebar a fonte ÚNICA e GLOBAL de escopo. Workflow rigoroso (spec v3 com 13+12 achados em 2 pente-finos + plan v3 com 15 achados + subagent-driven-development com TDD). 11 commits granulares · 15 testes novos · typecheck verde · code review autônomo APROVADO.
+
+**A. Hardening do helper** — `getActiveAccountId(user)` envolto em `cache()` do React, valida via `getAccessibleAccountIds` e devolve a **primeira conta permitida** (fail-closed) em vez do antigo `DEFAULT_ACCOUNT_ID=9` hardcoded; lança `NoAccessibleAccountError` quando o user não tem nenhuma conta. **Layout DRY** — `(protected)/layout.tsx` deixa de duplicar a lógica e passa a chamar o mesmo helper. **`assertAccountAccess` em todas as 8 pages** (defense in depth de 5 camadas: cookie HttpOnly + helper + assertAccountAccess + WHERE account_id + chatwoot_readonly somente SELECT).
+
+**B. Tools introspectivas do Agente Nex (read-only, sem secrets)** — `get_active_company` (`{ id, name, platformRole, companyRole, isOwner }` com fallback "Empresa #N"); `get_integrations_status` (filtrado por `accountIdFilter`, gating super_admin para `lastSyncAt`); `get_nex_config_summary` (provider/model/KB/audio/visibilidades, NUNCA secrets); `buildActiveCompanyContext` injeta bloco "═══ CONTEXTO ATIVO ═══" no system prompt em `run-nex.ts` (sem tocar `prompt.ts`).
+
+**C. Documentação canônica** — runbook `docs/runbooks/escopo-por-empresa.md` (tabela 22 surfaces + invariantes + comando de auditoria contínua + follow-ups). Spec + plan + 2 pente-finos cada um, commitados para rastreabilidade.
+
+**Notas:** sem schema change · cookie `nexus_active_account` mantido · 15 testes novos · coordenação multi-agente respeitada (não tocou `prompt.ts`/`schema.prisma`/`agente-nex/*` do `claude-nex-suite-polish-v020`).
+
+Runbook: `docs/runbooks/escopo-por-empresa.md`.
 
 ### Release v0.20.0 (2026-05-02) — Suite Agente Nex Polish
 
