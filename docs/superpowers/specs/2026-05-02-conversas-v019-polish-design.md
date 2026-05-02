@@ -617,7 +617,9 @@ className="... text-muted-foreground transition-colors hover:bg-destructive/15 h
 
 **Verificação a11y de contrast**: text-destructive (red-500) sobre bg-destructive/15 em dark mode — cálculo: red-500 (~ #ef4444) sobre dark bg + 15% red overlay. Aproximadamente 4.7:1. PASS na maioria dos casos. Em light mode, contrast também passa. Se algum smoke test indicar borda → trocar pra `bg-destructive/20`.
 
-### 3.11 Calendar — fix outside days
+### 3.11 Calendar — fix outside days (PRIORIDADE TOTAL — vale pra toda a plataforma)
+
+> **Reforço explícito do super_admin**: este fix é prioridade total e vale como **padrão** pra todos os menus da plataforma que usam o calendar de seleção personalizada de data — não só em `/relatorios/conversas`. O fix afeta TODAS as telas que usam `<PeriodPills>`.
 
 #### 3.11.1 Bug
 
@@ -627,23 +629,39 @@ className="... text-muted-foreground transition-colors hover:bg-destructive/15 h
 <Calendar
   mode="range"
   ...
-  showOutsideDays  // ← BUG: prop sem valor = true
+  showOutsideDays  // ← BUG: prop sem valor = true (sobrescreve default false do Calendar)
   ...
 />
 ```
 
 #### 3.11.2 Fix
 
-Remover a linha `showOutsideDays`. Calendar usa default `false` do componente.
+Remover a linha `showOutsideDays`. O componente `<Calendar>` (em `src/components/ui/calendar.tsx:18`) já tem default `showOutsideDays = false`. Como `<PeriodPills>` é o único consumidor de `<Calendar>` no projeto (verificado via grep), o fix em `period-pills.tsx` propaga automaticamente para **todas** as telas.
 
-#### 3.11.3 Verificar outros usuários do `<PeriodPills>`
+#### 3.11.3 Auditoria de consumidores
 
-Antes do plan, rodar:
-```bash
-grep -rln "<PeriodPills" src
-```
+Verificado via grep:
 
-Se aparecer fora de `<AdvancedFilters>`, todos beneficiam do fix automaticamente. Se algum site customiza `showOutsideDays` direto, registrar no plan.
+- **Componentes que usam `<Calendar>`**: APENAS `period-pills.tsx` (1 lugar). Componente isolado.
+- **Componentes que usam `<PeriodPills>`** (3 lugares):
+  - `src/components/reports/advanced-filters.tsx` (`/relatorios/conversas`).
+  - `src/components/llm/consumo-content.tsx` (`/agente-nex/consumo`).
+  - `src/components/reports/period-selector-url.tsx` — wrapper usado por:
+    - `/relatorios/distribuicao`
+    - `/relatorios/equipe`
+    - `/relatorios/origem-ia`
+    - `/relatorios/performance`
+    - `/relatorios/visao-geral`
+    - `/relatorios/mensagens-nao-respondidas`
+
+**Total**: 1 fix em `period-pills.tsx` → 8+ telas corrigidas.
+
+#### 3.11.4 Smoke E2E pós-deploy
+
+Verificar em pelo menos 3 telas distintas que dias overflow não aparecem:
+- `/relatorios/conversas` (data personalizada).
+- `/agente-nex/consumo` (data personalizada).
+- `/relatorios/distribuicao` (data personalizada).
 
 ### 3.12 minDate dinâmica por accountId
 
