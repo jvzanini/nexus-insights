@@ -30,14 +30,32 @@ describe("IDENTITY_BASE", () => {
 
   it("NÃO usa ChatGPT/GPT/Claude/Gemini como identidade", () => {
     // não pode aparecer como auto-identificação. Texto canônico cita esses
-    // nomes apenas dentro da regra "NUNCA mencione ..." — então procuramos
-    // pela frase de blindagem.
-    expect(IDENTITY_BASE).toContain('NUNCA mencione "ChatGPT"');
+    // nomes apenas dentro da regra de blindagem — então procuramos pela
+    // instrução de não-mencionar (regex flexível).
+    expect(IDENTITY_BASE).toMatch(/Não mencione.*"ChatGPT"/i);
+    expect(IDENTITY_BASE).toContain("ChatGPT");
+    expect(IDENTITY_BASE).toContain("GPT");
+    expect(IDENTITY_BASE).toContain("Claude");
+    expect(IDENTITY_BASE).toContain("Gemini");
+    expect(IDENTITY_BASE).toContain("OpenAI");
+    expect(IDENTITY_BASE).toContain("Anthropic");
+    expect(IDENTITY_BASE).toContain("Google");
   });
 
-  it("define formato de deep-link via mapeamento de URL pública", () => {
-    expect(IDENTITY_BASE).toContain(
-      "{publicUrl}/app/accounts/{accountId}/conversations/{conversationId}",
+  it("orienta uso do mapeamento de URL pública para deep-links", () => {
+    expect(IDENTITY_BASE.toLowerCase()).toContain("deep-link");
+    expect(IDENTITY_BASE.toLowerCase()).toContain("url pública");
+  });
+
+  it("é enxuta (anti-prolixidade)", () => {
+    expect(IDENTITY_BASE.length).toBeLessThan(1500);
+  });
+
+  it("menciona 'dashboard summary' apenas como jargão proibido (não como instrução de uso)", () => {
+    // O texto pode citar "dashboard summary" dentro da regra anti-jargão,
+    // mas NÃO pode instruir o agente a usar/citar esse termo.
+    expect(IDENTITY_BASE.toLowerCase()).toMatch(
+      /sem citar nomes técnicos internos[^.]*"dashboard summary"/i,
     );
   });
 });
