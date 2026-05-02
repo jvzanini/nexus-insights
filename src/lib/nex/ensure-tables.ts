@@ -76,6 +76,16 @@ async function createTables(): Promise<void> {
       AND "seeded_defaults_at" IS NULL
       AND ("guardrails" IS NULL OR "guardrails" = '[]'::jsonb);
   `);
+  // v0.20.0: backfill condicional de Personality e Tom default (apenas se já houve
+  // seed de guardrails E ambos campos estão vazios — não sobrescreve customizações).
+  await pgPool.query(`
+    UPDATE "nex_settings"
+    SET "personality" = 'Direto, prático, prefere bullets curtos quando há listas. Evita rodeios e textão. Não se apresenta a cada turno.',
+        "tone" = 'Profissional e objetivo, em pt-BR. Usa "você". Sem se desculpar; sem repetir o nome do agente.'
+    WHERE "id" = 'global'
+      AND "seeded_defaults_at" IS NOT NULL
+      AND "personality" = '' AND "tone" = '';
+  `);
 }
 
 export async function ensureNexTables(): Promise<void> {
