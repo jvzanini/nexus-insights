@@ -123,6 +123,9 @@ Se houver dúvida, escreva uma nota neste runbook + abra issue.
 - Tornar KB per-company.
 - Tornar chaves LLM per-company com billing.
 - Badge UI "esta tela é global vs per-company".
+- **Tool `get_active_company` simplificada** — `companyRole` e `isOwner` retornam stubs (`null`/`false`) hoje porque o schema ainda não tem `UserCompanyMembership`. Quando o schema crescer, atualizar `executor.ts → getActiveCompany` para popular esses campos via Prisma.
+- **Tool `get_nex_config_summary.nexBubbleVisibility`** — retorna sempre `"all_users"` na v0.21.0 (a coluna correspondente não existe no schema atual). Quando a visibility por role for adicionada à `nex_settings`, ajustar a função.
+- **Server Action `nex-chat`** — retorna `{ ok: false, error: "Sem acesso a nenhuma conta" }` genérico em `NoAccessibleAccountError`. Próxima iteração: adicionar `errorCode: "no_access"` para a UI do bubble exibir mensagem específica.
 
 Esses estão fora do escopo da v0.21.0.
 
