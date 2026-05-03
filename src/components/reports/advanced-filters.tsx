@@ -70,9 +70,10 @@ export type { MetaItem };
 // colunas com `compareFn` definidos em <ConversasTable>. WhatsApp foi
 // removido junto com a coluna em v0.10.4 (continua disponível só no
 // drill-down).
-const SORT_OPTIONS: SortRuleOption[] = [
+export const SORT_OPTIONS: SortRuleOption[] = [
   { key: "display_id", label: "#" },
   { key: "name", label: "Nome" },
+  { key: "document", label: "Documento" },
   { key: "inbox", label: "Estado" },
   { key: "team", label: "Departamento" },
   { key: "assignee", label: "Atendente" },
