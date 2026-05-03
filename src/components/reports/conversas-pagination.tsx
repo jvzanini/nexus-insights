@@ -1,7 +1,13 @@
 "use client";
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useState } from "react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -12,37 +18,134 @@ interface Props {
 }
 
 /**
- * Lista as páginas a renderizar com "ellipsis" entre lacunas (gap > 1).
- * Sempre inclui: primeira (1), última (totalPages), atual e vizinhos imediatos.
+ * Algoritmo v0.23: simplificado.
+ * - 1 pág: [1]
+ * - 2-4 pág: todas
+ * - 5+ atual=1 ou N: [1, "...", N]
+ * - 5+ atual no meio: [1, "...", page, "...", N]
  *
- * Exemplos:
- *   totalPages=5, page=3  → [1,2,3,4,5]
- *   totalPages=12, page=1 → [1,2,"ellipsis",12]
- *   totalPages=12, page=6 → [1,"ellipsis",5,6,7,"ellipsis",12]
- *   totalPages=12, page=12→ [1,"ellipsis",11,12]
+ * Reticência → Popover dropdown com páginas do range.
+ * Atual no meio → Popover dropdown com 1..N (atual destacada com check).
  */
 function buildPageItems(
   page: number,
   totalPages: number,
 ): Array<number | "ellipsis"> {
-  // Quando o total cabe sem elipsis, lista tudo (1..N).
-  if (totalPages <= 7) {
-    return Array.from({ length: totalPages }, (_, i) => i + 1);
-  }
-  const set = new Set<number>([1, totalPages, page - 1, page, page + 1]);
-  const sorted = [...set]
-    .filter((p) => p >= 1 && p <= totalPages)
-    .sort((a, b) => a - b);
-  const result: Array<number | "ellipsis"> = [];
-  for (let i = 0; i < sorted.length; i++) {
-    if (i > 0 && sorted[i]! - sorted[i - 1]! > 1) result.push("ellipsis");
-    result.push(sorted[i]!);
-  }
-  return result;
+  if (totalPages <= 0) return [];
+  if (totalPages === 1) return [1];
+  if (totalPages === 2) return [1, 2];
+  if (totalPages === 3) return [1, 2, 3];
+  if (totalPages === 4) return [1, 2, 3, 4];
+  if (page === 1 || page === totalPages) return [1, "ellipsis", totalPages];
+  return [1, "ellipsis", page, "ellipsis", totalPages];
+}
+
+function rangeToPages(start: number, end: number): number[] {
+  const out: number[] = [];
+  for (let i = start; i <= end; i++) out.push(i);
+  return out;
+}
+
+function EllipsisDropdown({
+  pages,
+  onSelect,
+}: {
+  pages: number[];
+  onSelect: (p: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  if (pages.length === 0) return null;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={(props) => (
+          <button
+            {...props}
+            type="button"
+            aria-label="Selecionar página"
+            className="inline-flex h-9 min-w-9 items-center justify-center rounded-md border border-border/50 px-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40"
+          >
+            …
+          </button>
+        )}
+      />
+      <PopoverContent className="w-32 p-1">
+        <ul role="list" className="max-h-64 overflow-y-auto">
+          {pages.map((p) => (
+            <li key={p}>
+              <button
+                type="button"
+                onClick={() => {
+                  onSelect(p);
+                  setOpen(false);
+                }}
+                className="flex w-full items-center justify-center rounded-md px-2 py-1.5 text-sm tabular-nums hover:bg-muted"
+              >
+                {p}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function CurrentPageDropdown({
+  page,
+  totalPages,
+  onPageChange,
+}: {
+  page: number;
+  totalPages: number;
+  onPageChange: (p: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={(props) => (
+          <button
+            {...props}
+            type="button"
+            aria-current="page"
+            aria-label={`Página atual ${page} — selecionar outra`}
+            className="inline-flex h-9 min-w-9 items-center justify-center gap-1 rounded-md border border-violet-500/40 bg-violet-500/15 px-3 text-sm font-semibold text-violet-500 tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40"
+          >
+            {page}
+            <ChevronDown className="h-3 w-3" aria-hidden />
+          </button>
+        )}
+      />
+      <PopoverContent className="w-32 p-1">
+        <ul role="list" className="max-h-64 overflow-y-auto">
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+            <li key={p}>
+              <button
+                type="button"
+                onClick={() => {
+                  onPageChange(p);
+                  setOpen(false);
+                }}
+                className={cn(
+                  "flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm tabular-nums hover:bg-muted",
+                  p === page &&
+                    "bg-violet-500/15 font-semibold text-violet-500",
+                )}
+              >
+                {p}
+                {p === page ? <Check className="h-3 w-3" aria-hidden /> : null}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 /**
- * Barra de paginação numerada com setinhas e elipsis.
+ * Barra de paginação numerada com setinhas, reticência-dropdown e atual-dropdown.
  * Não renderiza nada quando totalPages <= 1.
  */
 export function ConversasPagination({
@@ -53,15 +156,13 @@ export function ConversasPagination({
 }: Props) {
   if (totalPages <= 1) return null;
   const items = buildPageItems(page, totalPages);
+  const ellipsisCount = items.filter((it) => it === "ellipsis").length;
 
   return (
     <nav
       role="navigation"
       aria-label="Paginação de conversas"
-      className={cn(
-        "flex items-center justify-center gap-1.5 border-t border-border/40 bg-muted/10 p-3",
-        className,
-      )}
+      className={cn("flex items-center gap-1.5", className)}
     >
       <button
         type="button"
@@ -73,33 +174,63 @@ export function ConversasPagination({
         <ChevronLeft className="h-4 w-4" aria-hidden />
       </button>
 
-      {items.map((it, idx) =>
-        it === "ellipsis" ? (
-          <span
-            key={`e${idx}`}
-            className="inline-flex h-9 min-w-9 items-center justify-center px-1 text-sm text-muted-foreground tabular-nums"
-            aria-hidden
-          >
-            …
-          </span>
-        ) : (
+      {items.map((it, idx) => {
+        if (it === "ellipsis") {
+          // Range das páginas a exibir no dropdown.
+          let start = 2;
+          let end = totalPages - 1;
+          if (ellipsisCount === 2) {
+            // [1, "ellipsis", page, "ellipsis", N]: idx 1 = esquerda, idx 3 = direita.
+            if (idx === 1) {
+              start = 2;
+              end = page - 1;
+            } else {
+              start = page + 1;
+              end = totalPages - 1;
+            }
+          }
+          const pages = rangeToPages(start, end);
+          return (
+            <EllipsisDropdown
+              key={`e${idx}`}
+              pages={pages}
+              onSelect={onPageChange}
+            />
+          );
+        }
+
+        const isCurrent = page === it;
+        const isEdge = it === 1 || it === totalPages;
+
+        if (isCurrent && !isEdge) {
+          return (
+            <CurrentPageDropdown
+              key={it}
+              page={page}
+              totalPages={totalPages}
+              onPageChange={onPageChange}
+            />
+          );
+        }
+
+        return (
           <button
             key={it}
             type="button"
             onClick={() => onPageChange(it)}
-            aria-current={page === it ? "page" : undefined}
+            aria-current={isCurrent ? "page" : undefined}
             aria-label={`Ir para página ${it}`}
             className={cn(
               "inline-flex h-9 min-w-9 items-center justify-center rounded-md border px-3 text-sm tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40",
-              page === it
-                ? "border-violet-500/40 bg-violet-500/15 text-violet-500 font-semibold"
-                : "border-border/50 text-foreground hover:bg-muted hover:border-border",
+              isCurrent
+                ? "border-violet-500/40 bg-violet-500/15 font-semibold text-violet-500"
+                : "border-border/50 text-foreground hover:border-border hover:bg-muted",
             )}
           >
             {it}
           </button>
-        ),
-      )}
+        );
+      })}
 
       <button
         type="button"
