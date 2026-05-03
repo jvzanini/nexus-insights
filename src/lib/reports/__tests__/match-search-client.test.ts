@@ -76,15 +76,52 @@ describe("matchSearchClient", () => {
     expect(matchSearchClient([baseRow], "João")).toHaveLength(1);
     expect(matchSearchClient([baseRow], "SILVA")).toHaveLength(1);
   });
-  it("telefone com/sem máscara", () => {
+  it("digits raw bate (haystack tem raw via phoneVariants)", () => {
     expect(matchSearchClient([baseRow], "5511987654321")).toHaveLength(1);
-    expect(matchSearchClient([baseRow], "11 98765-4321")).toHaveLength(1);
+  });
+  it("substring contígua do formatPhone bate", () => {
     expect(matchSearchClient([baseRow], "987654321")).toHaveLength(1);
     expect(matchSearchClient([baseRow], "98765-4321")).toHaveLength(1);
   });
-  it("CPF com/sem máscara", () => {
-    expect(matchSearchClient([baseRow], "07041511111")).toHaveLength(1);
+  it("phone com máscara divergente (parens entre) NÃO bate (v0.27 respeita ordem)", () => {
+    // Comportamento intencional: match agora é substring contígua estrita.
+    // "11 98765-4321" não bate "+55 (11) 98765-4321" porque há "(", ")" entre.
+    expect(matchSearchClient([baseRow], "11 98765-4321")).toHaveLength(0);
+  });
+  it("CPF formatted bate", () => {
     expect(matchSearchClient([baseRow], "070.415.111-11")).toHaveLength(1);
+  });
+  it("CPF raw bate", () => {
+    expect(matchSearchClient([baseRow], "07041511111")).toHaveLength(1);
+  });
+  it("'3380' NÃO bate em row com display_id 3803 (caracteres iguais, ordem diferente — bug v0.25)", () => {
+    const r = {
+      ...baseRow,
+      display_id: 3803,
+      contact: { ...baseRow.contact, phone_number: null, identifier: null },
+      custom_attributes: null,
+      labels: [],
+    };
+    expect(matchSearchClient([r], "3380")).toHaveLength(0);
+  });
+  it("'3380' BATE em row com phone '+5511338021234' (substring contígua intencional)", () => {
+    const r = {
+      ...baseRow,
+      display_id: 999,
+      contact: {
+        ...baseRow.contact,
+        phone_number: "+5511338021234",
+        identifier: null,
+        name: "Test",
+      },
+      custom_attributes: null,
+      labels: [],
+    };
+    expect(matchSearchClient([r], "3380")).toHaveLength(1);
+  });
+  it("'#3380' bate em row com display_id 3380 (haystack tem '#3380')", () => {
+    const r = { ...baseRow, display_id: 3380 };
+    expect(matchSearchClient([r], "#3380")).toHaveLength(1);
   });
   it("inbox/team/assignee com acento", () => {
     expect(matchSearchClient([baseRow], "amapa")).toHaveLength(1);

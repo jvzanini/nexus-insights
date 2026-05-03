@@ -61,25 +61,16 @@ export function buildHaystack(row: ConversaRow): string {
 }
 
 /**
- * Detecta se o needle parece um telefone/documento mascarado: composto
- * exclusivamente por dígitos, espaços e pontuação típica (`-`, `.`, `(`,
- * `)`, `/`, `+`). Quando sim, ativa o match digits-only (cobre máscaras
- * arbitrárias como "11 98765-4321" vs "+55 (11) 98765-4321").
- */
-function isPhoneOrDocLike(s: string): boolean {
-  if (!/\d/.test(s)) return false;
-  return /^[\d\s\-.()\/+]+$/.test(s);
-}
-
-/**
  * Match OR sobre haystack normalizado.
  *
- * Estratégia dupla:
- *  1. Match textual direto sobre o haystack normalizado (cobre nomes, status,
- *     prioridade, labels, custom_attributes, identifier formatado etc).
- *  2. Match digits-only APENAS quando o needle é phone/doc-like (só dígitos
- *     + pontuação típica). Compara needle-digits vs haystack-digits para
- *     capturar máscaras arbitrárias.
+ * Match é substring contígua (case + acentos insensíveis). Respeita a
+ * ordem dos caracteres digitados pelo usuário — "3380" NÃO bate em
+ * haystack que contém "3803" (mesmos dígitos, ordem diferente).
+ *
+ * Telefones e documentos são cobertos via formatos múltiplos no haystack
+ * (phoneVariants: raw + formatPhone + digits-only; documentVariants:
+ * identifier + formatted CPF/CNPJ). Máscaras arbitrárias só batem se
+ * forem substring contígua de algum dos formatos.
  */
 export function matchSearchClient(
   rows: ConversaRow[],
@@ -88,15 +79,5 @@ export function matchSearchClient(
   const trimmed = (search ?? "").trim();
   if (!trimmed) return rows;
   const needle = normalize(trimmed);
-  const useDigitsMatch = isPhoneOrDocLike(trimmed);
-  const needleDigits = useDigitsMatch ? trimmed.replace(/\D/g, "") : "";
-  return rows.filter((row) => {
-    const hay = buildHaystack(row);
-    if (hay.includes(needle)) return true;
-    if (useDigitsMatch && needleDigits.length > 0) {
-      const hayDigits = hay.replace(/\D/g, "");
-      if (hayDigits.includes(needleDigits)) return true;
-    }
-    return false;
-  });
+  return rows.filter((row) => buildHaystack(row).includes(needle));
 }
