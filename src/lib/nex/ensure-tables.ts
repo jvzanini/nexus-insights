@@ -55,6 +55,40 @@ async function createTables(): Promise<void> {
     ALTER TABLE "nex_settings"
       ADD COLUMN IF NOT EXISTS "identity_base" TEXT NULL;
   `);
+  // v0.31.0: terminology JSONB — mapa termo→significado pra interpretar nomenclaturas custom.
+  await pgPool.query(`
+    ALTER TABLE "nex_settings"
+      ADD COLUMN IF NOT EXISTS "terminology" JSONB NOT NULL DEFAULT '{}'::jsonb;
+  `);
+  // v0.31.0: suggestions_enabled — toggle "Sugestões em botões" (default off).
+  await pgPool.query(`
+    ALTER TABLE "nex_settings"
+      ADD COLUMN IF NOT EXISTS "suggestions_enabled" BOOLEAN NOT NULL DEFAULT false;
+  `);
+  // v0.31.0: seeded_v3_at — flag pra pre-seed idempotente. Sem isso, próximo
+  // ensureNexTables re-aplica defaults Matrix sobrescrevendo customizações vazias.
+  await pgPool.query(`
+    ALTER TABLE "nex_settings"
+      ADD COLUMN IF NOT EXISTS "seeded_v3_at" TIMESTAMPTZ NULL;
+  `);
+  // v0.31.0: pre-seed terminology padrão Matrix — IDEMPOTENTE via seeded_v3_at.
+  // Só roda 1 vez por install; user pode limpar terminology depois sem re-seed.
+  await pgPool.query(`
+    UPDATE "nex_settings"
+    SET "terminology" = '{
+      "estados": "inboxes",
+      "colaboradores": "agentes",
+      "funcionários": "agentes",
+      "minha equipe": "agentes",
+      "meu time": "agentes",
+      "departamento": "teams",
+      "setor": "teams",
+      "time": "teams"
+    }'::jsonb,
+    "seeded_v3_at" = now()
+    WHERE "id" = 'global'
+      AND "seeded_v3_at" IS NULL;
+  `);
   // v0.16.0: chatwoot_account_urls (mapping account_id → URL pública para deep-links do Agente Nex).
   await pgPool.query(`
     CREATE TABLE IF NOT EXISTS "chatwoot_account_urls" (

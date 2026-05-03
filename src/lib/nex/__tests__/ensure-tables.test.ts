@@ -88,3 +88,48 @@ describe("ensure-tables — identity_base column (v0.28)", () => {
     expect(String(alterCall![0])).toMatch(/TEXT/i);
   });
 });
+
+describe("ensure-tables — terminology + suggestions_enabled + seeded_v3_at (v0.31)", () => {
+  it("ALTER TABLE adiciona terminology JSONB DEFAULT '{}'", async () => {
+    await ensureNexTables();
+    const alterCall = q.mock.calls.find((c) =>
+      String(c[0]).match(/ADD COLUMN IF NOT EXISTS\s+"?terminology/i),
+    );
+    expect(alterCall).toBeDefined();
+    expect(String(alterCall![0])).toMatch(/JSONB/i);
+    expect(String(alterCall![0])).toMatch(/DEFAULT\s+'\{\}'::jsonb/i);
+  });
+
+  it("ALTER TABLE adiciona suggestions_enabled BOOLEAN DEFAULT false", async () => {
+    await ensureNexTables();
+    const alterCall = q.mock.calls.find((c) =>
+      String(c[0]).match(/ADD COLUMN IF NOT EXISTS\s+"?suggestions_enabled/i),
+    );
+    expect(alterCall).toBeDefined();
+    expect(String(alterCall![0])).toMatch(/BOOLEAN/i);
+    expect(String(alterCall![0])).toMatch(/DEFAULT\s+false/i);
+  });
+
+  it("ALTER TABLE adiciona seeded_v3_at TIMESTAMPTZ NULL (flag de pre-seed idempotente)", async () => {
+    await ensureNexTables();
+    const alterCall = q.mock.calls.find((c) =>
+      String(c[0]).match(/ADD COLUMN IF NOT EXISTS\s+"?seeded_v3_at/i),
+    );
+    expect(alterCall).toBeDefined();
+    expect(String(alterCall![0])).toMatch(/TIMESTAMPTZ/i);
+  });
+
+  it("UPDATE pre-seed terminology Matrix gated por seeded_v3_at IS NULL (idempotente)", async () => {
+    await ensureNexTables();
+    const seedCall = q.mock.calls.find((c) =>
+      String(c[0]).replace(/\n/g, " ").match(/UPDATE\s+"nex_settings".*SET\s+"terminology"/i),
+    );
+    expect(seedCall).toBeDefined();
+    const sql = String(seedCall![0]);
+    expect(sql).toMatch(/"estados":\s*"inboxes"/);
+    expect(sql).toMatch(/"colaboradores":\s*"agentes"/);
+    expect(sql).toMatch(/"departamento":\s*"teams"/);
+    expect(sql).toMatch(/AND\s+"?seeded_v3_at"?\s+IS\s+NULL/i);
+    expect(sql).toMatch(/"seeded_v3_at"\s*=\s*now\(\)/i);
+  });
+});
