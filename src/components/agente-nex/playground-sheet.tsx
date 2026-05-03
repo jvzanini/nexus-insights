@@ -54,11 +54,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Sheet, SheetBody, SheetFooter, SheetHeader } from "@/components/ui/sheet";
+import { Sheet, SheetBody, SheetHeader } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { testNexPromptAction } from "@/lib/actions/nex-chat";
+import { sendNexMessage } from "@/lib/actions/nex-chat";
 import { previewSystemPromptAction } from "@/lib/actions/nex-prompt";
-import type { LlmProvider } from "@/lib/llm/types";
+import type { ChatMessage, LlmProvider } from "@/lib/llm/types";
 import type { NexPromptConfig } from "@/lib/nex/prompt";
 import { cn } from "@/lib/utils";
 
@@ -84,13 +84,6 @@ export interface PlaygroundSheetProps {
   providerLabel?: string;
   /** Label legível do modelo (ex.: "GPT-5.4"). */
   modelLabel?: string;
-}
-
-function counterClass(current: number, max: number): string {
-  const ratio = current / max;
-  if (current > max) return "text-destructive";
-  if (ratio >= 0.9) return "text-amber-600 dark:text-amber-400";
-  return "text-muted-foreground";
 }
 
 function genId(): string {
@@ -158,47 +151,64 @@ export function PlaygroundSheet({
   }, []);
 
   /**
-   * Envia uma mensagem de texto direto (sem ler `message` state — evita closure
-   * stale quando chamado após `setMessage` no flow de áudio).
+   * Envia uma mensagem de texto direto.
+   *
+   * v0.28: usa `sendNexMessage` (mesma action da bubble) com histórico completo
+   * — substituindo `testNexPromptAction(text, cfg)` que enviava só a msg atual
+   * sem contexto. Trade-off: o playground deixou de testar "prompt em edição"
+   * (não usa mais cfg do form); usa o prompt do DB direto. User aprovou:
+   * prefere qualidade idêntica à bubble do que testar prompt antes de salvar.
+   *
+   * Construímos o histórico ANTES de `appendItems` pra evitar closure stale —
+   * `items` no momento da chamada já reflete o estado correto pré-submit.
    */
-  const submitMessage = useCallback(
-    (text: string) => {
-      const trimmedText = text.trim();
-      if (!trimmedText) return;
-      if (trimmedText.length > MAX_INPUT_LEN) {
-        toast.error(`Mensagem acima de ${MAX_INPUT_LEN} chars.`);
-        return;
-      }
-      const userItem: ChatItem = {
-        id: genId(),
-        role: "user",
-        content: trimmedText,
-      };
-      appendItems([userItem]);
-      setMessage("");
+  function submitMessage(text: string) {
+    const trimmedText = text.trim();
+    if (!trimmedText) return;
+    if (trimmedText.length > MAX_INPUT_LEN) {
+      toast.error(`Mensagem acima de ${MAX_INPUT_LEN} chars.`);
+      return;
+    }
 
-      startSend(async () => {
-        try {
-          const r = await testNexPromptAction(trimmedText, cfgSnapshot);
-          if (!r.ok) {
-            toast.error(
-              `Erro: ${r.error}. Verifique chave/modelo em Configuração.`,
-            );
-            return;
-          }
-          appendItems([
-            { id: genId(), role: "assistant", content: r.message },
-          ]);
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
+    // Histórico = msgs já no estado (apenas user/assistant) + nova user msg.
+    const history: ChatMessage[] = [
+      ...items
+        .filter((m) => m.role === "user" || m.role === "assistant")
+        .map((m) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        })),
+      { role: "user", content: trimmedText },
+    ];
+
+    const userItem: ChatItem = {
+      id: genId(),
+      role: "user",
+      content: trimmedText,
+    };
+    appendItems([userItem]);
+    setMessage("");
+
+    startSend(async () => {
+      try {
+        const r = await sendNexMessage(history);
+        if (!r.ok) {
           toast.error(
-            `Erro: ${msg}. Verifique chave/modelo em Configuração.`,
+            `Erro: ${r.error}. Verifique chave/modelo em Configuração.`,
           );
+          return;
         }
-      });
-    },
-    [appendItems, cfgSnapshot, startSend],
-  );
+        appendItems([
+          { id: genId(), role: "assistant", content: r.message },
+        ]);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        toast.error(
+          `Erro: ${msg}. Verifique chave/modelo em Configuração.`,
+        );
+      }
+    });
+  }
 
   function handleSendClick() {
     if (isRecording) {
@@ -354,7 +364,13 @@ export function PlaygroundSheet({
           </div>
         </SheetBody>
 
-        <SheetFooter className="flex-col items-stretch gap-2 sm:flex-col sm:items-stretch">
+        {/*
+          Footer HTML normal (não SheetFooter sticky) — paridade visual com
+          nex-chat-panel: Mic externo redondo + inner area unificada + Send
+          violet retangular. Counter inline removido (visual mais limpo;
+          maxLength do textarea já blocka excesso).
+        */}
+        <footer className="border-t border-border bg-background/60 px-3 pt-3 pb-3">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -402,7 +418,7 @@ export function PlaygroundSheet({
                   onKeyDown={handleKeyDown}
                   maxLength={MAX_INPUT_LEN}
                   rows={1}
-                  placeholder="Pergunte algo ao Nex…"
+                  placeholder="Pergunte ao agente Nex…"
                   disabled={isSending}
                   aria-label="Mensagem para o Nex"
                   className="resize-none bg-transparent text-sm leading-relaxed border-0 shadow-none focus-visible:ring-0 px-0 py-1 max-h-28"
@@ -427,9 +443,7 @@ export function PlaygroundSheet({
             <button
               type="submit"
               aria-label={isRecording ? "Enviar áudio" : "Enviar pergunta"}
-              disabled={
-                isRecording ? false : !canSubmit || audioFlight
-              }
+              disabled={isRecording ? false : !canSubmit || audioFlight}
               className={cn(
                 "flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-xl",
                 "bg-gradient-to-br from-violet-600 to-violet-500 text-white shadow-md shadow-violet-600/30",
@@ -448,26 +462,15 @@ export function PlaygroundSheet({
               )}
             </button>
           </form>
-          <div className="flex items-center justify-between gap-2 px-1">
-            <span
-              className={cn(
-                "text-xs tabular-nums",
-                counterClass(message.length, MAX_INPUT_LEN),
-              )}
-              aria-live="polite"
-            >
-              {message.length}/{MAX_INPUT_LEN}
-            </span>
-            <span
-              className={cn(
-                "text-[11px] text-muted-foreground",
-                isRecording && "invisible",
-              )}
-            >
-              Enter envia · Shift+Enter quebra linha
-            </span>
-          </div>
-        </SheetFooter>
+          <p
+            className={cn(
+              "mt-1.5 px-1 text-[11px] text-muted-foreground transition-opacity",
+              isRecording ? "invisible" : "visible",
+            )}
+          >
+            Enter envia · Shift+Enter quebra linha
+          </p>
+        </footer>
       </Sheet>
 
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>

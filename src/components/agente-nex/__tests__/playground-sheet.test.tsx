@@ -23,6 +23,10 @@ jest.mock("@/lib/actions/nex-chat", () => ({
     ok: true,
     message: "resposta do agente",
   })),
+  sendNexMessage: jest.fn(async () => ({
+    ok: true,
+    message: "resposta do agente",
+  })),
 }));
 
 jest.mock("@/lib/actions/nex-prompt", () => ({
@@ -70,7 +74,7 @@ jest.mock("sonner", () => ({
   toast: toastMock,
 }));
 
-import { testNexPromptAction } from "@/lib/actions/nex-chat";
+import { sendNexMessage, testNexPromptAction } from "@/lib/actions/nex-chat";
 import { previewSystemPromptAction } from "@/lib/actions/nex-prompt";
 import { PlaygroundSheet, MAX_HISTORY_MSGS } from "../playground-sheet";
 
@@ -113,6 +117,11 @@ describe("PlaygroundSheet", () => {
       ok: true,
       message: "resposta do agente",
     }));
+    (sendNexMessage as jest.Mock).mockReset();
+    (sendNexMessage as jest.Mock).mockImplementation(async () => ({
+      ok: true,
+      message: "resposta do agente",
+    }));
     (previewSystemPromptAction as jest.Mock).mockReset();
     (previewSystemPromptAction as jest.Mock).mockImplementation(async () => ({
       ok: true,
@@ -152,9 +161,9 @@ describe("PlaygroundSheet", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it("submit chama testNexPromptAction e adiciona user + assistant na lista", async () => {
+  it("submit chama sendNexMessage e adiciona user + assistant na lista", async () => {
     render(<ControlledHarness />);
-    const textarea = screen.getByPlaceholderText(/Pergunte algo ao Nex/i);
+    const textarea = screen.getByPlaceholderText(/Pergunte ao agente Nex/i);
     fireEvent.change(textarea, { target: { value: "olá Nex" } });
 
     const sendBtn = screen.getByRole("button", { name: /Enviar/i });
@@ -164,14 +173,11 @@ describe("PlaygroundSheet", () => {
     });
 
     await waitFor(() =>
-      expect(testNexPromptAction).toHaveBeenCalledTimes(1),
+      expect(sendNexMessage).toHaveBeenCalledTimes(1),
     );
-    const [arg0, arg1] = (testNexPromptAction as jest.Mock).mock.calls[0];
-    expect(arg0).toBe("olá Nex");
-    expect(arg1).toMatchObject({
-      personality: "Direto",
-      tone: "Profissional",
-    });
+    expect((sendNexMessage as jest.Mock).mock.calls[0][0]).toEqual([
+      { role: "user", content: "olá Nex" },
+    ]);
 
     expect(await screen.findByText("olá Nex")).toBeInTheDocument();
     expect(await screen.findByText(/resposta do agente/i)).toBeInTheDocument();
@@ -180,12 +186,12 @@ describe("PlaygroundSheet", () => {
   });
 
   it("erro do action mostra toast.error e mantém histórico", async () => {
-    (testNexPromptAction as jest.Mock).mockResolvedValueOnce({
+    (sendNexMessage as jest.Mock).mockResolvedValueOnce({
       ok: false,
       error: "modelo indisponível",
     });
     render(<ControlledHarness />);
-    fireEvent.change(screen.getByPlaceholderText(/Pergunte algo ao Nex/i), {
+    fireEvent.change(screen.getByPlaceholderText(/Pergunte ao agente Nex/i), {
       target: { value: "ping" },
     });
     await act(async () => {
@@ -202,7 +208,7 @@ describe("PlaygroundSheet", () => {
     // Cada submit adiciona 2 msgs (user + assistant). Pra ultrapassar 20,
     // basta enviar 11 mensagens (=22 → mantém últimas 20 → primeira user some).
     render(<ControlledHarness />);
-    const textarea = screen.getByPlaceholderText(/Pergunte algo ao Nex/i);
+    const textarea = screen.getByPlaceholderText(/Pergunte ao agente Nex/i);
     const sendBtn = screen.getByRole("button", { name: /Enviar/i });
 
     for (let i = 0; i < 11; i++) {
@@ -213,7 +219,7 @@ describe("PlaygroundSheet", () => {
       });
       // eslint-disable-next-line no-await-in-loop
       await waitFor(() =>
-        expect(testNexPromptAction).toHaveBeenCalledTimes(i + 1),
+        expect(sendNexMessage).toHaveBeenCalledTimes(i + 1),
       );
       // eslint-disable-next-line no-await-in-loop
       await screen.findByText(`msg-${i}`);
@@ -227,7 +233,7 @@ describe("PlaygroundSheet", () => {
 
   it("Limpar histórico reseta state das mensagens", async () => {
     render(<ControlledHarness />);
-    fireEvent.change(screen.getByPlaceholderText(/Pergunte algo ao Nex/i), {
+    fireEvent.change(screen.getByPlaceholderText(/Pergunte ao agente Nex/i), {
       target: { value: "olá" },
     });
     await act(async () => {
@@ -275,6 +281,11 @@ describe("PlaygroundSheet — v0.26 bubble UX", () => {
     toastMock.error.mockReset();
     (testNexPromptAction as jest.Mock).mockReset();
     (testNexPromptAction as jest.Mock).mockImplementation(async () => ({
+      ok: true,
+      message: "resposta do agente",
+    }));
+    (sendNexMessage as jest.Mock).mockReset();
+    (sendNexMessage as jest.Mock).mockImplementation(async () => ({
       ok: true,
       message: "resposta do agente",
     }));
@@ -381,5 +392,44 @@ describe("PlaygroundSheet — v0.26 bubble UX", () => {
       name: /Prompt usado nesta sessão/i,
     });
     expect(dialog.className).toMatch(/z-\[60\]/);
+  });
+});
+
+describe("PlaygroundSheet — v0.28 sendNexMessage com histórico", () => {
+  beforeEach(() => {
+    toastMock.success.mockReset();
+    toastMock.error.mockReset();
+    (sendNexMessage as jest.Mock).mockReset();
+    (sendNexMessage as jest.Mock).mockImplementation(async () => ({
+      ok: true,
+      message: "ola",
+    }));
+    (previewSystemPromptAction as jest.Mock).mockReset();
+    (previewSystemPromptAction as jest.Mock).mockImplementation(async () => ({
+      ok: true,
+      data: { composedPrompt: "PROMPT COMPOSTO" },
+    }));
+  });
+
+  it("usa sendNexMessage (não testNexPromptAction) com histórico completo", async () => {
+    render(<ControlledHarness />);
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "Quantas conversas?" },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /enviar/i }));
+    });
+    await waitFor(() => expect(sendNexMessage).toHaveBeenCalled());
+
+    expect((sendNexMessage as jest.Mock).mock.calls[0][0]).toEqual([
+      { role: "user", content: "Quantas conversas?" },
+    ]);
+  });
+
+  it("placeholder 'Pergunte ao agente Nex'", () => {
+    render(<ControlledHarness />);
+    expect(
+      screen.getByPlaceholderText(/Pergunte ao agente Nex/i),
+    ).toBeInTheDocument();
   });
 });
