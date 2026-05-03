@@ -34,6 +34,16 @@ describe("AudioPlayer", () => {
     expect(SPEEDS).toEqual([1, 1.25, 1.5, 1.75, 2]);
   });
 
+  it("botão de velocidade tem min-w-[44px] pra acomodar todos os labels sem stretch (v0.24.0)", () => {
+    render(<AudioPlayer src="blob:fake" />);
+    const button = screen.getByRole("button", {
+      name: /velocidade .+ \(clique para próxima\)/i,
+    });
+    // min-w-[44px] garante largura uniforme entre "1×", "1.25×", "1.5×", "1.75×", "2×".
+    // 44px também é hit target acessível (Apple HIG ≥44pt).
+    expect(button.className).toContain("min-w-[44px]");
+  });
+
   it("clicar no botão cicla 1× → 1.25× → 1.5× → 1.75× → 2× → 1× (v0.15.2)", () => {
     const { container } = render(<AudioPlayer src="blob:fake" />);
     const audio = container.querySelector("audio") as HTMLAudioElement;
