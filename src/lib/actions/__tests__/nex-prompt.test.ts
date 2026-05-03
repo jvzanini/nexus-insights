@@ -35,6 +35,8 @@ import {
   refreshKbUrlAction,
   saveIdentityBaseAction,
   resetIdentityBaseAction,
+  saveTerminologyAction,
+  setSuggestionsEnabledAction,
 } from "../nex-prompt";
 
 const mockedAuth = auth as jest.MockedFunction<typeof auth>;
@@ -48,6 +50,8 @@ const baseCfg: promptLib.NexPromptConfig = {
   advancedOverride: null,
   audioInputEnabled: false,
   kbEnabled: true,
+  terminology: {},
+  suggestionsEnabled: false,
 };
 
 beforeEach(() => {
@@ -576,6 +580,154 @@ describe("resetIdentityBaseAction (v0.28)", () => {
 
   it("loga audit setting_updated com targetType=nex_prompt", async () => {
     const result = await resetIdentityBaseAction();
+    expect(result.ok).toBe(true);
+    expect(mockedLogAudit).toHaveBeenCalledTimes(1);
+    const audit = mockedLogAudit.mock.calls[0][0];
+    expect(audit.action).toBe("setting_updated");
+    expect(audit.targetType).toBe("nex_prompt");
+    expect(audit.userId).toBe("u-1");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T-C2 (v0.31) — saveTerminologyAction + setSuggestionsEnabledAction
+// ---------------------------------------------------------------------------
+
+describe("saveTerminologyAction (v0.31)", () => {
+  it("super_admin: persiste terminology no DB com user.id", async () => {
+    const result = await saveTerminologyAction({ estados: "inboxes" });
+    expect(result.ok).toBe(true);
+    expect(promptLib.saveNexPromptConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ terminology: { estados: "inboxes" } }),
+      "u-1",
+    );
+  });
+
+  it("não-superadmin (viewer): nega com erro de permissão", async () => {
+    mockedAuth.mockResolvedValueOnce({
+      user: { id: "u-x", platformRole: "viewer" },
+    } as never);
+    const result = await saveTerminologyAction({ x: "y" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/super_admin|permissão/i);
+    expect(promptLib.saveNexPromptConfig).not.toHaveBeenCalled();
+  });
+
+  it("máximo 50 chaves: nega quando excede", async () => {
+    const big: Record<string, string> = {};
+    for (let i = 0; i < 51; i++) big[`k${i}`] = "v";
+    const result = await saveTerminologyAction(big);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/50/);
+    expect(promptLib.saveNexPromptConfig).not.toHaveBeenCalled();
+  });
+
+  it("chave > 100 chars: nega", async () => {
+    const result = await saveTerminologyAction({ ["a".repeat(101)]: "b" });
+    expect(result.ok).toBe(false);
+    expect(promptLib.saveNexPromptConfig).not.toHaveBeenCalled();
+  });
+
+  it("valor > 100 chars: nega", async () => {
+    const result = await saveTerminologyAction({ a: "b".repeat(101) });
+    expect(result.ok).toBe(false);
+    expect(promptLib.saveNexPromptConfig).not.toHaveBeenCalled();
+  });
+
+  it("chave vazia: nega", async () => {
+    const result = await saveTerminologyAction({ "": "b" });
+    expect(result.ok).toBe(false);
+    expect(promptLib.saveNexPromptConfig).not.toHaveBeenCalled();
+  });
+
+  it("preserva demais campos da config existente", async () => {
+    (promptLib.getNexPromptConfig as jest.Mock).mockResolvedValueOnce({
+      ...baseCfg,
+      personality: "antiga",
+      tone: "antigo",
+      guardrails: ["existente"],
+      suggestionsEnabled: true,
+    });
+    const result = await saveTerminologyAction({ estados: "inboxes" });
+    expect(result.ok).toBe(true);
+    expect(promptLib.saveNexPromptConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        terminology: { estados: "inboxes" },
+        personality: "antiga",
+        tone: "antigo",
+        guardrails: ["existente"],
+        suggestionsEnabled: true,
+      }),
+      "u-1",
+    );
+  });
+
+  it("loga audit setting_updated com targetType=nex_prompt", async () => {
+    const result = await saveTerminologyAction({ estados: "inboxes" });
+    expect(result.ok).toBe(true);
+    expect(mockedLogAudit).toHaveBeenCalledTimes(1);
+    const audit = mockedLogAudit.mock.calls[0][0];
+    expect(audit.action).toBe("setting_updated");
+    expect(audit.targetType).toBe("nex_prompt");
+    expect(audit.userId).toBe("u-1");
+  });
+});
+
+describe("setSuggestionsEnabledAction (v0.31)", () => {
+  it("super_admin: persiste suggestionsEnabled=true", async () => {
+    const result = await setSuggestionsEnabledAction(true);
+    expect(result.ok).toBe(true);
+    expect(promptLib.saveNexPromptConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ suggestionsEnabled: true }),
+      "u-1",
+    );
+  });
+
+  it("super_admin: persiste suggestionsEnabled=false", async () => {
+    (promptLib.getNexPromptConfig as jest.Mock).mockResolvedValueOnce({
+      ...baseCfg,
+      suggestionsEnabled: true,
+    });
+    const result = await setSuggestionsEnabledAction(false);
+    expect(result.ok).toBe(true);
+    expect(promptLib.saveNexPromptConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ suggestionsEnabled: false }),
+      "u-1",
+    );
+  });
+
+  it("não-superadmin: nega com erro de permissão", async () => {
+    mockedAuth.mockResolvedValueOnce({
+      user: { id: "u-y", platformRole: "viewer" },
+    } as never);
+    const result = await setSuggestionsEnabledAction(true);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/super_admin|permissão/i);
+    expect(promptLib.saveNexPromptConfig).not.toHaveBeenCalled();
+  });
+
+  it("preserva demais campos da config existente", async () => {
+    (promptLib.getNexPromptConfig as jest.Mock).mockResolvedValueOnce({
+      ...baseCfg,
+      personality: "p",
+      tone: "t",
+      terminology: { estados: "inboxes" },
+    });
+    const result = await setSuggestionsEnabledAction(true);
+    expect(result.ok).toBe(true);
+    expect(promptLib.saveNexPromptConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        suggestionsEnabled: true,
+        personality: "p",
+        tone: "t",
+        terminology: { estados: "inboxes" },
+      }),
+      "u-1",
+    );
+  });
+
+  it("loga audit setting_updated com targetType=nex_prompt", async () => {
+    const result = await setSuggestionsEnabledAction(true);
     expect(result.ok).toBe(true);
     expect(mockedLogAudit).toHaveBeenCalledTimes(1);
     const audit = mockedLogAudit.mock.calls[0][0];

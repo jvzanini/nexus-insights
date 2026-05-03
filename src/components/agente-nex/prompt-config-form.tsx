@@ -130,6 +130,8 @@ export function PromptConfigForm({ initial, onSaved }: PromptConfigFormProps) {
       advancedOverride: overrideOn ? override : null,
       audioInputEnabled: initial.audioInputEnabled,
       kbEnabled: initial.kbEnabled,
+      terminology: initial.terminology ?? {},
+      suggestionsEnabled: initial.suggestionsEnabled ?? false,
     }),
     [
       personality,
@@ -140,6 +142,8 @@ export function PromptConfigForm({ initial, onSaved }: PromptConfigFormProps) {
       initial.identityBase,
       initial.audioInputEnabled,
       initial.kbEnabled,
+      initial.terminology,
+      initial.suggestionsEnabled,
     ],
   );
 

@@ -58,6 +58,8 @@ const baseInitial: NexPromptConfig = {
   advancedOverride: null,
   audioInputEnabled: false,
   kbEnabled: true,
+  terminology: {},
+  suggestionsEnabled: false,
 };
 
 function getTrashButtons(): HTMLElement[] {

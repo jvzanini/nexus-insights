@@ -31,6 +31,15 @@ function asStrArray(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
 }
 
+function asStringMap(v: unknown): Record<string, string> {
+  if (typeof v !== "object" || v === null) return {};
+  const out: Record<string, string> = {};
+  for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+    if (typeof k === "string" && typeof val === "string") out[k] = val;
+  }
+  return out;
+}
+
 export async function getNexPromptConfig(): Promise<NexPromptConfig> {
   await ensureNexTables();
   const r = await pgPool.query<{
@@ -41,8 +50,10 @@ export async function getNexPromptConfig(): Promise<NexPromptConfig> {
     advanced_override: string | null;
     audio_input_enabled: boolean;
     kb_enabled: boolean;
+    terminology: unknown;
+    suggestions_enabled: boolean;
   }>(
-    `SELECT identity_base, personality, tone, guardrails, advanced_override, audio_input_enabled, kb_enabled
+    `SELECT identity_base, personality, tone, guardrails, advanced_override, audio_input_enabled, kb_enabled, terminology, suggestions_enabled
      FROM nex_settings WHERE id = 'global' LIMIT 1`,
   );
   if (r.rowCount === 0) {
@@ -54,6 +65,8 @@ export async function getNexPromptConfig(): Promise<NexPromptConfig> {
       advancedOverride: null,
       audioInputEnabled: false,
       kbEnabled: true,
+      terminology: {},
+      suggestionsEnabled: false,
     };
   }
   const row = r.rows[0];
@@ -65,6 +78,8 @@ export async function getNexPromptConfig(): Promise<NexPromptConfig> {
     advancedOverride: row.advanced_override,
     audioInputEnabled: !!row.audio_input_enabled,
     kbEnabled: !!row.kb_enabled,
+    terminology: asStringMap(row.terminology),
+    suggestionsEnabled: !!row.suggestions_enabled,
   };
 }
 
@@ -91,8 +106,8 @@ export async function saveNexPromptConfig(
   }
   await ensureNexTables();
   await pgPool.query(
-    `INSERT INTO nex_settings (id, identity_base, personality, tone, guardrails, advanced_override, audio_input_enabled, kb_enabled, updated_at, updated_by_id)
-     VALUES ('global', $1, $2, $3, $4::jsonb, $5, $6, $7, NOW(), $8)
+    `INSERT INTO nex_settings (id, identity_base, personality, tone, guardrails, advanced_override, audio_input_enabled, kb_enabled, terminology, suggestions_enabled, updated_at, updated_by_id)
+     VALUES ('global', $1, $2, $3, $4::jsonb, $5, $6, $7, $8::jsonb, $9, NOW(), $10)
      ON CONFLICT (id) DO UPDATE SET
        identity_base = EXCLUDED.identity_base,
        personality = EXCLUDED.personality,
@@ -101,6 +116,8 @@ export async function saveNexPromptConfig(
        advanced_override = EXCLUDED.advanced_override,
        audio_input_enabled = EXCLUDED.audio_input_enabled,
        kb_enabled = EXCLUDED.kb_enabled,
+       terminology = EXCLUDED.terminology,
+       suggestions_enabled = EXCLUDED.suggestions_enabled,
        updated_at = NOW(),
        updated_by_id = EXCLUDED.updated_by_id`,
     [
@@ -111,6 +128,8 @@ export async function saveNexPromptConfig(
       cfg.advancedOverride ?? null,
       cfg.audioInputEnabled,
       cfg.kbEnabled,
+      JSON.stringify(cfg.terminology ?? {}),
+      cfg.suggestionsEnabled,
       updatedById ?? null,
     ],
   );

@@ -556,3 +556,104 @@ export async function resetIdentityBaseAction(): Promise<ActionResult> {
     return { ok: true };
   }, "reset-identity-base");
 }
+
+// ---------------------------------------------------------------------------
+// v0.31.0 — Terminology + Suggestions toggles (T-C2)
+// ---------------------------------------------------------------------------
+
+const MAX_TERMINOLOGY_KEYS = 50;
+const MAX_TERM_LEN = 100;
+
+/**
+ * Persiste o mapa `terminology` (termo→significado) em `nex_settings.terminology`.
+ *
+ * Apenas super_admin. Limites: até 50 entradas, key/value 1-100 chars cada.
+ * Demais campos da config são preservados (read-modify-write).
+ */
+export async function saveTerminologyAction(
+  terminology: Record<string, string>,
+): Promise<ActionResult> {
+  return safeAction(async () => {
+    const guard = await requireSuperAdmin();
+    if (!guard.ok) return { ok: false, error: guard.error };
+    const entries = Object.entries(terminology ?? {});
+    if (entries.length > MAX_TERMINOLOGY_KEYS) {
+      return { ok: false, error: `Máximo ${MAX_TERMINOLOGY_KEYS} termos` };
+    }
+    for (const [k, v] of entries) {
+      if (typeof k !== "string" || typeof v !== "string") {
+        return { ok: false, error: "Termos devem ser strings" };
+      }
+      if (k.length === 0 || k.length > MAX_TERM_LEN) {
+        return { ok: false, error: `Chave inválida (1-${MAX_TERM_LEN} chars)` };
+      }
+      if (v.length === 0 || v.length > MAX_TERM_LEN) {
+        return { ok: false, error: `Valor inválido (1-${MAX_TERM_LEN} chars)` };
+      }
+    }
+    const current = await getNexPromptConfig();
+    try {
+      await saveNexPromptConfig(
+        { ...current, terminology },
+        guard.userId,
+      );
+    } catch (err) {
+      return {
+        ok: false,
+        error:
+          err instanceof Error
+            ? err.message
+            : "Erro ao salvar terminologia do Agente Nex",
+      };
+    }
+    await logAudit({
+      userId: guard.userId,
+      action: "setting_updated",
+      targetType: "nex_prompt",
+      details: {
+        terminologyKeys: entries.length,
+        terminologyAction: "save",
+      },
+    });
+    return { ok: true };
+  }, "save-terminology");
+}
+
+/**
+ * Persiste o toggle `suggestions_enabled` em `nex_settings.suggestions_enabled`.
+ *
+ * Apenas super_admin. Demais campos da config são preservados (read-modify-write).
+ */
+export async function setSuggestionsEnabledAction(
+  enabled: boolean,
+): Promise<ActionResult> {
+  return safeAction(async () => {
+    const guard = await requireSuperAdmin();
+    if (!guard.ok) return { ok: false, error: guard.error };
+    const current = await getNexPromptConfig();
+    try {
+      await saveNexPromptConfig(
+        { ...current, suggestionsEnabled: !!enabled },
+        guard.userId,
+      );
+    } catch (err) {
+      return {
+        ok: false,
+        error:
+          err instanceof Error
+            ? err.message
+            : "Erro ao salvar toggle de sugestões do Agente Nex",
+      };
+    }
+    await logAudit({
+      userId: guard.userId,
+      action: "setting_updated",
+      targetType: "nex_prompt",
+      details: {
+        suggestionsEnabled: !!enabled,
+        suggestionsAction: "toggle",
+      },
+    });
+    return { ok: true };
+  }, "set-suggestions-enabled");
+}

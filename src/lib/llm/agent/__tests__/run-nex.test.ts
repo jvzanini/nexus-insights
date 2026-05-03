@@ -34,6 +34,8 @@ jest.mock("@/lib/nex/prompt", () => ({
     advancedOverride: null,
     audioInputEnabled: false,
     kbEnabled: false,
+    terminology: {},
+    suggestionsEnabled: false,
   })),
   composeSystemPrompt: jest.fn(() => "BASE"),
 }));

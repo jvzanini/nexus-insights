@@ -86,6 +86,8 @@ const baseConfig: NexPromptConfig = {
   advancedOverride: null,
   audioInputEnabled: false,
   kbEnabled: true,
+  terminology: {},
+  suggestionsEnabled: false,
 };
 
 function ControlledHarness(props: {
@@ -304,6 +306,8 @@ describe("PlaygroundSheet — v0.26 bubble UX", () => {
     advancedOverride: null,
     audioInputEnabled: true,
     kbEnabled: false,
+    terminology: {},
+    suggestionsEnabled: false,
   };
 
   it("renderiza Mic externo quando audioInputEnabled + provider OpenAI + idle", () => {

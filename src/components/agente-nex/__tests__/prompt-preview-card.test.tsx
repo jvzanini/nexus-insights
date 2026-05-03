@@ -26,6 +26,8 @@ const baseConfig = {
   advancedOverride: null,
   audioInputEnabled: false,
   kbEnabled: false,
+  terminology: {},
+  suggestionsEnabled: false,
 };
 
 describe("PromptPreviewCard — v0.28", () => {

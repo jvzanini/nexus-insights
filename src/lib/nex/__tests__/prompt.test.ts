@@ -70,6 +70,8 @@ describe("composeSystemPrompt", () => {
       advancedOverride: null,
       audioInputEnabled: false,
       kbEnabled: false,
+      terminology: {},
+      suggestionsEnabled: false,
     };
     expect(composeSystemPrompt(cfg, [])).toBe(IDENTITY_BASE);
     expect(composeSystemPrompt(cfg, [], [])).toBe(IDENTITY_BASE);
@@ -85,6 +87,8 @@ describe("composeSystemPrompt", () => {
         advancedOverride: null,
         audioInputEnabled: false,
         kbEnabled: false,
+        terminology: {},
+        suggestionsEnabled: false,
       },
       [],
     );
@@ -105,6 +109,8 @@ describe("composeSystemPrompt", () => {
         advancedOverride: "PROMPT CRU",
         audioInputEnabled: false,
         kbEnabled: true,
+        terminology: {},
+        suggestionsEnabled: false,
       },
       [{ name: "doc", extractedText: "conteudo" }],
     );
@@ -121,6 +127,8 @@ describe("composeSystemPrompt", () => {
         advancedOverride: null,
         audioInputEnabled: false,
         kbEnabled: false,
+        terminology: {},
+        suggestionsEnabled: false,
       },
       [{ name: "doc", extractedText: "importante" }],
     );
@@ -137,6 +145,8 @@ describe("composeSystemPrompt", () => {
         advancedOverride: null,
         audioInputEnabled: false,
         kbEnabled: true,
+        terminology: {},
+        suggestionsEnabled: false,
       },
       [
         { name: "manual.pdf", extractedText: "passo 1" },
@@ -160,6 +170,8 @@ describe("composeSystemPrompt", () => {
         advancedOverride: null,
         audioInputEnabled: false,
         kbEnabled: true,
+        terminology: {},
+        suggestionsEnabled: false,
       },
       [
         { name: "a", extractedText: big },
@@ -180,6 +192,8 @@ describe("composeSystemPrompt", () => {
         advancedOverride: null,
         audioInputEnabled: false,
         kbEnabled: false,
+        terminology: {},
+        suggestionsEnabled: false,
       },
       [],
       [{ accountId: 1, publicUrl: "https://chat.matrix.com.br" }],
@@ -198,6 +212,8 @@ describe("composeSystemPrompt", () => {
         advancedOverride: null,
         audioInputEnabled: false,
         kbEnabled: false,
+        terminology: {},
+        suggestionsEnabled: false,
       },
       [],
       [
@@ -219,6 +235,8 @@ describe("composeSystemPrompt", () => {
         advancedOverride: "PROMPT CRU",
         audioInputEnabled: false,
         kbEnabled: false,
+        terminology: {},
+        suggestionsEnabled: false,
       },
       [],
       [{ accountId: 1, publicUrl: "https://chat.matrix.com.br" }],
@@ -237,6 +255,8 @@ describe("composeSystemPrompt", () => {
         advancedOverride: null,
         audioInputEnabled: false,
         kbEnabled: false,
+        terminology: {},
+        suggestionsEnabled: false,
       },
       [],
       [],
@@ -257,6 +277,8 @@ describe("getNexPromptConfig", () => {
           advanced_override: null,
           audio_input_enabled: false,
           kb_enabled: true,
+          terminology: {},
+          suggestions_enabled: false,
         },
       ],
       rowCount: 1,
@@ -270,6 +292,8 @@ describe("getNexPromptConfig", () => {
       advancedOverride: null,
       audioInputEnabled: false,
       kbEnabled: true,
+      terminology: {},
+      suggestionsEnabled: false,
     });
   });
 
@@ -284,12 +308,36 @@ describe("getNexPromptConfig", () => {
           advanced_override: null,
           audio_input_enabled: false,
           kb_enabled: true,
+          terminology: {},
+          suggestions_enabled: false,
         },
       ],
       rowCount: 1,
     } as never);
     const cfg = await getNexPromptConfig();
     expect(cfg.identityBase).toBe("Você é um assistente customizado.");
+  });
+
+  it("retorna terminology + suggestionsEnabled quando setados no row (v0.31)", async () => {
+    q.mockResolvedValueOnce({
+      rows: [
+        {
+          identity_base: null,
+          personality: "",
+          tone: "",
+          guardrails: [],
+          advanced_override: null,
+          audio_input_enabled: false,
+          kb_enabled: true,
+          terminology: { estados: "inboxes" },
+          suggestions_enabled: true,
+        },
+      ],
+      rowCount: 1,
+    } as never);
+    const cfg = await getNexPromptConfig();
+    expect(cfg.terminology).toEqual({ estados: "inboxes" });
+    expect(cfg.suggestionsEnabled).toBe(true);
   });
 
   it("retorna defaults quando não há row", async () => {
@@ -303,6 +351,8 @@ describe("getNexPromptConfig", () => {
       advancedOverride: null,
       audioInputEnabled: false,
       kbEnabled: true,
+      terminology: {},
+      suggestionsEnabled: false,
     });
   });
 });
@@ -318,6 +368,8 @@ describe("saveNexPromptConfig", () => {
         advancedOverride: null,
         audioInputEnabled: false,
         kbEnabled: true,
+        terminology: {},
+        suggestionsEnabled: false,
       }),
     ).rejects.toThrow(/500/);
   });
@@ -332,6 +384,8 @@ describe("saveNexPromptConfig", () => {
         advancedOverride: null,
         audioInputEnabled: false,
         kbEnabled: true,
+        terminology: {},
+        suggestionsEnabled: false,
       }),
     ).rejects.toThrow(/20/);
   });
@@ -346,6 +400,8 @@ describe("saveNexPromptConfig", () => {
         advancedOverride: "x".repeat(MAX_PROMPT_LEN + 1),
         audioInputEnabled: false,
         kbEnabled: true,
+        terminology: {},
+        suggestionsEnabled: false,
       }),
     ).rejects.toThrow();
   });
@@ -360,6 +416,8 @@ describe("saveNexPromptConfig", () => {
       advancedOverride: null,
       audioInputEnabled: true,
       kbEnabled: false,
+      terminology: {},
+      suggestionsEnabled: false,
     });
     const sql = String(q.mock.calls[0][0]);
     expect(sql).toContain("INSERT INTO nex_settings");
