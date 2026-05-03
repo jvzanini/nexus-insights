@@ -15,6 +15,9 @@ import {
 
 export type FilterMode = "simple" | "advanced";
 
+/** Tipo de documento detectado em uma conversa. */
+export type DocumentTypeFilter = "cpf" | "cnpj" | "none";
+
 export interface FilterState {
   period: PeriodKey;
   customRange?: { start: string; end: string }; // ISO yyyy-mm-dd
@@ -24,6 +27,8 @@ export interface FilterState {
   statuses: number[];
   priorities: number[];
   labelIds: number[];
+  /** Filtro por tipo de documento (CPF/CNPJ/Sem). Multi-select OR. Default []. */
+  documentTypes: DocumentTypeFilter[];
   search?: string;
   /** Modo simples (padrão) usa multi-selects nativos; advanced usa where-clause builder. */
   mode: FilterMode;
@@ -41,8 +46,15 @@ export const EMPTY_FILTER_STATE: FilterState = {
   statuses: [],
   priorities: [],
   labelIds: [],
+  documentTypes: [],
   mode: "simple",
 };
+
+const DOC_TYPE_VALUES: readonly DocumentTypeFilter[] = ["cpf", "cnpj", "none"];
+
+function isDocumentTypeFilter(v: string): v is DocumentTypeFilter {
+  return (DOC_TYPE_VALUES as readonly string[]).includes(v);
+}
 
 export function serializeFilterState(state: FilterState): URLSearchParams {
   const p = new URLSearchParams();
@@ -57,6 +69,9 @@ export function serializeFilterState(state: FilterState): URLSearchParams {
   if (state.statuses.length) p.set("status", state.statuses.join(","));
   if (state.priorities.length) p.set("priority", state.priorities.join(","));
   if (state.labelIds.length) p.set("label", state.labelIds.join(","));
+  if (state.documentTypes && state.documentTypes.length) {
+    p.set("docTypes", state.documentTypes.join(","));
+  }
   if (state.search?.trim()) p.set("q", state.search.trim());
   if (state.mode === "advanced") {
     p.set("mode", "advanced");
@@ -101,6 +116,14 @@ export function deserializeFilterState(params: URLSearchParams): FilterState {
           .filter(Number.isFinite)
       : [];
 
+  const docTypesRaw = params.get("docTypes");
+  const documentTypes: DocumentTypeFilter[] = docTypesRaw
+    ? docTypesRaw
+        .split(",")
+        .map((t) => t.trim())
+        .filter(isDocumentTypeFilter)
+    : [];
+
   const modeRaw = params.get("mode");
   const mode: FilterMode = modeRaw === "advanced" ? "advanced" : "simple";
 
@@ -122,6 +145,7 @@ export function deserializeFilterState(params: URLSearchParams): FilterState {
     statuses: parseIds(params.get("status")),
     priorities: parseIds(params.get("priority")),
     labelIds: parseIds(params.get("label")),
+    documentTypes,
     search: params.get("q") ?? undefined,
     mode,
     conditionGroup,
@@ -129,7 +153,18 @@ export function deserializeFilterState(params: URLSearchParams): FilterState {
   };
 }
 
-export function diffFilterStates(a: FilterState, b: FilterState): number {
+export interface DiffOptions {
+  /** Se true, não conta diff de `mode`. Útil para esconder contador "Aplicar (N)" fantasma quando troca de tab. */
+  ignoreMode?: boolean;
+  /** Se true, não conta diff de `search`. Útil quando search é client-side e não muda o pendingDiff. */
+  ignoreSearch?: boolean;
+}
+
+export function diffFilterStates(
+  a: FilterState,
+  b: FilterState,
+  opts: DiffOptions = {},
+): number {
   let diff = 0;
   if (a.period !== b.period) diff++;
   if (
@@ -143,8 +178,9 @@ export function diffFilterStates(a: FilterState, b: FilterState): number {
   if (a.statuses.join(",") !== b.statuses.join(",")) diff++;
   if (a.priorities.join(",") !== b.priorities.join(",")) diff++;
   if (a.labelIds.join(",") !== b.labelIds.join(",")) diff++;
-  if ((a.search ?? "") !== (b.search ?? "")) diff++;
-  if (a.mode !== b.mode) diff++;
+  if ((a.documentTypes ?? []).join(",") !== (b.documentTypes ?? []).join(",")) diff++;
+  if (!opts.ignoreSearch && (a.search ?? "") !== (b.search ?? "")) diff++;
+  if (!opts.ignoreMode && a.mode !== b.mode) diff++;
   if (
     JSON.stringify(a.conditionGroup ?? null) !==
     JSON.stringify(b.conditionGroup ?? null)

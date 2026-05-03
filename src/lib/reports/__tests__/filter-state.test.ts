@@ -21,6 +21,7 @@ function makeState(overrides: Partial<FilterState> = {}): FilterState {
     statuses: [],
     priorities: [],
     labelIds: [],
+    documentTypes: [],
     mode: "simple",
     ...overrides,
   };
@@ -91,8 +92,7 @@ describe("serializeFilterState", () => {
 
   it("serializa mode=advanced + cg quando conditionGroup presente", () => {
     const cg: ConditionGroup = {
-      combinator: "AND",
-      conditions: [{ field: "status", operator: "eq", value: 1 }],
+      items: [{ node: { field: "status", operator: "eq", value: 1 } }],
     };
     const sp = serializeFilterState(
       makeState({ mode: "advanced", conditionGroup: cg }),
@@ -173,8 +173,7 @@ describe("deserializeFilterState", () => {
 
   it("mode=advanced + cg= deserializa conditionGroup", () => {
     const cg: ConditionGroup = {
-      combinator: "AND",
-      conditions: [],
+      items: [],
     };
     const encoded = encodeConditionGroup(cg);
     expect(encoded).toBeTruthy();
@@ -230,15 +229,19 @@ describe("round-trip serialize/deserialize", () => {
 
   it("mode=advanced + conditionGroup faz round-trip", () => {
     const cg: ConditionGroup = {
-      combinator: "OR",
-      conditions: [
-        { field: "priority", operator: "gte", value: 2 },
+      items: [
+        { node: { field: "priority", operator: "gte", value: 2 } },
         {
-          combinator: "AND",
-          conditions: [
-            { field: "status", operator: "eq", value: 0 },
-            { field: "team_id", operator: "in", value: [1, 2] },
-          ],
+          connector: "OR",
+          node: {
+            items: [
+              { node: { field: "status", operator: "eq", value: 0 } },
+              {
+                connector: "AND",
+                node: { field: "team_id", operator: "in", value: [1, 2] },
+              },
+            ],
+          },
         },
       ],
     };
@@ -301,7 +304,7 @@ describe("diffFilterStates", () => {
     const a = makeState({ mode: "advanced" });
     const b = makeState({
       mode: "advanced",
-      conditionGroup: { combinator: "AND", conditions: [] },
+      conditionGroup: { items: [] },
     });
     expect(diffFilterStates(a, b)).toBe(1);
   });
@@ -341,12 +344,14 @@ describe("isFilterStateEqual", () => {
 });
 
 describe("condition-group-codec", () => {
-  it("encode/decode round-trip preserva o objeto", () => {
+  it("encode/decode round-trip preserva o objeto v2", () => {
     const cg: ConditionGroup = {
-      combinator: "AND",
-      conditions: [
-        { field: "status", operator: "eq", value: 1 },
-        { field: "name", operator: "contains", value: "matrix" },
+      items: [
+        { node: { field: "status", operator: "eq", value: 1 } },
+        {
+          connector: "AND",
+          node: { field: "name", operator: "contains", value: "matrix" },
+        },
       ],
     };
     const encoded = encodeConditionGroup(cg);
@@ -357,11 +362,13 @@ describe("condition-group-codec", () => {
 
   it("encode retorna null quando excede 4kB", () => {
     const huge: ConditionGroup = {
-      combinator: "AND",
-      conditions: Array.from({ length: 500 }, (_, i) => ({
-        field: `field_${i}`,
-        operator: "eq" as const,
-        value: "x".repeat(20),
+      items: Array.from({ length: 500 }, (_, i) => ({
+        connector: i === 0 ? undefined : ("AND" as const),
+        node: {
+          field: `field_${i}`,
+          operator: "eq" as const,
+          value: "x".repeat(20),
+        },
       })),
     };
     expect(encodeConditionGroup(huge)).toBeNull();
@@ -371,13 +378,82 @@ describe("condition-group-codec", () => {
     expect(decodeConditionGroup("!!!not-base64!!!")).toBeNull();
   });
 
-  it("decode retorna null para JSON sem combinator/conditions", () => {
+  it("decode retorna null para JSON sem schema reconhecível", () => {
     const bad = Buffer.from(JSON.stringify({ foo: "bar" }), "utf8")
       .toString("base64")
       .replace(/\+/g, "-")
       .replace(/\//g, "_")
       .replace(/=+$/, "");
     expect(decodeConditionGroup(bad)).toBeNull();
+  });
+});
+
+describe("FilterState v0.32 — documentTypes", () => {
+  it("EMPTY tem documentTypes []", () => {
+    expect(EMPTY_FILTER_STATE.documentTypes).toEqual([]);
+  });
+
+  it("serialize/deserialize round-trip com documentTypes", () => {
+    const state = makeState({ documentTypes: ["cpf", "none"] });
+    const serialized = serializeFilterState(state);
+    expect(serialized.get("docTypes")).toBe("cpf,none");
+    const restored = deserializeFilterState(serialized);
+    expect(restored.documentTypes).toEqual(["cpf", "none"]);
+  });
+
+  it("documentTypes vazio não emite param", () => {
+    const state = makeState({ documentTypes: [] });
+    const serialized = serializeFilterState(state);
+    expect(serialized.has("docTypes")).toBe(false);
+  });
+
+  it("deserializa todos os 3 valores válidos", () => {
+    const sp = new URLSearchParams("period=hoje&docTypes=cpf,cnpj,none");
+    const state = deserializeFilterState(sp);
+    expect(state.documentTypes).toEqual(["cpf", "cnpj", "none"]);
+  });
+
+  it("descarta valores inválidos em docTypes", () => {
+    const sp = new URLSearchParams("period=hoje&docTypes=cpf,foo,bar,cnpj");
+    const state = deserializeFilterState(sp);
+    expect(state.documentTypes).toEqual(["cpf", "cnpj"]);
+  });
+});
+
+describe("diffFilterStates v0.32 — DiffOptions", () => {
+  it("ignoreMode pula mode change", () => {
+    const a = makeState({ mode: "simple" });
+    const b = makeState({ mode: "advanced" });
+    expect(diffFilterStates(a, b)).toBe(1);
+    expect(diffFilterStates(a, b, { ignoreMode: true })).toBe(0);
+  });
+
+  it("ignoreSearch pula search change", () => {
+    const a = makeState({ search: "abc" });
+    const b = makeState({ search: "def" });
+    expect(diffFilterStates(a, b)).toBe(1);
+    expect(diffFilterStates(a, b, { ignoreSearch: true })).toBe(0);
+  });
+
+  it("ignoreMode + ignoreSearch combinados", () => {
+    const a = makeState({ mode: "simple", search: "abc" });
+    const b = makeState({ mode: "advanced", search: "def" });
+    expect(diffFilterStates(a, b)).toBe(2);
+    expect(
+      diffFilterStates(a, b, { ignoreMode: true, ignoreSearch: true }),
+    ).toBe(0);
+  });
+
+  it("documentTypes change conta no diff", () => {
+    const a = makeState({ documentTypes: ["cpf"] });
+    const b = makeState({ documentTypes: ["cnpj"] });
+    expect(diffFilterStates(a, b)).toBe(1);
+  });
+
+  it("documentTypes equal não conta", () => {
+    const a = makeState({ documentTypes: ["cpf", "none"] });
+    const b = makeState({ documentTypes: ["cpf", "none"] });
+    expect(diffFilterStates(a, b)).toBe(0);
   });
 });
 
