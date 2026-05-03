@@ -51,6 +51,7 @@ export function SortingDialog({
   }, [open, applied]);
 
   const isDirty = JSON.stringify(draft) !== JSON.stringify(applied);
+  const hasInvalidRule = draft.some((r) => r.key === "");
   const usedKeys = new Set(draft.map((d) => d.key));
   const available = options.filter((o) => !usedKeys.has(o.key));
 
@@ -67,8 +68,7 @@ export function SortingDialog({
   };
 
   const addRule = () => {
-    if (!available[0]) return;
-    setDraft((p) => [...p, { key: available[0]!.key, direction: "asc" }]);
+    setDraft((p) => [...p, { key: "", direction: "asc" }]);
   };
 
   const setKey = (idx: number, key: string) => {
@@ -110,14 +110,17 @@ export function SortingDialog({
               // listada para que o trigger renderize o label correto e o usuário
               // possa trocar para qualquer outra opção livre.
               const usedByOthers = new Set(
-                draft.filter((_, i) => i !== idx).map((c) => c.key),
+                draft
+                  .filter((_, i) => i !== idx)
+                  .map((c) => c.key)
+                  .filter((k) => k !== ""),
               );
               const fieldOptions = options
                 .filter((o) => !usedByOthers.has(o.key))
                 .map((o) => ({ value: o.key, label: o.label }));
               return (
                 <li
-                  key={`${rule.key}-${idx}`}
+                  key={`rule-${idx}-${rule.key || "empty"}`}
                   className="flex items-center gap-2 rounded-lg border border-border bg-card p-2"
                 >
                   <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary tabular-nums">
@@ -128,6 +131,7 @@ export function SortingDialog({
                       value={rule.key}
                       onChange={(k) => setKey(idx, k)}
                       options={fieldOptions}
+                      placeholder="Selecione uma coluna"
                       triggerClassName="h-9 text-sm"
                     />
                   </div>
@@ -221,7 +225,7 @@ export function SortingDialog({
                 onApply(draft);
                 onOpenChange(false);
               }}
-              disabled={!isDirty}
+              disabled={!isDirty || hasInvalidRule}
             >
               <ArrowUpDown aria-hidden />
               Aplicar

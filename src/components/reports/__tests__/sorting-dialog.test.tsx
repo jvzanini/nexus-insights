@@ -14,26 +14,36 @@ jest.mock("@/components/ui/custom-select", () => ({
     value,
     onChange,
     options,
+    placeholder,
     triggerClassName,
   }: {
     value: string;
     onChange: (v: string) => void;
     options: Array<{ value: string; label: string }>;
+    placeholder?: string;
     triggerClassName?: string;
-  }) => (
-    <select
-      data-testid="custom-select"
-      className={triggerClassName}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-    >
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
-  ),
+  }) => {
+    const hasMatch = options.some((o) => o.value === value);
+    return (
+      <select
+        data-testid="custom-select"
+        className={triggerClassName}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {!hasMatch ? (
+          <option value="" disabled>
+            {placeholder ?? "Selecionar"}
+          </option>
+        ) : null}
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    );
+  },
 }));
 
 import { SortingDialog } from "../sorting-dialog";
@@ -51,7 +61,7 @@ function getOptionLabels(select: HTMLElement): string[] {
 }
 
 describe("SortingDialog", () => {
-  test("Adicionar critério inclui novo item com direction=asc", () => {
+  test("Adicionar critério + escolher coluna inclui novo item com direction=asc", () => {
     const onApply = jest.fn();
     render(
       <SortingDialog
@@ -66,6 +76,10 @@ describe("SortingDialog", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /adicionar critério/i }),
     );
+    // v0.25: addRule cria critério com key vazio; usuário precisa escolher
+    // a coluna antes de Aplicar (que fica desabilitado até lá).
+    const select = screen.getByTestId("custom-select");
+    fireEvent.change(select, { target: { value: "name" } });
     fireEvent.click(screen.getByRole("button", { name: /^aplicar$/i }));
     expect(onApply).toHaveBeenCalledWith([
       { key: "name", direction: "asc" },
@@ -140,6 +154,74 @@ describe("SortingDialog — anti-duplicação", () => {
     expect(labels1).not.toContain("Status");
   });
 
+});
+
+describe("SortingDialog v0.25", () => {
+  test("addRule cria critério com key vazio + placeholder visível", () => {
+    render(
+      <SortingDialog
+        open
+        onOpenChange={jest.fn()}
+        applied={[]}
+        options={options}
+        onApply={jest.fn()}
+        onClear={jest.fn()}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /adicionar critério/i }),
+    );
+    // O CustomSelect mockado é um <select> nativo; quando key="" e nenhuma
+    // option corresponde, espera-se que uma option-placeholder esteja
+    // disponível com o label "Selecione uma coluna".
+    expect(
+      screen.getByRole("option", { name: /selecione uma coluna/i }),
+    ).toBeInTheDocument();
+  });
+
+  test("Aplicar desabilitado quando há critério com key vazio", () => {
+    render(
+      <SortingDialog
+        open
+        onOpenChange={jest.fn()}
+        applied={[]}
+        options={options}
+        onApply={jest.fn()}
+        onClear={jest.fn()}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /adicionar critério/i }),
+    );
+    expect(
+      screen.getByRole("button", { name: /^aplicar$/i }),
+    ).toBeDisabled();
+  });
+
+  test("anti-dup: 2 critérios com key vazio coexistem (React keys distintas)", () => {
+    render(
+      <SortingDialog
+        open
+        onOpenChange={jest.fn()}
+        applied={[]}
+        options={options}
+        onApply={jest.fn()}
+        onClear={jest.fn()}
+      />,
+    );
+    const addBtn = screen.getByRole("button", {
+      name: /adicionar critério/i,
+    });
+    fireEvent.click(addBtn);
+    fireEvent.click(addBtn);
+    // Ambos os critérios renderizam o option-placeholder (key vazia).
+    expect(
+      screen.getAllByRole("option", { name: /selecione uma coluna/i }),
+    ).toHaveLength(2);
+  });
+});
+
+describe("SortingDialog — anti-duplicação (cont.)", () => {
   test("removendo critério N libera a opção pra outros critérios", () => {
     render(
       <SortingDialog
