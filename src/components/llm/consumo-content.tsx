@@ -7,7 +7,6 @@ import {
   useState,
   useTransition,
 } from "react";
-import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   Activity,
@@ -19,12 +18,10 @@ import {
   Hash,
   History,
   Loader2,
-  Sigma,
   Sparkles,
   Zap,
 } from "lucide-react";
 
-import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -358,8 +355,6 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
   );
 
   const totalPages = Math.max(1, Math.ceil(detailsTotal / pageSize));
-  const isEmpty =
-    !!stats && stats.totalCalls === 0 && page === 0 && !isPending;
   const isFirstLoad = stats === null && isPending;
 
   // ---- Charts data --------------------------------------------------------
@@ -408,10 +403,6 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
   );
 
   // ---- Render -------------------------------------------------------------
-
-  if (isEmpty && !error) {
-    return <EmptyConsumoState />;
-  }
 
   // Range visível (mostrando X-Y de N). Quando há filtros, N é detailsTotal.
   const rangeStartIdx = detailsTotal === 0 ? 0 : page * pageSize + 1;
@@ -675,16 +666,11 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {/* Linha de TOTAL no topo — destaque visual violet */}
+                {/* Linha de TOTAL no topo — sutil (label uppercase, sem ícone) */}
                 {detailsTotals && detailsTotals.count > 0 ? (
-                  <TableRow className="sticky top-0 z-[1] bg-violet-500/15 dark:bg-violet-500/10 border-y-2 border-violet-500/40 dark:border-violet-500/30 text-violet-700 dark:text-violet-300 font-bold tracking-wide">
+                  <TableRow className="sticky top-0 z-[1] bg-muted/30 border-b border-border/40 text-foreground font-semibold text-xs uppercase tracking-wide">
                     <TableCell colSpan={3} className="whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <Sigma className="h-4 w-4" aria-hidden="true" />
-                        <span className="uppercase text-xs tracking-wider">
-                          Total no filtro ({numberFmt.format(detailsTotals.count)})
-                        </span>
-                      </div>
+                      <span>Total no filtro</span>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {numberFmt.format(detailsTotals.tokensInput)}
@@ -721,10 +707,14 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
                     return (
                       <TableRow
                         key={row.id}
-                        className="cursor-pointer transition-colors hover:bg-muted/40"
+                        className="group cursor-pointer transition-colors hover:bg-muted/40"
                         onClick={() => setSheetRow(row)}
                       >
-                        <TableCell className="whitespace-nowrap tabular-nums">
+                        <TableCell className="relative whitespace-nowrap tabular-nums pl-7">
+                          <ChevronRight
+                            className="absolute left-1.5 top-1/2 -translate-y-1/2 h-3 w-3 opacity-0 transition-opacity group-hover:opacity-60"
+                            aria-hidden="true"
+                          />
                           {dateTimeFmt.format(new Date(row.createdAt))}
                         </TableCell>
                         <TableCell>{providerLabel(row.provider)}</TableCell>
@@ -840,35 +830,8 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Empty state e skeleton
+// Skeleton
 // ---------------------------------------------------------------------------
-
-function EmptyConsumoState() {
-  return (
-    <Card className="rounded-2xl border border-border bg-muted/30">
-      <CardContent className="flex flex-col items-center justify-center gap-4 py-12 text-center">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-600/10">
-          <Sparkles className="h-7 w-7 text-violet-500" aria-hidden />
-        </div>
-        <div className="max-w-md space-y-2">
-          <h2 className="text-lg font-semibold">
-            Nenhuma chamada ao Agente Nex registrada ainda
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Configure o provedor em Configurações e use o agente flutuante para
-            começar a registrar consumo.
-          </p>
-        </div>
-        <Link
-          href="/configuracoes"
-          className={buttonVariants({ variant: "default", size: "default" })}
-        >
-          Ir para Configurações
-        </Link>
-      </CardContent>
-    </Card>
-  );
-}
 
 function ChartSkeleton({ height = 300 }: { height?: number }) {
   return (

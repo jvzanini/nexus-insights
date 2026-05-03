@@ -294,7 +294,61 @@ describe("ConsumoContent — refactor T6d v0.16.0", () => {
 
   // ----- T2-CONSUMO v0.20.0 ----------------------------------------------
 
-  it("A2: linha total renderiza com classe destaque violet + ícone Sigma + label uppercase", async () => {
+  // ----- T1+T4 v0.24.0 ---------------------------------------------------
+
+  it("T1: dashboard zerado (totalCalls=0) NÃO renderiza EmptyConsumoState", async () => {
+    fetchUsageStatsMock.mockResolvedValue(
+      makeStats({
+        totalCalls: 0,
+        totalCost: 0,
+        totalCostBrl: 0,
+        totalTokensInput: 0,
+        totalTokensOutput: 0,
+        byModel: [],
+        byDay: [],
+        byProvider: [],
+      }),
+    );
+    fetchUsageDetailsMock.mockResolvedValue(
+      makeDetails({
+        rows: [],
+        total: 0,
+        totals: {
+          costUsd: 0,
+          costBrl: 0,
+          tokensInput: 0,
+          tokensOutput: 0,
+          durationMsTotal: 0,
+          count: 0,
+        },
+      }),
+    );
+
+    render(<ConsumoContent minDate="2026-01-01T00:00:00.000Z" />);
+
+    await waitFor(() => expect(fetchUsageStatsMock).toHaveBeenCalled());
+    await waitFor(() => expect(fetchUsageDetailsMock).toHaveBeenCalled());
+
+    // Empty state full-page foi removido.
+    await waitFor(() => {
+      expect(
+        screen.queryByText(
+          /Nenhuma chamada ao Agente Nex registrada ainda/i,
+        ),
+      ).not.toBeInTheDocument();
+    });
+
+    // Mas o dashboard deve estar visível com KPIs zerados + tabela vazia.
+    expect(await screen.findByText(/Total de chamadas/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Hist[oó]rico de chamadas/i),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Nenhuma chamada no per[ií]odo/i),
+    ).toBeInTheDocument();
+  });
+
+  it("T4: linha total tem visual sutil (bg-muted/30) — sem violet, sem Sigma, sem (N)", async () => {
     const { container } = render(
       <ConsumoContent minDate="2026-01-01T00:00:00.000Z" />,
     );
@@ -303,19 +357,55 @@ describe("ConsumoContent — refactor T6d v0.16.0", () => {
     await screen.findByText(/Hist[oó]rico de chamadas/i);
 
     const totalLabel = await screen.findByText(/Total no filtro/i);
-    expect(totalLabel).toBeInTheDocument();
-    // O texto fica visualmente uppercase via classe `uppercase`.
-    expect(totalLabel.className).toMatch(/uppercase/);
-
-    // Linha do total tem bg-violet-500/15.
     const totalRow = totalLabel.closest("tr");
     expect(totalRow).not.toBeNull();
-    expect(totalRow!.className).toMatch(/bg-violet-500\/15/);
-    expect(totalRow!.className).toMatch(/font-bold/);
 
-    // Ícone Sigma (lucide) — render como svg com classe `lucide-sigma`.
-    const sigma = container.querySelector(".lucide-sigma");
-    expect(sigma).toBeInTheDocument();
+    // Classe sutil nova.
+    expect(totalRow!.className).toMatch(/bg-muted\/30/);
+    expect(totalRow!.className).toMatch(/font-semibold/);
+    expect(totalRow!.className).toMatch(/uppercase/);
+
+    // Não deve mais ter violet nem font-bold.
+    expect(totalRow!.className).not.toMatch(/bg-violet-500\/15/);
+    expect(totalRow!.className).not.toMatch(/font-bold/);
+
+    // Sigma removido da linha total.
+    expect(container.querySelector(".lucide-sigma")).toBeNull();
+
+    // Label sem "(N)" — só "Total no filtro" puro.
+    expect(totalLabel.textContent ?? "").not.toMatch(/\(/);
+  });
+
+  it("T4: linhas clicáveis têm class 'group' + ChevronRight com opacity-0 group-hover:opacity-60", async () => {
+    const { container } = render(
+      <ConsumoContent minDate="2026-01-01T00:00:00.000Z" />,
+    );
+
+    await waitFor(() => expect(fetchUsageDetailsMock).toHaveBeenCalled());
+    await screen.findByText(/Hist[oó]rico de chamadas/i);
+
+    // Aguarda render das rows clicáveis (modelo gpt-5.4).
+    const modelCell = await screen.findByText("gpt-5.4");
+    const dataRow = modelCell.closest("tr");
+    expect(dataRow).not.toBeNull();
+    expect(dataRow!.className).toMatch(/\bgroup\b/);
+    expect(dataRow!.className).toMatch(/cursor-pointer/);
+
+    // Primeira célula (data/hora) tem ChevronRight absolute.
+    const firstCell = dataRow!.querySelector("td");
+    expect(firstCell).not.toBeNull();
+    expect(firstCell!.className).toMatch(/relative/);
+    expect(firstCell!.className).toMatch(/pl-7/);
+
+    // ChevronRight com opacity-0 + group-hover:opacity-60.
+    const chevron = firstCell!.querySelector(".lucide-chevron-right");
+    expect(chevron).toBeInTheDocument();
+    expect(chevron!.getAttribute("class") ?? "").toMatch(/opacity-0/);
+    expect(chevron!.getAttribute("class") ?? "").toMatch(
+      /group-hover:opacity-60/,
+    );
+    // sanity: container existe para evitar lint unused.
+    expect(container).toBeTruthy();
   });
 
   it("3.G: pageSize usa CustomSelect (não <select> HTML nativo)", async () => {
