@@ -13,7 +13,7 @@ import { getKbDocsForPrompt } from "@/lib/nex/kb";
 import { composeSystemPrompt, type NexPromptConfig } from "@/lib/nex/prompt";
 
 export type SendNexMessageResult =
-  | { ok: true; message: string }
+  | { ok: true; message: string; suggestions: string[] }
   | { ok: false; error: string };
 
 /** Cap defensivo para o input do Playground (UI mostra contador X/1000). */
@@ -29,6 +29,7 @@ const PLAYGROUND_MAX_INPUT_LEN = 1000;
  */
 export async function sendNexMessage(
   messages: ChatMessage[],
+  options?: { isPlayground?: boolean },
 ): Promise<SendNexMessageResult> {
   const session = await auth();
   if (!session?.user) {
@@ -65,12 +66,13 @@ export async function sendNexMessage(
     userId,
     userName: authUser.name ?? null,
     platformRole,
+    isPlayground: options?.isPlayground ?? false,
   });
 
   if (!result.ok) {
     return { ok: false, error: result.error };
   }
-  return { ok: true, message: result.message };
+  return { ok: true, message: result.message, suggestions: result.suggestions };
 }
 
 /**
@@ -133,5 +135,5 @@ export async function testNexPromptAction(
   if (!result.ok) {
     return { ok: false, error: result.error };
   }
-  return { ok: true, message: result.message };
+  return { ok: true, message: result.message, suggestions: result.suggestions };
 }
