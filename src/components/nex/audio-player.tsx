@@ -164,11 +164,10 @@ export function AudioPlayer({
         aria-label={`Velocidade ${formatSpeed(speed)} (clique para próxima)`}
         title={`Velocidade ${formatSpeed(speed)} — clique para próxima`}
         className={cn(
-          // v0.15.4: sem ícone, sem container preto. Texto puro com border
-          // violeta sutil que combina com o balão. Hover animado (scale + bg).
-          // v0.24.0: min-w-[44px] uniformiza largura entre "1×" e "1.75×",
-          // mantém o botão dentro da margem do container e acerta hit target.
-          "flex h-6 min-w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-md border border-violet-500/30 bg-transparent px-1.5 font-mono text-[11px] font-medium tabular-nums text-violet-700 dark:text-violet-300",
+          // v0.28.0: tag compacta — cabe no balão violet sem vazar nas velocidades 1.25×/1.75×.
+          // Trade-off: h-5 < 44pt touch target, mas é botão cíclico não-crítico (next-speed)
+          // dentro de balão com padding amplo; aria-label dinâmico cobre acessibilidade.
+          "flex h-5 min-w-[34px] shrink-0 cursor-pointer items-center justify-center rounded-md border border-violet-500/30 bg-transparent px-1 font-mono text-[9px] font-medium tabular-nums text-violet-700 dark:text-violet-300",
           "transition-all duration-150 hover:scale-105 hover:border-violet-500/60 hover:bg-violet-500/20",
           "focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none",
         )}

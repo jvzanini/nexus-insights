@@ -34,14 +34,18 @@ describe("AudioPlayer", () => {
     expect(SPEEDS).toEqual([1, 1.25, 1.5, 1.75, 2]);
   });
 
-  it("botão de velocidade tem min-w-[44px] pra acomodar todos os labels sem stretch (v0.24.0)", () => {
+  it("botão de velocidade tem tag compacta (h-5 min-w-[34px] text-[9px]) — cabe no balão violet (v0.28.0)", () => {
     render(<AudioPlayer src="blob:fake" />);
     const button = screen.getByRole("button", {
       name: /velocidade .+ \(clique para próxima\)/i,
     });
-    // min-w-[44px] garante largura uniforme entre "1×", "1.25×", "1.5×", "1.75×", "2×".
-    // 44px também é hit target acessível (Apple HIG ≥44pt).
-    expect(button.className).toContain("min-w-[44px]");
+    // v0.28: compactado pra não vazar do balão violet em "1.25×"/"1.75×".
+    // Trade-off: h-5 < 44pt touch target, mas é botão cíclico não-crítico
+    // dentro de balão com padding amplo; aria-label dinâmico cobre a11y.
+    expect(button.className).toContain("h-5");
+    expect(button.className).toContain("min-w-[34px]");
+    expect(button.className).toContain("text-[9px]");
+    expect(button.className).not.toContain("min-w-[44px]");
   });
 
   it("clicar no botão cicla 1× → 1.25× → 1.5× → 1.75× → 2× → 1× (v0.15.2)", () => {
