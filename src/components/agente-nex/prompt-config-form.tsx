@@ -308,7 +308,7 @@ export function PromptConfigForm({ initial, onSaved }: PromptConfigFormProps) {
         </div>
         <p className="text-xs text-muted-foreground">
           Regras que o agente nunca deve violar (ex.: &quot;Nunca exponha dados
-          de outro tenant&quot;, &quot;Sempre cite a fonte do número&quot;).
+          de outro tenant&quot;, &quot;Não simule ações destrutivas&quot;).
         </p>
 
         {guardrailsCount === 0 ? (
