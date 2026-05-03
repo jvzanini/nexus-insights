@@ -24,6 +24,7 @@ export async function logUsage(args: {
   userId?: string;
   durationMs?: number;
   errorMessage?: string;
+  isPlayground?: boolean; // v0.31.0
 }): Promise<void> {
   try {
     await ensureLlmTables();
@@ -42,9 +43,9 @@ export async function logUsage(args: {
       `INSERT INTO llm_usage (
          id, provider, model, tokens_input, tokens_output, cost_usd, cost_brl,
          usd_to_brl_rate, prompt_chars, response_chars, user_id, duration_ms,
-         error_message, created_at
+         error_message, is_playground, created_at
        )
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())`,
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())`,
       [
         args.provider,
         args.model,
@@ -58,6 +59,7 @@ export async function logUsage(args: {
         args.userId ?? null,
         args.durationMs ?? null,
         args.errorMessage ?? null,
+        args.isPlayground ?? false,
       ],
     );
   } catch (err) {

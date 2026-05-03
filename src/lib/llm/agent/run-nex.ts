@@ -177,10 +177,7 @@ export async function runNexAgent(args: RunNexInput): Promise<RunNexResult> {
     //
     // v0.31.0: SEMPRE logamos (remove skip de v0.16). Propaga `isPlayground`
     // como flag — `usage-logger` (T-D2) persiste em `llm_usage.is_playground`
-    // pra distinguir Bubble (false) vs Playground (true) no dashboard. Cast
-    // intencional: a signature de `logUsage` ganha `isPlayground` em T-D2;
-    // até lá, esta task escreve o payload completo pro mock dos testes
-    // validar o contract end-to-end.
+    // pra distinguir Bubble (false) vs Playground (true) no dashboard.
     void logUsage({
       provider: client.provider,
       model: client.model,
@@ -196,7 +193,7 @@ export async function runNexAgent(args: RunNexInput): Promise<RunNexResult> {
           ? "max_iterations_exceeded"
           : undefined,
       isPlayground: args.isPlayground ?? false,
-    } as Parameters<typeof logUsage>[0] & { isPlayground: boolean });
+    });
 
     if (!result.toolCalls?.length) {
       // Resposta final — extrai sufixo `[[suggestions]]` se presente (v0.31).

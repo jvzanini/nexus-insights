@@ -92,3 +92,63 @@ describe("logUsage", () => {
     warn.mockRestore();
   });
 });
+
+describe("logUsage — is_playground (v0.31)", () => {
+  it("INSERT inclui is_playground=true quando isPlayground=true", async () => {
+    rate.mockResolvedValueOnce({
+      rate: 5.61,
+      commercial: 5.1,
+      spread: 1.1,
+      source: "live",
+      fetchedAt: new Date(),
+    });
+    q.mockResolvedValueOnce({ rows: [], rowCount: 1 } as never);
+
+    await logUsage({
+      provider: "openai",
+      model: "gpt-5",
+      tokensInput: 10,
+      tokensOutput: 20,
+      costUsd: 0.001,
+      promptChars: 50,
+      responseChars: 100,
+      isPlayground: true,
+    });
+
+    const insertCall = q.mock.calls.find((c) =>
+      String(c[0]).includes("INSERT INTO llm_usage"),
+    );
+    expect(insertCall).toBeDefined();
+    const sql = String(insertCall![0]);
+    expect(sql).toMatch(/is_playground/i);
+    const params = insertCall![1] as unknown[];
+    expect(params).toContain(true);
+  });
+
+  it("INSERT inclui is_playground=false quando omitido (default)", async () => {
+    rate.mockResolvedValueOnce({
+      rate: 5.61,
+      commercial: 5.1,
+      spread: 1.1,
+      source: "live",
+      fetchedAt: new Date(),
+    });
+    q.mockResolvedValueOnce({ rows: [], rowCount: 1 } as never);
+
+    await logUsage({
+      provider: "openai",
+      model: "gpt-5",
+      tokensInput: 10,
+      tokensOutput: 20,
+      costUsd: 0.001,
+      promptChars: 50,
+      responseChars: 100,
+    });
+
+    const insertCall = q.mock.calls.find((c) =>
+      String(c[0]).includes("INSERT INTO llm_usage"),
+    );
+    const params = insertCall![1] as unknown[];
+    expect(params).toContain(false);
+  });
+});
