@@ -87,7 +87,7 @@ export interface ConversasListCursor {
 }
 
 const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 10000;
+const MAX_LIMIT = 50_000;
 const DEFAULT_TTL_SECONDS = 30;
 
 interface RawRow {
@@ -159,7 +159,7 @@ export async function conversasList(args: {
   const useOffset = args.page != null;
   const effectivePage = useOffset ? Math.max(1, args.page!) : 1;
   const effectivePageSize = useOffset
-    ? Math.min(Math.max(args.pageSize ?? 1000, 10), 5000)
+    ? Math.min(Math.max(args.pageSize ?? 1000, 10), MAX_LIMIT)
     : 0;
   const offset = useOffset ? (effectivePage - 1) * effectivePageSize : 0;
   const cursor = !useOffset && args.cursor ? decodeCursor(args.cursor) : null;

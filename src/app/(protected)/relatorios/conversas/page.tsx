@@ -67,8 +67,8 @@ export default async function ConversasPage({ searchParams }: PageProps) {
       ? filterState.priorities
       : undefined,
     labelIds: filterState.labelIds.length ? filterState.labelIds : undefined,
-    search: filterState.search,
     excludeMatrixIA,
+    // search removido: virou client-side em ConversasPageClient (T10).
   };
 
   // Carrega meta + dados em paralelo. Cada chamada é resiliente a falhas
@@ -87,8 +87,8 @@ export default async function ConversasPage({ searchParams }: PageProps) {
     fetchConversas({
       filters: reportFilters,
       accountId,
-      page: filterState.page ?? 1,
-      pageSize: 1000,
+      page: 1,
+      pageSize: 50_000,
     }),
   ]);
 
@@ -105,9 +105,7 @@ export default async function ConversasPage({ searchParams }: PageProps) {
     Boolean(labelsResult?.stale);
 
   const conversasTotal = conversasResult.total ?? 0;
-  const conversasPage = conversasResult.page ?? 1;
-  const conversasPageSize = conversasResult.pageSize ?? 1000;
-  const conversasTotalPages = conversasResult.totalPages ?? 0;
+  const conversasOverCap = conversasTotal > 50_000;
 
   return (
     <>
@@ -130,6 +128,18 @@ export default async function ConversasPage({ searchParams }: PageProps) {
         }
       />
 
+      {conversasOverCap ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-foreground"
+        >
+          Período retornou {conversasTotal.toLocaleString("pt-BR")} conversas
+          (acima do cap de 50.000 pra busca global). Mostrando as primeiras
+          50.000. Refine o período ou os filtros para incluir mais.
+        </div>
+      ) : null}
+
       {stale ? <StaleBanner cachedAt={conversasResult.cachedAt} /> : null}
 
       <FilterTransitionProvider>
@@ -142,10 +152,6 @@ export default async function ConversasPage({ searchParams }: PageProps) {
             filterState={filterState}
             accountId={accountId}
             initialRows={conversasResult.rows}
-            total={conversasTotal}
-            page={conversasPage}
-            pageSize={conversasPageSize}
-            totalPages={conversasTotalPages}
             reportFilters={reportFilters}
             conditionGroup={
               filterState.mode === "advanced"
