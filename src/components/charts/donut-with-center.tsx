@@ -45,11 +45,7 @@ export interface DonutWithCenterProps {
    * Recebe `name` (label da fatia) e `index` na lista filtrada.
    */
   onSliceClick?: (name: string, index: number) => void;
-  /**
-   * @deprecated Desde v0.24.0 o tooltip segue o mouse (default Recharts) com
-   * `offset=12` e `allowEscapeViewBox`. Esta prop é ignorada (no-op) e mantida
-   * apenas para back-compat. Será removida numa major futura.
-   */
+  /** Posição do tooltip dentro do container (default: "top-right"). */
   tooltipPosition?: DonutTooltipPosition;
 }
 
@@ -146,8 +142,8 @@ export function DonutWithCenter({
   centerLabel,
   centerValue,
   height = 360,
-  innerRadius = 80,
-  outerRadius = 120,
+  innerRadius = 75,
+  outerRadius = 110,
   emptyMessage,
   emptyHint,
   formatValue,
@@ -155,8 +151,7 @@ export function DonutWithCenter({
   className,
   ariaLabel = "Donut chart",
   onSliceClick,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  tooltipPosition: _tooltipPositionDeprecated,
+  tooltipPosition = "top-right",
 }: DonutWithCenterProps) {
   const prefersReducedMotion = useReducedMotion();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -200,8 +195,7 @@ export function DonutWithCenter({
         <PieChart margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
           <Tooltip
             cursor={false}
-            offset={12}
-            allowEscapeViewBox={{ x: true, y: true }}
+            wrapperStyle={donutTooltipWrapperStyle(tooltipPosition)}
             content={(props: { active?: boolean; payload?: unknown }) => (
               <DonutTooltipStacked
                 active={props.active}

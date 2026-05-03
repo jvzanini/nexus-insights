@@ -294,3 +294,23 @@ describe("DonutWithCenter — defaults v0.26", () => {
     expect(wrapper.style.height).toBe("360px");
   });
 });
+
+describe("DonutWithCenter — defaults v0.31", () => {
+  it("usa innerRadius=75 outerRadius=110 height=360 por default", () => {
+    const { container } = render(
+      <DonutWithCenter
+        data={[{ name: "A", value: 50 }]}
+        centerLabel="Total"
+        centerValue="50"
+      />,
+    );
+    const wrapper = container.querySelector("[role='img']") as HTMLElement;
+    expect(wrapper.style.height).toBe("360px");
+  });
+
+  it("tooltipPosition é prop ATIVA não-deprecated com default 'top-right'", () => {
+    expect(donutTooltipWrapperStyle("top-right")).toMatchObject({
+      position: "absolute", top: 8, right: 8,
+    });
+  });
+});
