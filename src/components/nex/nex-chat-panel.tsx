@@ -731,11 +731,14 @@ export function NexChatPanel({
               <Send className="h-4 w-4" strokeWidth={2.25} />
             </button>
           </form>
-          {!isRecording ? (
-            <p className="mt-1.5 px-1 text-[11px] text-muted-foreground">
-              Enter envia · Shift+Enter quebra linha
-            </p>
-          ) : null}
+          <p
+            className={cn(
+              "mt-1.5 px-1 text-[11px] text-muted-foreground transition-opacity",
+              isRecording ? "invisible" : "visible",
+            )}
+          >
+            Enter envia · Shift+Enter quebra linha
+          </p>
         </footer>
       </motion.div>
 
