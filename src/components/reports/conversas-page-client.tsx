@@ -17,8 +17,7 @@
 // nós apenas o roteamos do filterState (server) para a tabela como prop
 // dedicada — fora do contrato de `ReportFilters`.
 
-import { useCallback, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AdvancedFilters } from "@/components/reports/advanced-filters";
 import { ConversasTable } from "@/components/reports/conversas-table";
@@ -26,7 +25,6 @@ import { ContentLoadingWrapper } from "@/components/reports/content-loading-wrap
 import { PresetsDialog } from "@/components/reports/presets-dialog";
 import type { SortRule } from "@/components/reports/sorting-dialog";
 import type { FilterState } from "@/lib/reports/filter-state";
-import { serializeFilterState } from "@/lib/reports/filter-state";
 import { useLocalStorageState } from "@/lib/hooks/use-local-storage-state";
 import {
   useFilterPresets,
@@ -52,10 +50,6 @@ interface Props {
   filterState: FilterState;
   accountId: number;
   initialRows: ConversaRow[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
   reportFilters: FetchConversasInput["filters"];
   /**
    * Grupo de condições do modo Avançado dos filtros — vem do filterState
@@ -69,6 +63,8 @@ interface Props {
   currentChatwootUserId: number | null;
 }
 
+const PAGE_SIZE_CLIENT = 100;
+
 export function ConversasPageClient({
   inboxes,
   teams,
@@ -77,10 +73,6 @@ export function ConversasPageClient({
   filterState,
   accountId,
   initialRows,
-  total,
-  page,
-  pageSize,
-  totalPages,
   reportFilters,
   conditionGroup,
   currentChatwootUserId,
@@ -126,22 +118,19 @@ export function ConversasPageClient({
   const presetsApi = useFilterPresets();
   const [presetsDialogOpen, setPresetsDialogOpen] = useState(false);
 
-  // ---- Row count atual da tabela (pra disable do <ExportButton>) -----
-  // T7: inicializa com initialRows.length. T9 sobrepõe via callback
-  // bidirecional `onRowCountChange` quando filtros client-side reduzirem.
-  const [tableRowCount, setTableRowCount] = useState(initialRows.length);
+  // ---- Busca + paginação client-side (v0.25) -----
+  // searchClient é o estado de UI da caixa de busca; pageClient idem da paginação.
+  // filteredCount é notificado pela <ConversasTable> via onFilteredCountChange e
+  // propagado pro <ExportButton> dentro do <AdvancedFilters>.
+  const [searchClient, setSearchClient] = useState<string>("");
+  const [pageClient, setPageClient] = useState<number>(1);
+  const [filteredCount, setFilteredCount] = useState<number>(initialRows.length);
 
-  // ---- Paginação -----
-  const router = useRouter();
-
-  const handlePageChange = useCallback(
-    (newPage: number) => {
-      const next = { ...filterState, page: newPage > 1 ? newPage : undefined };
-      const qs = serializeFilterState(next).toString();
-      router.push(qs ? `?${qs}` : "?");
-    },
-    [filterState, router],
-  );
+  // Reset de página quando search/filters/sort/quickFilters mudam — UX padrão:
+  // alterar critérios faz voltar pra primeira página automaticamente.
+  useEffect(() => {
+    setPageClient(1);
+  }, [searchClient, filterState, sortStack, quickFilters]);
 
   const handleApplyPreset = useCallback(
     (preset: FilterPreset) => {
@@ -170,7 +159,9 @@ export function ConversasPageClient({
           onApplyPreset={handleApplyPreset}
           onOpenPresetsManager={() => setPresetsDialogOpen(true)}
           appliedReportFilters={reportFilters}
-          tableRowCount={total}
+          tableRowCount={filteredCount}
+          searchClient={searchClient}
+          onSearchClientChange={setSearchClient}
         />
       </div>
 
@@ -178,17 +169,16 @@ export function ConversasPageClient({
         <div data-tour="table">
           <ConversasTable
             initialRows={initialRows}
-            total={total}
-            page={page}
-            pageSize={pageSize}
-            totalPages={totalPages}
-            onPageChange={handlePageChange}
+            pageClient={pageClient}
+            pageSizeClient={PAGE_SIZE_CLIENT}
+            onPageClientChange={setPageClient}
+            onFilteredCountChange={setFilteredCount}
             accountId={accountId}
             filters={reportFilters}
             sortStack={sortStack}
             onSortStackChange={setSortStack}
             conditionGroup={composedConditionGroup}
-            searchTerm={reportFilters.search}
+            searchClient={searchClient}
           />
         </div>
       </ContentLoadingWrapper>
