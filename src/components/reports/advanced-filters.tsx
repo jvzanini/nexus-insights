@@ -175,7 +175,6 @@ export function AdvancedFilters({
     [draft, applied],
   );
   const hasPendingNonSearch = pendingDiffExSearch > 0;
-  const searchPending = (draft.search ?? "") !== (applied.search ?? "");
 
   const appliedCount = useMemo(
     () =>
@@ -366,10 +365,7 @@ export function AdvancedFilters({
 
       {/* Linha 2 — Busca + chip Filtros + chip Ordenação */}
       <div className="flex flex-wrap items-center gap-2">
-        <div
-          data-tour="search"
-          className="relative w-full max-w-[320px] min-w-[200px] sm:flex-none"
-        >
+        <div data-tour="search" className="relative w-full max-w-[320px] min-w-[200px] sm:flex-none">
           <Search
             className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
             aria-hidden="true"
@@ -386,17 +382,12 @@ export function AdvancedFilters({
             }}
             placeholder="Buscar..."
             aria-label="Buscar conversas"
-            className="h-10 pl-9"
+            className="h-10 pl-9 pr-[112px]"
           />
-          {searchPending ? (
-            <span
-              role="status"
-              aria-live="polite"
-              className="mt-1 block px-1 text-[11px] text-muted-foreground/70"
-            >
-              Aperte Enter para buscar
-            </span>
-          ) : null}
+          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+            Pressione
+            <kbd className="font-semibold text-violet-500 tabular-nums">↵ Enter</kbd>
+          </span>
         </div>
 
         <PresetsPopover
