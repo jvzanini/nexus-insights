@@ -1,12 +1,18 @@
 # Status — Nexus Insights
 
-**Última atualização:** 2026-05-03
-**Versão atual em produção:** v0.34.0
+**Última atualização:** 2026-05-04
+**Versão atual em produção:** v0.35.0
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.34.0)
+## Em produção (v0.35.0)
+
+### Release v0.35.0 (2026-05-04) — Conversas Bugfix (XLSX rows fantasma + filtro Documento)
+
+2 bugs urgentes da v0.32 reportados pelo João em produção: (1) **XLSX export sem rows fantasma** — refator do builder pra `ws.addRow(headers)` direto evitando interação `ws.columns` + frozen pane que pré-alocava rows; (2) **Filtro Documento aplica no pipeline da tabela** — bug de cabeamento da v0.32: UI completa mas `<ConversasTable>` não chamava `matchDocumentTypes`. Fix: passar prop + adicionar `docFilteredRows` no pipeline. `detectDocument` identifica CPF/CNPJ por 11/14 dígitos no `identifier` ou `additional_attributes`.
+
+Workflow: plan v1→v2→v3 (14 achados em 2 pentes-finos REAIS) + subagent-driven com TDD em ambos. 3 commits granulares (T1+T2+release).
 
 ### Release v0.34.0 (2026-05-03) — Suite Agente Nex Polish v5
 

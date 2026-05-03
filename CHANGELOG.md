@@ -1,5 +1,21 @@
 # Changelog
 
+## [v0.35.0] 2026-05-04 — Conversas Bugfix (XLSX rows fantasma + filtro Documento)
+
+> 2 bugs urgentes da v0.32 reportados pelo João em produção. Workflow: plan v1→v2→v3 (14 achados em 2 pentes-finos REAIS) + subagent-driven com TDD em ambos. 3 commits granulares (T1+T2+release) + tests verde + typecheck clean no escopo.
+
+### Bug fixes
+
+- **T1 — XLSX export sem rows fantasma:** João reportou que exportação com poucas rows (1) gerava rows em branco extras no arquivo final. Causa: combinação de `ws.columns = [...]` em ExcelJS com `views: { state: "frozen", ySplit: 1 }` pré-aloca rows fantasma. Fix: refator pra `ws.addRow(headers)` direto + widths/format aplicados via `ws.getColumn(i).width` (1-based) e `headerRow.font/fill`. Frozen pane mantido. Tests: 3 cenários (0/1/3 rows) validando `actualRowCount` + `rowCount` exatos.
+
+- **T2 — Filtro Documento aplica no pipeline da tabela:** João reportou que filtro Documento (CPF/CNPJ/Sem) não filtrava nada. Causa: na v0.32 F1, a UI (chip + dropdown + propagação pro Export) ficou completa, MAS a tabela visível NÃO chamava `matchDocumentTypes` na pipeline e `<ConversasTable>` nem recebia `documentTypes` como prop. Fix: ConversasTable ganha prop `documentTypes`; ConversasPageClient passa `filterState.documentTypes`; pipeline ganha etapa `docFilteredRows` entre `searchedRows` e `applyConditions`. Helper `matchDocumentTypes` (existente desde v0.32) finalmente cabeado. `detectDocument` identifica CPF/CNPJ por quantidade de dígitos (11/14) no `identifier` ou em `additional_attributes` (chaves `cpf/CPF/cnpj/CNPJ/document`).
+
+### Coordenação multi-agente
+
+3 agentes paralelos ativos durante a sessão: `claude-agente-nex-polish-v031` (escopo `/agente-nex/*`), `claude-multitenant-realtime-fase1` (Fase 1 spec/code), `claude-dashboard-conversas-chart-fix` (escopo dashboard charts). Bumpando v0.35 (skip 0.33 multitenant + 0.34 dashboard-chart). Zero conflito de código fonte.
+
+---
+
 ## [v0.34.0] 2026-05-03 — Suite Agente Nex Polish v5 (nomenclaturas + sugestões em botões + 6 polish + bug cotação)
 
 > Feature grande + 6 polish cirúrgicos + bug fix da cotação USD/BRL inflada (>R$6/USD por bug de spread setado pra 1.40+). Workflow rigoroso (plan v1→v2→v3 com 50 achados em 2 pentes-finos REAIS · subagent-driven-development com TDD em cada task · ui-ux-pro-max em todas as tasks UI · two-stage review automático). 17 commits granulares (A1+A2+B1+B2+C1+C2+C3+C4+D1+D2+D3+D4+D5+D6+E1+E2+E3) + commit do release. Bump 0.32→0.34 (pula 0.33 — outro agente ativo no Multi-tenant Realtime Fase 1 já marcou commits T0.X com prefix v0.33).
