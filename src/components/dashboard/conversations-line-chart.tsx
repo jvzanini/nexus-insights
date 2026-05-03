@@ -18,7 +18,7 @@ import type {
 } from "recharts/types/component/DefaultTooltipContent";
 import { fromZonedTime } from "date-fns-tz";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatBucketLabel } from "@/lib/utils/format-bucket";
 import { cn } from "@/lib/utils";
 import type { DashboardChartPoint } from "@/lib/chatwoot/queries/dashboard-data";
@@ -288,7 +288,7 @@ export function ConversationsLineChart({
 
   return (
     <Card className="bg-card border border-border rounded-xl">
-      <CardHeader className="pb-3 flex-row items-start justify-between gap-3">
+      <CardHeader className="pb-3">
         <div>
           <CardTitle className="text-base font-semibold text-foreground flex items-center gap-2">
             <LineChartIcon className="h-4 w-4 text-violet-400" />
@@ -298,15 +298,17 @@ export function ConversationsLineChart({
             Selecione abaixo as séries que deseja ver no gráfico.
           </p>
         </div>
-        <PeriodNavigator
-          period={period}
-          range={range}
-          tz={tz}
-          weekStartsOn={weekStartsOn}
-          referenceDate={referenceDate}
-          nextAvailable={nextAvailable}
-          onChange={onReferenceDateChange}
-        />
+        <CardAction>
+          <PeriodNavigator
+            period={period}
+            range={range}
+            tz={tz}
+            weekStartsOn={weekStartsOn}
+            referenceDate={referenceDate}
+            nextAvailable={nextAvailable}
+            onChange={onReferenceDateChange}
+          />
+        </CardAction>
       </CardHeader>
       <CardContent>
         {/* Checkboxes de séries */}
