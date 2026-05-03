@@ -50,3 +50,34 @@ describe("HighlightedText", () => {
     expect(container.querySelector("mark")).toBeNull();
   });
 });
+
+describe("HighlightedText v0.25 — normalize NFD", () => {
+  it("destaca match ignorando acentos (busca 'joao' destaca 'João')", () => {
+    const { container } = render(
+      <HighlightedText text="João Silva" term="joao" />,
+    );
+    const mark = container.querySelector("mark");
+    expect(mark).not.toBeNull();
+    expect(mark?.textContent).toBe("João");
+  });
+
+  it("destaca match ignorando case (busca 'AçÃO' destaca 'ação')", () => {
+    const { container } = render(
+      <HighlightedText text="Plano de ação" term="AçÃO" />,
+    );
+    const mark = container.querySelector("mark");
+    expect(mark?.textContent).toBe("ação");
+  });
+
+  it("preserva texto original com acentos no render", () => {
+    const { container } = render(
+      <HighlightedText text="São Paulo" term="sao" />,
+    );
+    expect(container.textContent).toBe("São Paulo");
+  });
+
+  it("texto sem term retorna texto cru", () => {
+    const { container } = render(<HighlightedText text="abc" term="" />);
+    expect(container.textContent).toBe("abc");
+  });
+});
