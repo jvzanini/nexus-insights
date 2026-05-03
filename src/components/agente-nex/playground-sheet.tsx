@@ -106,6 +106,9 @@ export function PlaygroundSheet({
 
   const [previewOpen, setPreviewOpen] = useState<boolean>(false);
   const [previewText, setPreviewText] = useState<string>("");
+  // v0.28.0: Sheet suppress quando Dialog "Ver prompt usado" abre — evita
+  // dispute de focus + z-index entre Sheet (z-50) e Dialog (z-[70]).
+  const [sheetSuppressed, setSheetSuppressed] = useState<boolean>(false);
 
   // Áudio (paridade com nex-chat-panel).
   const recorderRef = useRef<AudioRecorderHandle | null>(null);
@@ -273,21 +276,28 @@ export function PlaygroundSheet({
 
   function handleOpenPreview() {
     startPreview(async () => {
-      const result = await previewSystemPromptAction(cfgSnapshot);
-      if (!result.ok || !result.data) {
-        toast.error(
-          `Erro: ${result.error ?? "não foi possível carregar o prompt"}. Verifique chave/modelo em Configuração.`,
-        );
-        return;
+      try {
+        const result = await previewSystemPromptAction(cfgSnapshot);
+        if (!result.ok || !result.data) {
+          toast.error(
+            `Erro: ${result.error ?? "não foi possível carregar o prompt"}. Verifique chave/modelo em Configuração.`,
+          );
+          return;
+        }
+        setPreviewText(result.data.composedPrompt);
+        // v0.28.0: Sheet sai do caminho antes do Dialog abrir.
+        setSheetSuppressed(true);
+        setPreviewOpen(true);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        toast.error(`Erro inesperado: ${msg}`);
       }
-      setPreviewText(result.data.composedPrompt);
-      setPreviewOpen(true);
     });
   }
 
   return (
     <>
-      <Sheet open={open} onOpenChange={onOpenChange} width={480}>
+      <Sheet open={open && !sheetSuppressed} onOpenChange={onOpenChange} width={480}>
         <SheetHeader onClose={() => onOpenChange(false)}>
           <div className="flex flex-col gap-2">
             <div className="flex min-w-0 items-center gap-2">
@@ -473,10 +483,17 @@ export function PlaygroundSheet({
         </footer>
       </Sheet>
 
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+      <Dialog
+        open={previewOpen}
+        onOpenChange={(o) => {
+          setPreviewOpen(o);
+          // v0.28.0: restaura Sheet quando user fecha o Dialog.
+          if (!o) setSheetSuppressed(false);
+        }}
+      >
         <DialogContent
-          className="sm:max-w-3xl z-[60]"
-          overlayClassName="z-[60]"
+          className="sm:max-w-3xl z-[70]"
+          overlayClassName="z-[70]"
           aria-label="Prompt usado nesta sessão"
         >
           <DialogHeader>

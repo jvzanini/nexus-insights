@@ -391,7 +391,9 @@ describe("PlaygroundSheet — v0.26 bubble UX", () => {
     const dialog = await screen.findByRole("dialog", {
       name: /Prompt usado nesta sessão/i,
     });
-    expect(dialog.className).toMatch(/z-\[60\]/);
+    // v0.28.0: subiu de z-[60] (v0.26) pra z-[70] junto com Sheet suppress
+    // — Sheet desaparece quando preview abre, evitando dispute de z-index.
+    expect(dialog.className).toMatch(/z-\[70\]/);
   });
 });
 
