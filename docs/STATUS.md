@@ -1,12 +1,29 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-05-03
-**Versão atual em produção:** v0.30.0
+**Versão atual em produção:** v0.32.0
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.30.0)
+## Em produção (v0.32.0)
+
+### Release v0.32.0 (2026-05-03) — Conversas Filtros Polish v5 (Documento + redesign Avançado + Export pipeline)
+
+9 fixes/features no menu de filtros após feedback do João sobre v0.30. Workflow rigoroso (plan v1→v2→v3 com 28 achados em 2 pentes-finos REAIS · subagent-driven-development com TDD em 4 batches sequenciais · ui-ux-pro-max em todas tasks UI). 14 commits granulares + release · 100+ tests novos verde · typecheck 0 erros.
+
+**Destaques:**
+- **F1 NEW** — filtro Documento (CPF/CNPJ/Sem) multi-select no Simples.
+- **F3** — AlertDialog ao trocar Simples↔Avançado se houver dados (descarta tab origem).
+- **F4** — "Limpar todos" respeita só o tab ativo.
+- **F6 BUG FIX** — contador "Aplicar (N)" fantasma corrigido (não inflava mais ao trocar tabs).
+- **F7 ARQUITETURAL** — operador E/OU per-par no Avançado (refator schema; codec v1→v2 auto-migra).
+- **F8 VISUAL** — redesign completo do where-clause builder (ícones Filter/FolderOpen distinguem condição/grupo, conector chip clicável, indentação grupos com border-l violet, animations sutis).
+- **F9 NEW** — export respeita pipeline client (searchClient + conditionGroup + documentTypes + sortStack). XLSX agora bate exatamente com a tabela visível.
+
+**Polish:** F2 cursor-pointer nos tabs · F5 remove botões internos do `<ConditionalFilters>` (single source of truth no rodapé do FiltersDialog).
+
+**Coordenação multi-agente:** `claude-agente-nex-polish-v031` ativo em escopo `/agente-nex/*` (skip v0.31). Commits intercalados via rebase.
 
 ### Release v0.30.0 (2026-05-03) — Conversas Polish v4 (correções v0.29: cells single-line + X adesivo)
 

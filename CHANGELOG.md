@@ -1,5 +1,66 @@
 # Changelog
 
+## [v0.32.0] 2026-05-03 — Conversas Filtros Polish v5 (Documento + redesign Avançado + Export pipeline)
+
+> 9 fixes/features no menu de filtros de `/relatorios/conversas` após feedback do João sobre v0.30. Workflow rigoroso (plan v1→v2→v3 com 28 achados em 2 pentes-finos REAIS · subagent-driven-development com TDD em 4 batches sequenciais · ui-ux-pro-max em todas tasks UI · code review final via tests inline). 14 commits granulares + release · 100+ tests novos verde · typecheck 0 erros (no escopo Conversas) · sem schema DB change (apenas codec migration v1→v2 transparente).
+
+### Fixes
+
+- **F1 NEW FEATURE — Filtro Documento (CPF/CNPJ/Sem) no Simples:** nova seção `Documento` no `<FiltersDialog>` Simples com 3 opções multi-select (`Com CPF` · `Com CNPJ` · `Sem documento`). `FilterState.documentTypes: Array<"cpf"|"cnpj"|"none">`. URL `?docTypes=`. Helper `matchDocumentTypes` filtra rows via `detectDocument()` existente. Chip aplicado padrão "Documento: Com CPF +1" via summarize. Multi-select OR.
+
+- **F2 — Cursor pointer nos tabs Simples/Avançado:** afford visual com `cursor-pointer`.
+
+- **F3 — AlertDialog ao trocar de tab quando há dados:** "Você só pode usar um modo por vez" — tabs continuam clicáveis sempre, mas se há seleções no tab atual, click no outro abre AlertDialog "Trocar para filtro X vai descartar essa configuração" com Confirmar/Cancelar/X. Confirmar limpa tab origem + ativa destino.
+
+- **F4 — "Limpar todos" respeita só o tab ativo:** se Simples ativo, zera só `inboxIds/teamIds/etc + documentTypes`; se Avançado ativo, zera só `conditionGroup`.
+
+- **F5 — Remove botões internos Aplicar/Limpar do `<ConditionalFilters>`:** rodapé Aplicar/Limpar interno do where-clause builder ocultado via prop `hideActions={true}`. Os botões do rodapé do `<FiltersDialog>` é que prevalecem (single source of truth).
+
+- **F6 BUG — Contador "Aplicar (N)" fantasma:** `diffFilterStates` agora aceita `{ ignoreMode?, ignoreSearch? }`. Trocar tab Simples↔Avançado não inflava mais o contador (era `mode` change contando como diff). Bug reportado pelo João: "vou pra avançado e aparece Aplicar (2) sem nada selecionado".
+
+- **F7 ARQUITETURAL — Operador E/OU per-par no Avançado (refator schema):** `ConditionGroup { combinator, conditions }` → `ConditionGroup { items[] }` com `ConditionGroupItem { connector?, node }`. Operador é POR PAR de items irmãos (não global do grupo). Avaliação left-associative: `((A op1 B) op2 C) op3 D`. Codec v2 com auto-migrate v1→v2 — URLs antigas `?cg=` continuam funcionando (preserva presets em localStorage também).
+
+- **F8 VISUAL — Redesign do `<ConditionalFilters>`:** João reportou "tá uma zona, uma bagunça" — múltiplos botões E/OU verticais sem hierarquia visual. Redesign:
+  - Item de Condição: card cinza com ícone `<Filter h-3.5>`, hover violet sutil, botão delete aparece em group-hover.
+  - Item de Grupo: card violet com ícone `<FolderOpen h-3.5 text-violet-500>` + label "GRUPO" uppercase, indentação `border-l-2 border-violet-500/30 + bg-muted/20`, conteúdo recursivo aninhado.
+  - Conector entre items: chip clicável `w-9 h-5` com `E` ou `OU` uppercase + linhas tracejadas conectando. Click alterna E↔OU.
+  - Animations: `motion-safe:animate-in fade-in slide-in-from-top-1 duration-200` ao adicionar item.
+  - Empty state: placeholder italic.
+  - Hierarquia visual via cor + ícone + indentação, não dependendo só de cor.
+
+- **F9 NEW — Export respeita o pipeline client (searchClient + conditionGroup + documentTypes + sortStack):** export agora reflete EXATAMENTE a tabela visível, incluindo a barra de busca (que João reportou: "se eu pesquisar e exportar, tem que vir o que tá na tela"). `exportConversasAction` ganha 4 args opcionais; após `conversasList`, replica pipeline server-side via helpers já existentes (`matchSearchClient`, `applyConditions`, `matchDocumentTypes`, `sortConversasByStack`). Tooltip atualizado: "A exportação inclui a busca aplicada e os filtros".
+
+### Internal
+
+- `src/lib/reports/match-document-types.ts` (novo) — helper F1.
+- `src/lib/reports/sort-conversas.ts` (novo) — helper sort server-safe extraído de `conversas-table.tsx` (DRY: server export + client table usam o mesmo).
+- `src/lib/utils/apply-conditions.ts` — schema v2 `{ items[] }` com eval left-associative.
+- `src/lib/reports/condition-group-codec.ts` — v2 codec + `migrateV1ToV2` recursivo.
+- `src/lib/reports/filter-state.ts` — `documentTypes` field + `diffFilterStates(opts)` parametrizado.
+- `src/components/ui/conditional-filters.tsx` — redesign visual completo + schema v2 + componente recursivo `ConditionalFiltersInner`.
+- `src/components/reports/filters-dialog.tsx` — F1 seção Documento + F2 cursor + F3 AlertDialog + F4 Limpar tab-ativo + F5 hideActions.
+- `src/components/reports/applied-filters-chips.tsx` — chip Documento.
+- `src/components/reports/advanced-filters.tsx` — F6 contador correto + propagação F9.
+- `src/components/reports/conversas-page-client.tsx` — agrega states + propaga pro Export.
+- `src/components/reports/export-button.tsx` — recebe + propaga 4 args novos.
+- `src/lib/actions/reports/conversas-export.ts` — replica pipeline server.
+- `src/lib/reports/quick-filters.ts` — migrado pro schema v2.
+
+### Trade-offs
+
+- F7 schema breaking: URLs `?cg=` v1 e presets localStorage v1 são auto-migrados no decode (transparente). Encode SEMPRE escreve v2.
+- F9 export passa pela query SQL primeiro (até 50k rows), depois aplica pipeline client. Performance aceitável; cache Redis amortiza fetches repetidos.
+- F8 redesign visual significativo — usuários do Avançado vão notar. UX mais clara, mais consistente.
+
+### Coordenação multi-agente
+
+- `claude-agente-nex-polish-v031` ativo em escopo `/agente-nex/*`, `src/lib/nex/*`, `src/lib/llm/*` — sem conflito de código fonte.
+- `claude-multitenant-realtime-fase1` ativo em modo spec docs only.
+- Bumpando v0.32 (skip 0.31 que ficou com agente paralelo).
+- Commits intercalados no main local; resolvidos via pull rebase em cada commit.
+
+---
+
 ## [v0.30.0] 2026-05-03 — Conversas Polish v4 (correções v0.29: cells single-line + X adesivo)
 
 > 2 fixes urgentes em /relatorios/conversas após feedback duro do João sobre v0.29. Workflow rigoroso (plan v1→v2→v3 com 22 achados em 2 pentes-finos REAIS · subagent-driven-development com TDD em T1+T2 · ui-ux-pro-max em todas as tasks UI). 3 commits granulares (T1+T2+release) · tests verde · typecheck 0 erros.
