@@ -7,7 +7,7 @@ import {
   useState,
   type ChangeEvent,
 } from "react";
-import { Plus, Trash2, FolderPlus } from "lucide-react";
+import { Plus, Trash2, FolderPlus, Filter, FolderOpen } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -91,45 +91,28 @@ function emptyGroup(): ConditionGroup {
   return { items: [] };
 }
 
-// Re-export do helper canônico de apply-conditions para evitar drift entre
-// definições do schema v2 (combinator agora é per-par no item, não no grupo).
+// Re-export do helper canônico — schema v2 (connector per-par no item).
 const isGroup = isConditionGroup;
 
-/** Connector "default" pra cabeçalho do grupo (UI placeholder Batch C-ready):
- *  reflete o connector do PRIMEIRO item com connector definido (item 1+).
- *  Se grupo só tem 1 item (sem connectors), retorna "AND".
- */
-function deriveGroupCombinator(g: ConditionGroup): "AND" | "OR" {
-  for (let i = 1; i < g.items.length; i++) {
-    const c = g.items[i].connector;
-    if (c) return c;
-  }
-  return "AND";
-}
-
-/** Aplica o mesmo connector a todos os items 1+ do grupo (UI placeholder
- *  Batch C-ready: visualmente um único toggle AND/OR, internamente aplicado
- *  uniforme em todos os pares). Item 0 sempre fica sem connector.
- */
-function setGroupCombinator(
-  g: ConditionGroup,
-  connector: "AND" | "OR",
-): ConditionGroup {
-  return {
-    items: g.items.map((it, idx) =>
-      idx === 0 ? { ...it, connector: undefined } : { ...it, connector },
-    ),
-  };
-}
-
 /**
- * Where Clause Builder visual.
- * - Combinator pill (AND/OR) no topo de cada grupo.
- * - Lista de condições: campo, operador, valor, remover.
- * - Botões "+ Adicionar condição" e "+ Adicionar grupo" (cria sub-grupo).
- * - Rodapé com "Aplicar" e "Limpar".
+ * Where Clause Builder visual (v0.32 redesign).
  *
- * Sempre que possível, evita derivar estado pesado em render.
+ * Topo: <ConditionalFilters> top-level com state controlado + rodapé opcional
+ * Aplicar/Limpar (escondido via `hideActions` quando caller é Dialog).
+ *
+ * Recursivo: <ConditionalFiltersInner> stateless via prop. Cada item do grupo
+ * pode ser uma Condição (`Condition`) ou um Sub-grupo (`ConditionGroup`).
+ *
+ * UX:
+ * - Item de Condição: card cinza com ícone Filter, hover violet, botão delete
+ *   aparece em group-hover.
+ * - Item de Grupo: card violet com ícone FolderOpen + label "Grupo" uppercase,
+ *   conteúdo recursivo indentado com border-l violet + bg-muted/20.
+ * - Conector entre items (idx > 0): chip clicável w-9 h-5 com "E"/"OU" uppercase,
+ *   linhas tracejadas conectando items (continuidade visual).
+ * - Animations sutis (motion-safe:animate-in fade-in slide-in-from-top-1) ao
+ *   adicionar/remover items.
+ * - Empty state: placeholder italic.
  */
 export function ConditionalFilters({
   fields,
@@ -140,19 +123,23 @@ export function ConditionalFilters({
   hideActions = false,
 }: ConditionalFiltersProps) {
   const initialGroup = useMemo<ConditionGroup>(
-    () => initial ?? emptyGroup(),
+    () => (initial && initial.items?.length ? initial : emptyGroup()),
     [initial],
   );
   const [group, setGroup] = useState<ConditionGroup>(initialGroup);
 
-  // Notifica mudanças.
+  // Sync com prop `initial` quando muda externamente.
   useEffect(() => {
-    if (onChange) onChange(group);
-    // queremos disparar SOMENTE quando group muda; onChange é estável via parent.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [group]);
+    setGroup(initialGroup);
+  }, [initialGroup]);
 
-  const update = useCallback((next: ConditionGroup) => setGroup(next), []);
+  const updateGroup = useCallback(
+    (next: ConditionGroup) => {
+      setGroup(next);
+      onChange?.(next);
+    },
+    [onChange],
+  );
 
   return (
     <div
@@ -161,18 +148,29 @@ export function ConditionalFilters({
         className,
       )}
     >
-      <GroupEditor group={group} onChange={update} fields={fields} depth={0} />
+      <ConditionalFiltersInner
+        fields={fields}
+        group={group}
+        onChange={updateGroup}
+        depth={0}
+      />
       {hideActions ? null : (
         <div className="mt-4 flex items-center justify-end gap-2 border-t border-border/40 pt-3">
           <Button
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => update(emptyGroup())}
+            onClick={() => updateGroup(emptyGroup())}
+            className="cursor-pointer"
           >
             Limpar
           </Button>
-          <Button type="button" size="sm" onClick={() => onApply?.(group)}>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => onApply?.(group)}
+            className="cursor-pointer"
+          >
             Aplicar
           </Button>
         </div>
@@ -181,35 +179,36 @@ export function ConditionalFilters({
   );
 }
 
-interface GroupEditorProps {
+interface InnerProps {
+  fields: ConditionFieldDef[];
   group: ConditionGroup;
   onChange: (next: ConditionGroup) => void;
-  fields: ConditionFieldDef[];
   depth: number;
-  onRemove?: () => void;
 }
 
-function GroupEditor({
+function ConditionalFiltersInner({
+  fields,
   group,
   onChange,
-  fields,
   depth,
-  onRemove,
-}: GroupEditorProps) {
-  // Schema v2 (v0.32+): items[] com connector per-par. Esta UI ainda é o
-  // placeholder visual "single combinator no topo" do v0.31 — Batch C
-  // redesenha pra inline-per-pair. Internamente, addCondition/addGroup
-  // mantém o connector ATUAL do grupo (deriveGroupCombinator) ao adicionar
-  // o próximo item. Item 0 sempre tem connector=undefined.
-  const currentCombinator = deriveGroupCombinator(group);
+}: InnerProps) {
+  const items = group.items ?? [];
 
-  const addItem = (node: Condition | ConditionGroup) => {
-    const isFirst = group.items.length === 0;
-    const newItem: ConditionGroupItem = {
-      connector: isFirst ? undefined : currentCombinator,
-      node,
-    };
-    onChange({ ...group, items: [...group.items, newItem] });
+  const updateItem = (idx: number, patch: Partial<ConditionGroupItem>) => {
+    const next = items.slice();
+    next[idx] = { ...next[idx], ...patch };
+    onChange({ items: next });
+  };
+
+  const updateNodeAt = (idx: number, nextNode: Condition | ConditionGroup) => {
+    updateItem(idx, { node: nextNode });
+  };
+
+  const removeAt = (idx: number) => {
+    const next = items.filter((_, i) => i !== idx);
+    // Item 0 nunca tem connector — corrige caso o item removido fosse o primeiro.
+    if (next[0]) next[0] = { ...next[0], connector: undefined };
+    onChange({ items: next });
   };
 
   const addCondition = () => {
@@ -221,91 +220,105 @@ function GroupEditor({
       operator: ops[0].value,
       value: defaultValueFor(first),
     };
-    addItem(newCond);
+    const newItem: ConditionGroupItem = {
+      connector: items.length === 0 ? undefined : "AND",
+      node: newCond,
+    };
+    onChange({ items: [...items, newItem] });
   };
 
   const addGroup = () => {
-    addItem(emptyGroup());
+    const newItem: ConditionGroupItem = {
+      connector: items.length === 0 ? undefined : "AND",
+      node: emptyGroup(),
+    };
+    onChange({ items: [...items, newItem] });
   };
 
-  const updateNodeAt = (idx: number, nextNode: Condition | ConditionGroup) => {
-    const arr = group.items.slice();
-    arr[idx] = { ...arr[idx], node: nextNode };
-    onChange({ ...group, items: arr });
-  };
-
-  const removeAt = (idx: number) => {
-    const arr = group.items.slice();
-    arr.splice(idx, 1);
-    // Item 0 nunca tem connector — corrige caso o item removido fosse o primeiro.
-    if (arr.length > 0) {
-      arr[0] = { ...arr[0], connector: undefined };
-    }
-    onChange({ items: arr });
+  const toggleConnector = (idx: number) => {
+    if (idx === 0) return; // primeiro nunca tem connector
+    const current = items[idx]?.connector ?? "AND";
+    updateItem(idx, { connector: current === "AND" ? "OR" : "AND" });
   };
 
   return (
-    <div
-      className={cn(
-        "flex flex-col gap-3",
-        depth > 0 &&
-          "rounded-xl border-l-2 border-violet-500/40 bg-violet-500/[0.02] py-3 pl-3 pr-2",
+    <div className="flex flex-col gap-1">
+      {items.length === 0 ? (
+        <p className="px-2 py-3 text-xs italic text-muted-foreground">
+          Nenhuma condição. Adicione uma condição ou um grupo para começar.
+        </p>
+      ) : (
+        items.map((item, idx) => {
+          const connector = item.connector ?? "AND";
+          const nextLabel = connector === "AND" ? "OU" : "E";
+          return (
+            <div key={idx} className="flex flex-col gap-0">
+              {idx > 0 ? (
+                <div className="my-1.5 ml-2 flex items-center gap-2 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-150">
+                  <div
+                    className="h-3 w-px bg-border"
+                    aria-hidden="true"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => toggleConnector(idx)}
+                    aria-label={`Mudar operador para ${nextLabel}`}
+                    className={cn(
+                      "inline-flex h-5 w-9 cursor-pointer items-center justify-center rounded-md border text-[10px] font-semibold uppercase tracking-wide transition-colors outline-none",
+                      "focus-visible:ring-2 focus-visible:ring-ring/50",
+                      connector === "OR"
+                        ? "border-violet-500/40 bg-violet-500/10 text-violet-500 hover:bg-violet-500/15"
+                        : "border-border bg-card text-foreground hover:border-violet-500/40 hover:bg-muted hover:text-violet-500",
+                    )}
+                  >
+                    {connector === "OR" ? "OU" : "E"}
+                  </button>
+                  <div
+                    className="h-px flex-1 bg-border"
+                    aria-hidden="true"
+                  />
+                </div>
+              ) : null}
+
+              {isGroup(item.node) ? (
+                <GroupCard
+                  group={item.node}
+                  fields={fields}
+                  depth={depth + 1}
+                  onChange={(next) => updateNodeAt(idx, next)}
+                  onRemove={() => removeAt(idx)}
+                />
+              ) : (
+                <ConditionRow
+                  condition={item.node}
+                  fields={fields}
+                  onChange={(next) => updateNodeAt(idx, next)}
+                  onRemove={() => removeAt(idx)}
+                />
+              )}
+            </div>
+          );
+        })
       )}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <CombinatorToggle
-          value={currentCombinator}
-          onChange={(v) => onChange(setGroupCombinator(group, v))}
-        />
-        {onRemove ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={onRemove}
-            aria-label="Remover grupo"
-            className="h-8 w-8 text-muted-foreground hover:text-destructive"
-          >
-            <Trash2 className="size-3.5" aria-hidden="true" />
-          </Button>
-        ) : null}
-      </div>
 
-      <div className="flex flex-col gap-2">
-        {group.items.length === 0 ? (
-          <p className="text-xs text-muted-foreground">
-            Nenhuma condição. Adicione uma condição ou um grupo.
-          </p>
-        ) : (
-          group.items.map((item, idx) =>
-            isGroup(item.node) ? (
-              <GroupEditor
-                key={idx}
-                group={item.node}
-                onChange={(next) => updateNodeAt(idx, next)}
-                fields={fields}
-                depth={depth + 1}
-                onRemove={() => removeAt(idx)}
-              />
-            ) : (
-              <ConditionRow
-                key={idx}
-                condition={item.node}
-                fields={fields}
-                onChange={(next) => updateNodeAt(idx, next)}
-                onRemove={() => removeAt(idx)}
-              />
-            ),
-          )
-        )}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="outline" size="sm" onClick={addCondition}>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={addCondition}
+          className="h-8 cursor-pointer text-xs"
+        >
           <Plus className="size-3.5" aria-hidden="true" />
           Adicionar condição
         </Button>
-        <Button type="button" variant="outline" size="sm" onClick={addGroup}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={addGroup}
+          className="h-8 cursor-pointer text-xs"
+        >
           <FolderPlus className="size-3.5" aria-hidden="true" />
           Adicionar grupo
         </Button>
@@ -314,38 +327,54 @@ function GroupEditor({
   );
 }
 
-interface CombinatorToggleProps {
-  value: "AND" | "OR";
-  onChange: (v: "AND" | "OR") => void;
+interface GroupCardProps {
+  group: ConditionGroup;
+  fields: ConditionFieldDef[];
+  depth: number;
+  onChange: (next: ConditionGroup) => void;
+  onRemove: () => void;
 }
 
-function CombinatorToggle({ value, onChange }: CombinatorToggleProps) {
+function GroupCard({
+  group,
+  fields,
+  depth,
+  onChange,
+  onRemove,
+}: GroupCardProps) {
   return (
     <div
-      role="radiogroup"
-      aria-label="Combinador lógico"
-      className="inline-flex items-center gap-0 rounded-full border border-border/60 bg-background/50 p-0.5"
+      className={cn(
+        "rounded-lg border border-violet-500/30 bg-muted/20 p-3 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-200",
+      )}
     >
-      {(["AND", "OR"] as const).map((opt) => {
-        const active = value === opt;
-        return (
-          <button
-            key={opt}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            onClick={() => onChange(opt)}
-            className={cn(
-              "rounded-full px-3 py-1 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-              active
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {opt === "AND" ? "E" : "OU"}
-          </button>
-        );
-      })}
+      <div className="mb-2 flex items-center gap-2">
+        <FolderOpen
+          className="size-3.5 shrink-0 text-violet-500"
+          aria-hidden="true"
+        />
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-500">
+          Grupo
+        </span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          onClick={onRemove}
+          aria-label="Remover grupo"
+          className="ml-auto h-6 w-6 cursor-pointer opacity-50 transition-opacity hover:opacity-100 hover:text-destructive"
+        >
+          <Trash2 className="size-3.5" aria-hidden="true" />
+        </Button>
+      </div>
+      <div className="border-l-2 border-violet-500/30 pl-3">
+        <ConditionalFiltersInner
+          fields={fields}
+          group={group}
+          onChange={onChange}
+          depth={depth}
+        />
+      </div>
     </div>
   );
 }
@@ -357,9 +386,13 @@ interface ConditionRowProps {
   onRemove: () => void;
 }
 
-function ConditionRow({ condition, fields, onChange, onRemove }: ConditionRowProps) {
-  const fieldDef =
-    fields.find((f) => f.key === condition.field) ?? fields[0];
+function ConditionRow({
+  condition,
+  fields,
+  onChange,
+  onRemove,
+}: ConditionRowProps) {
+  const fieldDef = fields.find((f) => f.key === condition.field) ?? fields[0];
   const operators = OPERATORS_BY_TYPE[fieldDef.type];
 
   const handleFieldChange = (key: string) => {
@@ -375,12 +408,22 @@ function ConditionRow({ condition, fields, onChange, onRemove }: ConditionRowPro
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-card p-2.5">
+    <div
+      className={cn(
+        "group flex flex-wrap items-center gap-2 rounded-lg border border-border/50 bg-card/50 p-3 transition-colors",
+        "hover:border-violet-500/30",
+        "motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-200",
+      )}
+    >
+      <Filter
+        className="size-3.5 shrink-0 text-muted-foreground"
+        aria-hidden="true"
+      />
       <select
         value={condition.field}
         onChange={(e) => handleFieldChange(e.target.value)}
         aria-label="Campo"
-        className="h-9 min-w-[160px] rounded-md border border-input bg-card px-2.5 text-sm font-medium text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 dark:bg-input/30"
+        className="h-9 min-w-[160px] cursor-pointer rounded-md border border-input bg-card px-2.5 text-sm font-medium text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 dark:bg-input/30"
       >
         {fields.map((f) => (
           <option key={f.key} value={f.key}>
@@ -392,10 +435,13 @@ function ConditionRow({ condition, fields, onChange, onRemove }: ConditionRowPro
       <select
         value={condition.operator}
         onChange={(e) =>
-          onChange({ ...condition, operator: e.target.value as ConditionOperator })
+          onChange({
+            ...condition,
+            operator: e.target.value as ConditionOperator,
+          })
         }
         aria-label="Operador"
-        className="h-9 min-w-[120px] rounded-md border border-input bg-card px-2.5 text-sm text-muted-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 dark:bg-input/30"
+        className="h-9 min-w-[120px] cursor-pointer rounded-md border border-input bg-card px-2.5 text-sm text-muted-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 dark:bg-input/30"
       >
         {operators.map((op) => (
           <option key={op.value} value={op.value}>
@@ -417,9 +463,9 @@ function ConditionRow({ condition, fields, onChange, onRemove }: ConditionRowPro
         size="icon-sm"
         onClick={onRemove}
         aria-label="Remover condição"
-        className="ml-auto h-9 w-9 text-muted-foreground hover:text-destructive"
+        className="ml-auto h-8 w-8 cursor-pointer text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100 group-focus-within:opacity-100"
       >
-        <Trash2 className="size-4" aria-hidden="true" />
+        <Trash2 className="size-3.5" aria-hidden="true" />
       </Button>
     </div>
   );
@@ -439,9 +485,11 @@ function ValueInput({ field, operator, value, onChange }: ValueInputProps) {
     return (
       <select
         value={(value as string | number | undefined) ?? ""}
-        onChange={(e: ChangeEvent<HTMLSelectElement>) => onChange(e.target.value)}
+        onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+          onChange(e.target.value)
+        }
         aria-label="Valor"
-        className="h-8 min-w-32 rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 dark:bg-input/30"
+        className="h-8 min-w-32 cursor-pointer rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 dark:bg-input/30"
       >
         <option value="">—</option>
         {field.options?.map((opt) => (
@@ -484,9 +532,6 @@ function ValueInput({ field, operator, value, onChange }: ValueInputProps) {
     // "tapete de chips" que estourava o Dialog.
     const allNumeric = opts.every((o) => typeof o.value === "number");
     if (allNumeric) {
-      // Label do MultiSelectCheckbox vira "Valor" pois o campo já está
-      // identificado pelo <select> à esquerda — evita duplicação visual
-      // (ex.: "Caixa de entrada" no select + "Caixa de entrada" no popover).
       return (
         <div className="min-w-[220px] max-w-[320px] flex-1">
           <MultiSelectCheckbox
@@ -502,8 +547,8 @@ function ValueInput({ field, operator, value, onChange }: ValueInputProps) {
       );
     }
 
-    // Fallback para options string: mantém os chips, mas com altura limitada
-    // e scroll interno para não estourar o Dialog quando há muitas opções.
+    // Fallback para options string: chips, mas com altura limitada e scroll
+    // interno para não estourar o Dialog quando há muitas opções.
     const toggle = (optValue: string | number) => {
       const exists = arr.some((v) => String(v) === String(optValue));
       const next = exists
@@ -523,7 +568,7 @@ function ValueInput({ field, operator, value, onChange }: ValueInputProps) {
               aria-checked={active}
               onClick={() => toggle(opt.value)}
               className={cn(
-                "rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                "cursor-pointer rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                 active
                   ? "border-primary/40 bg-primary/10 text-primary"
                   : "border-border/60 bg-background/40 text-muted-foreground hover:text-foreground",
