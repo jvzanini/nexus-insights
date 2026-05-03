@@ -49,6 +49,8 @@ type DashboardSnapshot = NonNullable<DashboardActionResult["data"]>;
 interface DashboardContentProps {
   userName: string;
   initialAccountId: number;
+  /** UUID da connection ativa — escopa SSE/realtime multi-tenant. */
+  connectionId: string;
   /** Timezone da plataforma (lida no server). */
   tz: string;
   /** Lista de contas acessíveis — usada apenas para empty state. */
@@ -118,6 +120,7 @@ function isDrillDownObject(
 export function DashboardContent({
   userName,
   initialAccountId,
+  connectionId,
   tz,
   initialAccounts,
 }: DashboardContentProps) {
@@ -338,7 +341,7 @@ export function DashboardContent({
           <p className="text-sm text-muted-foreground mt-1">{today}</p>
         </div>
         <div className="flex items-center gap-2">
-          <FactsFreshness accountId={accountId} />
+          <FactsFreshness connectionId={connectionId} accountId={accountId} />
           <TourButton tour={dashboardTour} />
         </div>
       </motion.div>

@@ -18,6 +18,7 @@ import { TourButton } from "@/components/tour/tour-button";
 import { performanceTour } from "@/lib/tours/performance-tour";
 import { getCurrentUser } from "@/lib/auth";
 import { getActiveAccountId } from "@/lib/reports/active-account";
+import { getActiveConnectionId } from "@/lib/reports/active-connection";
 import { assertAccountAccess } from "@/lib/tenant";
 import { parseReportSearchParams } from "@/lib/reports/parse-search-params";
 import { isReportVisibleForUser } from "@/lib/reports/visibility";
@@ -71,6 +72,7 @@ export default async function Page({ searchParams }: PageProps) {
   const { period, customStart, customEnd, tab } = parseReportSearchParams(sp);
   const accountId = await getActiveAccountId(user as AuthUser);
   await assertAccountAccess(user as AuthUser, accountId);
+  const connectionId = await getActiveConnectionId(user as AuthUser);
 
   const contentProps = { accountId, period, customStart, customEnd };
 
@@ -82,7 +84,7 @@ export default async function Page({ searchParams }: PageProps) {
         subtitle="Tempos de resposta, SLA e CSAT"
         actions={
           <div className="flex items-center gap-2">
-            <FactsFreshness accountId={accountId} />
+            <FactsFreshness connectionId={connectionId} accountId={accountId} />
             <TourButton tour={performanceTour} />
           </div>
         }

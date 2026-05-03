@@ -37,6 +37,12 @@ import { useFactsRealtime } from "@/components/reports/use-facts-realtime";
 const POLL_INTERVAL_MS = 30_000;
 
 interface FactsFreshnessProps {
+  /**
+   * UUID da `nexus_chat_connection` ativa pro binding atual. Usado pra
+   * filtrar eventos SSE multi-tenant — sem isso o componente reage a
+   * refreshes de outras instalações.
+   */
+  connectionId: string;
   accountId: number;
   className?: string;
   /** When true, polls every 30s. Default true. */
@@ -89,6 +95,7 @@ function buildLabel(summary: FreshnessSummary): string {
 }
 
 export function FactsFreshness({
+  connectionId,
   accountId,
   className,
   autoRefresh = true,
@@ -96,8 +103,9 @@ export function FactsFreshness({
   const [summary, setSummary] = useState<FreshnessSummary | null>(null);
   const mounted = useRef(true);
 
-  // SSE: ao receber facts:refreshed para esta conta, refaz o page refresh (soft).
-  useFactsRealtime({ accountId });
+  // SSE: invalidação escopada por (connectionId, accountId). Ver hook pra
+  // detalhes do filtro multi-tenant + listeners de connection lifecycle.
+  useFactsRealtime({ connectionId, accountId });
 
   useEffect(() => {
     mounted.current = true;

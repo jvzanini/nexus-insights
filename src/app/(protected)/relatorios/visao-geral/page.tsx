@@ -17,6 +17,7 @@ import { VolumetriaContent } from "@/components/reports/dashboards/volumetria-co
 import { ChartSkeleton, CardSkeleton } from "@/components/ui/skeleton";
 import { getCurrentUser } from "@/lib/auth";
 import { getActiveAccountId } from "@/lib/reports/active-account";
+import { getActiveConnectionId } from "@/lib/reports/active-connection";
 import { assertAccountAccess } from "@/lib/tenant";
 import { parseReportSearchParams } from "@/lib/reports/parse-search-params";
 import { isReportVisibleForUser } from "@/lib/reports/visibility";
@@ -58,6 +59,9 @@ export default async function Page({ searchParams }: PageProps) {
   const { period, customStart, customEnd, tab } = parseReportSearchParams(sp);
   const accountId = await getActiveAccountId(user as AuthUser);
   await assertAccountAccess(user as AuthUser, accountId);
+  // WHY: connectionId vem do binding ativo. Erros (No/Ambiguous) propagam
+  // pra error boundary — UX padrão do app já cobre o caso.
+  const connectionId = await getActiveConnectionId(user as AuthUser);
 
   const contentProps = { accountId, period, customStart, customEnd };
 
@@ -67,7 +71,7 @@ export default async function Page({ searchParams }: PageProps) {
         icon={LayoutDashboard}
         title="Visão Geral"
         subtitle="Status das conversas e volumetria geral"
-        actions={<FactsFreshness accountId={accountId} />}
+        actions={<FactsFreshness connectionId={connectionId} accountId={accountId} />}
       />
 
       <FilterTransitionProvider>

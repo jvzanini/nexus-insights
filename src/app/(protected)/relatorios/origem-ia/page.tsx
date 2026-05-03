@@ -20,6 +20,7 @@ import { TourButton } from "@/components/tour/tour-button";
 import { origemIaTour } from "@/lib/tours/origem-ia-tour";
 import { getCurrentUser } from "@/lib/auth";
 import { getActiveAccountId } from "@/lib/reports/active-account";
+import { getActiveConnectionId } from "@/lib/reports/active-connection";
 import { assertAccountAccess } from "@/lib/tenant";
 import { parseReportSearchParams } from "@/lib/reports/parse-search-params";
 import {
@@ -67,6 +68,7 @@ export default async function Page({ searchParams }: PageProps) {
   const { period, customStart, customEnd, tab } = parseReportSearchParams(sp);
   const accountId = await getActiveAccountId(user as AuthUser);
   await assertAccountAccess(user as AuthUser, accountId);
+  const connectionId = await getActiveConnectionId(user as AuthUser);
 
   const granRaw = typeof sp.granularity === "string" ? sp.granularity : null;
   const granularity: Granularity =
@@ -120,7 +122,7 @@ export default async function Page({ searchParams }: PageProps) {
         subtitle="Leads recebidos e canal automatizado Matrix IA"
         actions={
           <div className="flex items-center gap-2">
-            <FactsFreshness accountId={accountId} />
+            <FactsFreshness connectionId={connectionId} accountId={accountId} />
             <TourButton tour={origemIaTour} />
           </div>
         }

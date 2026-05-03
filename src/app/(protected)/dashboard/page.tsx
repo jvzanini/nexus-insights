@@ -3,6 +3,7 @@ import { DashboardContent } from "@/components/dashboard/dashboard-content";
 import { PageShell } from "@/components/layout/page-shell";
 import { getCurrentUser } from "@/lib/auth";
 import { getActiveAccountId } from "@/lib/reports/active-account";
+import { getActiveConnectionId } from "@/lib/reports/active-connection";
 import {
   getKnownAccounts,
   getAccessibleAccountIds,
@@ -48,11 +49,16 @@ export default async function DashboardPage() {
     ? activeAccountId
     : (accounts[0]?.id ?? activeAccountId);
 
+  // WHY: connectionId precisa do account ativo do binding. Erros (No/Ambiguous
+  // Binding) propagam pra error boundary global.
+  const connectionId = await getActiveConnectionId(authUser);
+
   return (
     <PageShell variant="wide">
       <DashboardContent
         userName={user.name}
         initialAccountId={safeAccountId}
+        connectionId={connectionId}
         initialAccounts={accounts}
         tz={tz}
       />
