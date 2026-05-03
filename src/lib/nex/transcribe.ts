@@ -95,8 +95,15 @@ export async function transcribeAudio(
       };
     }
 
+    // v0.26.0: log inclui body do erro pra debug em produção (motivo do fallback).
+    let errorBody = "";
+    try {
+      errorBody = await response.text();
+    } catch {
+      /* noop */
+    }
     console.warn(
-      `[transcribe] gpt-4o-mini-transcribe ${response.status} — fallback whisper-1`,
+      `[transcribe] gpt-4o-mini-transcribe ${response.status} — ${errorBody.slice(0, 200)} — fallback whisper-1`,
     );
   } catch (err) {
     console.warn(

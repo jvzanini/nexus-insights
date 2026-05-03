@@ -238,4 +238,33 @@ describe("transcribeAudio", () => {
     expect(result.inputTokens).toBe(42);
     expect(result.outputTokens).toBe(3);
   });
+
+  it("v0.26: console.warn inclui body do erro 4xx do gpt-4o-mini-transcribe (debug em prod)", async () => {
+    mockOpenAIConfig();
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        statusText: "Bad Request",
+        text: async () =>
+          JSON.stringify({ error: { message: "model_not_available" } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({ text: "fallback", duration: 1 }),
+      });
+
+    const blob = makeBlob(1024);
+    await transcribeAudio(blob);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /gpt-4o-mini-transcribe.*400.*model_not_available.*fallback whisper-1/,
+      ),
+    );
+    warnSpy.mockRestore();
+  });
 });
