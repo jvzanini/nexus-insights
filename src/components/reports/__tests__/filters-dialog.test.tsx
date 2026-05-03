@@ -167,3 +167,80 @@ describe("FiltersDialog v0.23 — sections fechadas + Limpar isolado + header di
     expect(screen.getByText(/Filtros avançados/i)).toBeInTheDocument();
   });
 });
+
+describe("FiltersDialog v0.32 T8 — AlertDialog ao trocar de tab com dados", () => {
+  const baseProps = {
+    open: true,
+    onOpenChange: jest.fn(),
+    applied: EMPTY_FILTER_STATE,
+    onApply: jest.fn(),
+    onClear: jest.fn(),
+    inboxes: [{ id: 1, name: "Geral" }],
+    teams: [{ id: 10, name: "Suporte" }],
+    assignees: [{ id: 100, name: "Ana" }],
+    labels: [{ id: 5, name: "VIP" }],
+  };
+
+  beforeEach(() => jest.clearAllMocks());
+
+  test("trocar tab sem dados (Simples vazio → Avançado) troca direto sem AlertDialog", () => {
+    render(<FiltersDialog {...baseProps} />);
+    fireEvent.click(screen.getByRole("tab", { name: /avançado/i }));
+    expect(
+      screen.queryByText(/Trocar para filtro/i),
+    ).not.toBeInTheDocument();
+    // Header refletiu mudança de modo
+    expect(screen.getByText(/Filtros avançados/i)).toBeInTheDocument();
+  });
+
+  test("trocar tab COM dados no Simples abre AlertDialog", () => {
+    render(
+      <FiltersDialog
+        {...baseProps}
+        applied={{ ...EMPTY_FILTER_STATE, inboxIds: [1] }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("tab", { name: /avançado/i }));
+    expect(
+      screen.getByText(/Trocar para filtro Avançado/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/só pode usar um modo por vez/i),
+    ).toBeInTheDocument();
+  });
+
+  test("Cancelar do AlertDialog mantém o tab origem", () => {
+    render(
+      <FiltersDialog
+        {...baseProps}
+        applied={{ ...EMPTY_FILTER_STATE, inboxIds: [1] }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("tab", { name: /avançado/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Cancelar/i }));
+    // Header continua "Filtros simples"
+    expect(screen.getByText(/Filtros simples/i)).toBeInTheDocument();
+  });
+
+  test("Confirmar do AlertDialog troca tab e zera dados do origem", () => {
+    const onApply = jest.fn();
+    render(
+      <FiltersDialog
+        {...baseProps}
+        applied={{ ...EMPTY_FILTER_STATE, inboxIds: [1], teamIds: [10] }}
+        onApply={onApply}
+      />,
+    );
+    fireEvent.click(screen.getByRole("tab", { name: /avançado/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar/i }));
+    // Header agora "Filtros avançados"
+    expect(screen.getByText(/Filtros avançados/i)).toBeInTheDocument();
+    // Aplicar revela o draft zerado
+    fireEvent.click(screen.getByRole("button", { name: /aplicar filtros/i }));
+    expect(onApply).toHaveBeenCalledTimes(1);
+    const next = onApply.mock.calls[0][0];
+    expect(next.mode).toBe("advanced");
+    expect(next.inboxIds).toEqual([]);
+    expect(next.teamIds).toEqual([]);
+  });
+});

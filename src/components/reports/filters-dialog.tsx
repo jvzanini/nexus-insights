@@ -20,6 +20,16 @@ import {
 } from "lucide-react";
 
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -42,6 +52,7 @@ import {
   diffFilterStates,
   isFilterStateEqual,
   type DocumentTypeFilter,
+  type FilterMode,
   type FilterState,
 } from "@/lib/reports/filter-state";
 import type { MetaItem } from "@/lib/chatwoot/queries/meta-cache";
@@ -261,7 +272,70 @@ export function FiltersDialog({
     draft.labelIds.length > 0 ||
     (draft.documentTypes ?? []).length > 0;
 
+  // v0.32 T8 — Confirmação ao trocar de tab quando o tab atual tem dados.
+  // O usuário só pode usar UM modo por vez (decisão João): trocar limpa
+  // o que estava no tab origem. Apresenta AlertDialog antes pra prevenir
+  // perda acidental de configuração.
+  const [pendingTab, setPendingTab] = useState<FilterMode | null>(null);
+
+  function hasDataInSimple(s: FilterState): boolean {
+    return (
+      s.inboxIds.length > 0 ||
+      s.teamIds.length > 0 ||
+      s.assigneeIds.length > 0 ||
+      s.statuses.length > 0 ||
+      s.priorities.length > 0 ||
+      s.labelIds.length > 0 ||
+      (s.documentTypes ?? []).length > 0
+    );
+  }
+
+  function hasDataInAdvanced(s: FilterState): boolean {
+    return !!s.conditionGroup && (s.conditionGroup.items?.length ?? 0) > 0;
+  }
+
+  function handleTabClick(target: FilterMode) {
+    if (target === draft.mode) return;
+    const hasData =
+      draft.mode === "simple"
+        ? hasDataInSimple(draft)
+        : hasDataInAdvanced(draft);
+    if (hasData) {
+      setPendingTab(target);
+    } else {
+      setDraft((d) => ({ ...d, mode: target }));
+    }
+  }
+
+  function handleConfirmTabSwitch() {
+    if (!pendingTab) return;
+    const target = pendingTab;
+    setDraft((d) => {
+      const next: FilterState = { ...d, mode: target };
+      if (d.mode === "simple") {
+        // Sai do Simples → limpa todos os filtros simples
+        next.inboxIds = [];
+        next.teamIds = [];
+        next.assigneeIds = [];
+        next.statuses = [];
+        next.priorities = [];
+        next.labelIds = [];
+        next.documentTypes = [];
+      } else {
+        // Sai do Avançado → limpa o conditionGroup
+        next.conditionGroup = undefined;
+      }
+      return next;
+    });
+    setPendingTab(null);
+  }
+
+  function handleCancelTabSwitch() {
+    setPendingTab(null);
+  }
+
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[85vh] w-[min(96vw,1100px)] max-w-[96vw] flex-col gap-0 p-0 sm:max-w-[1100px]">
         {/* Header — fixo. Título reflete o draft.mode atual (simples vs avançado),
@@ -280,14 +354,38 @@ export function FiltersDialog({
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-4">
           <Tabs
             value={draft.mode}
-            onValueChange={(v) => update("mode", v as FilterState["mode"])}
+            // v0.32 T8: troca real do tab é mediada por handleTabClick — se
+            // o tab atual contém dados, abre AlertDialog em vez de trocar.
+            // onValueChange cobre o caso de troca via teclado (setas) que
+            // não dispara onClick — também passa por handleTabClick pra
+            // mesma proteção.
+            onValueChange={(v) => handleTabClick(v as FilterMode)}
             className="flex min-h-0 flex-1 flex-col"
           >
             <TabsList>
-              <TabsTrigger value="simple" className="cursor-pointer">
+              <TabsTrigger
+                value="simple"
+                className="cursor-pointer"
+                onClick={(e) => {
+                  // Intercepta antes do toggle nativo do TabsPrimitive: se
+                  // o tab origem tem dados, abrimos AlertDialog. Cancelar
+                  // o evento via preventDefault não basta porque a base-ui
+                  // ativa via onValueChange (mouse + keyboard). O guard
+                  // está em handleTabClick (chamado de ambos os caminhos).
+                  e.preventDefault();
+                  handleTabClick("simple");
+                }}
+              >
                 Simples
               </TabsTrigger>
-              <TabsTrigger value="advanced" className="cursor-pointer">
+              <TabsTrigger
+                value="advanced"
+                className="cursor-pointer"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleTabClick("advanced");
+                }}
+              >
                 Avançado
               </TabsTrigger>
             </TabsList>
@@ -505,6 +603,47 @@ export function FiltersDialog({
         </div>
       </DialogContent>
     </Dialog>
+
+    {/* v0.32 T8 — Confirmação para troca destrutiva de tab. AlertDialog
+        fora do Dialog (portal independente) pra empilhar sobre ele.
+        Mensagem deixa explícito que o usuário só pode usar UM modo
+        por vez. Confirmar zera tab origem; Cancelar mantém. */}
+    <AlertDialog
+      open={pendingTab !== null}
+      onOpenChange={(o) => {
+        if (!o) handleCancelTabSwitch();
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            Trocar para filtro{" "}
+            {pendingTab === "advanced" ? "Avançado" : "Simples"}?
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            Você tem seleções no filtro{" "}
+            {draft.mode === "simple" ? "Simples" : "Avançado"}. Trocar para o{" "}
+            {pendingTab === "advanced" ? "Avançado" : "Simples"} vai descartar
+            essa configuração — você só pode usar um modo por vez.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel
+            onClick={handleCancelTabSwitch}
+            className="cursor-pointer"
+          >
+            Cancelar
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleConfirmTabSwitch}
+            className="cursor-pointer"
+          >
+            Confirmar
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 
