@@ -111,6 +111,29 @@ const MIGRATED_TO_DRILL_DOWN = new Set([
 // v0.17.0: chave do page-size foi descontinuada — limpamos no mount.
 const STORAGE_PAGE_SIZE_LEGACY = "conversas-table-page-size";
 
+/**
+ * v0.27 (T7): Larguras fixas de cada coluna (px). Usadas via
+ * <colgroup><col width=...>  + table-layout: fixed para evitar
+ * redimensionamento dinâmico das colunas conforme o virtualizer monta/desmonta
+ * linhas (bug reportado pelo João v0.25). Truncate + title HTML continuam
+ * cobrindo overflow de textos longos.
+ */
+const COLUMN_WIDTHS: Record<string, string> = {
+  expand: "40px",
+  display_id: "80px",
+  name: "220px",
+  document: "160px",
+  inbox: "140px",
+  team: "140px",
+  assignee: "140px",
+  status: "120px",
+  priority: "120px",
+  waiting_seconds: "160px",
+  open_seconds: "170px",
+  created_at: "160px",
+  last_activity_at: "180px",
+};
+
 // ----------------------------------------------------------------------------
 // Helpers de display
 // ----------------------------------------------------------------------------
@@ -220,7 +243,8 @@ const COLUMNS: ColumnDef[] = [
     defaultVisible: true,
     defaultOrder: -1,
     sortable: false,
-    className: "w-10",
+    // v0.27 (T7): largura via <colgroup>.
+    className: "",
     render: () => null,
   },
   {
@@ -229,7 +253,8 @@ const COLUMNS: ColumnDef[] = [
     defaultVisible: true,
     defaultOrder: 0,
     sortable: true,
-    className: "w-20",
+    // v0.27 (T7): largura via <colgroup>.
+    className: "",
     compareFn: (a, b) => a.display_id - b.display_id,
     // Render do body é especial — usa <OpenIdLink>. Aqui só placeholder.
     render: () => null,
@@ -240,7 +265,8 @@ const COLUMNS: ColumnDef[] = [
     defaultVisible: true,
     defaultOrder: 1,
     sortable: true,
-    className: "min-w-[180px]",
+    // v0.27 (T7): largura via <colgroup>; min-w removido pra estabilizar.
+    className: "",
     compareFn: (a, b) =>
       nullableStringCompare(a.contact.name, b.contact.name),
     render: (row) => {
@@ -261,7 +287,8 @@ const COLUMNS: ColumnDef[] = [
     defaultVisible: false,
     defaultOrder: 3,
     sortable: true,
-    className: "min-w-[160px]",
+    // v0.27 (T7): largura via <colgroup>.
+    className: "",
     compareFn: (a, b) =>
       nullableStringCompare(
         getDocumentDisplay(a.contact),
@@ -279,7 +306,8 @@ const COLUMNS: ColumnDef[] = [
     defaultVisible: true,
     defaultOrder: 4,
     sortable: true,
-    className: "min-w-[140px]",
+    // v0.27 (T7): largura via <colgroup>.
+    className: "",
     compareFn: (a, b) =>
       nullableStringCompare(a.inbox.name, b.inbox.name),
     render: (row) => {
@@ -300,7 +328,8 @@ const COLUMNS: ColumnDef[] = [
     defaultVisible: true,
     defaultOrder: 5,
     sortable: true,
-    className: "min-w-[140px]",
+    // v0.27 (T7): largura via <colgroup>.
+    className: "",
     compareFn: (a, b) =>
       nullableStringCompare(a.team.name, b.team.name),
     render: (row) => {
@@ -321,7 +350,8 @@ const COLUMNS: ColumnDef[] = [
     defaultVisible: true,
     defaultOrder: 6,
     sortable: true,
-    className: "min-w-[140px]",
+    // v0.27 (T7): largura via <colgroup>.
+    className: "",
     compareFn: (a, b) =>
       nullableStringCompare(a.assignee.name, b.assignee.name),
     render: (row) => {
@@ -342,7 +372,8 @@ const COLUMNS: ColumnDef[] = [
     defaultVisible: true,
     defaultOrder: 7,
     sortable: true,
-    className: "min-w-[120px]",
+    // v0.27 (T7): largura via <colgroup>.
+    className: "",
     compareFn: (a, b) => a.status - b.status,
     render: (row) => <StatusBadge status={row.status} />,
   },
@@ -352,7 +383,8 @@ const COLUMNS: ColumnDef[] = [
     defaultVisible: true,
     defaultOrder: 8,
     sortable: true,
-    className: "min-w-[120px]",
+    // v0.27 (T7): largura via <colgroup>.
+    className: "",
     compareFn: (a, b) =>
       nullableNumberCompare(a.priority, b.priority),
     render: (row) => <PriorityBadge priority={row.priority} />,
@@ -363,7 +395,8 @@ const COLUMNS: ColumnDef[] = [
     defaultVisible: false,
     defaultOrder: 10,
     sortable: true,
-    className: "min-w-[160px]",
+    // v0.27 (T7): largura via <colgroup>.
+    className: "",
     compareFn: (a, b) => nullableDateCompare(a.created_at, b.created_at),
     render: (row) => (
       <span className="whitespace-nowrap text-[13px] text-muted-foreground tabular-nums">
@@ -377,7 +410,8 @@ const COLUMNS: ColumnDef[] = [
     defaultVisible: false,
     defaultOrder: 11,
     sortable: true,
-    className: "min-w-[170px]",
+    // v0.27 (T7): largura via <colgroup>.
+    className: "",
     compareFn: (a, b) =>
       nullableDateCompare(a.last_activity_at, b.last_activity_at),
     render: (row) => (
@@ -393,7 +427,8 @@ const COLUMNS: ColumnDef[] = [
     defaultVisible: true,
     defaultOrder: 12,
     sortable: true,
-    className: "min-w-[140px]",
+    // v0.27 (T7): largura via <colgroup>.
+    className: "",
     compareFn: (a, b) =>
       nullableNumberCompare(a.waiting_seconds, b.waiting_seconds),
     render: (row) => {
@@ -418,7 +453,8 @@ const COLUMNS: ColumnDef[] = [
     defaultVisible: true,
     defaultOrder: 13,
     sortable: true,
-    className: "min-w-[140px]",
+    // v0.27 (T7): largura via <colgroup>.
+    className: "",
     compareFn: (a, b) =>
       nullableNumberCompare(a.open_seconds, b.open_seconds),
     render: (row) => {
@@ -807,7 +843,18 @@ export function ConversasTable({
         }}
         aria-busy={pending}
       >
-        <Table>
+        <Table style={{ tableLayout: "fixed", minWidth: "max-content" }}>
+          {/* v0.27 (T7): larguras fixas via <colgroup> evitam que o virtualizer
+              cause "balanço" das colunas conforme rows entram/saem do viewport.
+              Veja COLUMN_WIDTHS no topo do arquivo. */}
+          <colgroup>
+            {orderedColumns.map((col) => (
+              <col
+                key={col.key}
+                style={{ width: COLUMN_WIDTHS[col.key] ?? "auto" }}
+              />
+            ))}
+          </colgroup>
           <TableHeader className="sticky top-0 z-10 bg-card shadow-[0_1px_0_0_rgb(var(--border)_/_0.6)]">
             <TableRow className="hover:bg-transparent">
               {orderedColumns.map((col) => {
@@ -889,7 +936,6 @@ export function ConversasTable({
                         return (
                           <TableCell
                             key="expand"
-                            className="w-10"
                             data-tour={
                               virtualRow.index === 0 ? "drill-down" : undefined
                             }
@@ -908,7 +954,6 @@ export function ConversasTable({
                         return (
                           <TableCell
                             key={col.key}
-                            className="w-20"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <OpenIdLink

@@ -277,6 +277,18 @@ describe("ConversasTable v0.25 — pipeline client", () => {
     expect(screen.getByText(/limpe a busca/i)).toBeInTheDocument();
   });
 
+  it("tabela tem table-layout: fixed e <colgroup> (v0.27 T7)", () => {
+    const { container } = render(
+      <ConversasTable {...baseProps} initialRows={[baseRow(1, 100)]} />,
+    );
+    const table = container.querySelector("table");
+    expect(table?.style.tableLayout).toBe("fixed");
+    const colgroup = container.querySelector("colgroup");
+    expect(colgroup).not.toBeNull();
+    const cols = colgroup?.querySelectorAll("col");
+    expect(cols && cols.length).toBeGreaterThan(0);
+  });
+
   it("highlight roxo aparece em colunas matched", () => {
     const { container } = render(
       <ConversasTable
