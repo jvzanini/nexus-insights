@@ -88,7 +88,7 @@ beforeAll(() => {
     };
 });
 
-it("X dos chips Filtros e Ordenação tem classes destrutivas", () => {
+it("X dos chips Filtros e Ordenação tem estilo destrutivo fosco (v0.27)", () => {
   render(<AdvancedFilters {...baseProps} />);
   const xFilters = screen.getByRole("button", {
     name: /Limpar todos os filtros/i,
@@ -97,8 +97,12 @@ it("X dos chips Filtros e Ordenação tem classes destrutivas", () => {
   for (const el of [xFilters, xSort]) {
     const cls = el.className;
     expect(cls).toMatch(/h-5 w-5/);
-    expect(cls).toMatch(/hover:bg-destructive/);
-    expect(cls).toMatch(/hover:text-white/);
-    expect(cls).toMatch(/hover:ring-2/);
+    expect(cls).toMatch(/bg-destructive\/15/);
+    expect(cls).toMatch(/text-destructive/);
+    expect(cls).toMatch(/border-destructive\/40/);
+    expect(cls).toMatch(/hover:bg-destructive\/25/);
+    expect(cls).not.toMatch(/hover:text-white/);
+    expect(cls).not.toMatch(/hover:ring-2/);
+    expect(cls).not.toMatch(/hover:scale-110/);
   }
 });
