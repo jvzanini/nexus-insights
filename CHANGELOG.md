@@ -1,5 +1,22 @@
 # Changelog
 
+## [v0.30.0] 2026-05-03 — Conversas Polish v4 (correções v0.29: cells single-line + X adesivo)
+
+> 2 fixes urgentes em /relatorios/conversas após feedback duro do João sobre v0.29. Workflow rigoroso (plan v1→v2→v3 com 22 achados em 2 pentes-finos REAIS · subagent-driven-development com TDD em T1+T2 · ui-ux-pro-max em todas as tasks UI). 3 commits granulares (T1+T2+release) · tests verde · typecheck 0 erros.
+
+### Fixes
+
+- **F1 — Cells da tabela voltam pra single-line + overflow-hidden + larguras maiores:** v0.29 quebrei o layout das cells aplicando `whitespace-normal break-words` (texto ficava multi-line). João pediu single-line + texto completo + sem mexer em larguras toda hora. Fix: voltar `whitespace-nowrap` + `overflow-hidden` (sem vazar pra coluna vizinha); remove `align-top`/`break-words`. `COLUMN_WIDTHS` aumenta pra cobrir percentil 99 dos textos comuns: name 240→280, inbox 180→220 (Estado), team 160→180 (Departamento), assignee 200→240 (Atendente). Sem ellipsis (clip default) — casos extremos cortam discretamente. Aplicado em desktop + mobile (10 lugares: 8 cells + h3 + Field).
+- **F2 — X chips Filtros/Ordenação pouco maior + adesivo na quina:** v0.29 reduziu pra h-4 (era h-5 v0.27) e ficou pequeno demais + muito "pra dentro" do botão. João pediu pouco maior + mais "fora" do botão como adesivo na quina superior direita. Fix: h-4→h-5 + ícone X 2.5→3 + offset `-right-1/-top-1` → `-right-2/-top-2` (8px fora da borda — adesivo claro). Mantém estilo discreto idle (`text-muted-foreground` sem bg/border) + hover vermelho fosco (`hover:bg-destructive/15` + `hover:text-destructive`).
+
+### Trade-offs
+
+- F1 textos extremos > col width cortam discretamente sem ellipsis (decisão consciente — João não quer "..."). Widths cobrem 99% dos casos comuns.
+- F1 soma de widths ~2110px desktop — scroll-x (já tem `overflow-x-auto`).
+- F2 adesivo `-right-2 -top-2` cobre 8px da borda do botão (visual intencional).
+
+---
+
 ## [v0.29.0] 2026-05-03 — Conversas Polish v3 (X duplo, X chips, colunas truncate)
 
 > 3 fixes pontuais reportados pelo João via screenshots após v0.27/v0.28 LIVE. Workflow rigoroso (plan v1→v2→v3 com 28 achados em 2 pentes-finos REAIS · subagent-driven-development com TDD em T2/T3 · ui-ux-pro-max em todas tasks UI · code review aprovado). 4 commits granulares (T1-T3 + release) · 308/308 tests verde · typecheck 0 erros.

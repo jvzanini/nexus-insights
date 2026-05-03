@@ -1,12 +1,18 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-05-03
-**Versão atual em produção:** v0.29.0
+**Versão atual em produção:** v0.30.0
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.29.0)
+## Em produção (v0.30.0)
+
+### Release v0.30.0 (2026-05-03) — Conversas Polish v4 (correções v0.29: cells single-line + X adesivo)
+
+2 fixes urgentes após feedback duro do João sobre v0.29: (1) cells da tabela voltam pra single-line com `whitespace-nowrap overflow-hidden` + larguras maiores (name 280, inbox 220, team 180, assignee 240) — sem ellipsis (clip default), casos extremos cortam discretamente; (2) X dos chips Filtros/Ordenação volta pra h-5 (pouco maior que v0.29 que era h-4) + ícone X h-3 + offset `-right-2/-top-2` (adesivo na quina superior direita do botão, 8px fora da borda).
+
+Workflow rigoroso: plan v1→v2→v3 com 22 achados em 2 pentes-finos REAIS · subagent-driven-development com TDD em T1+T2 · ui-ux-pro-max em todas as tasks UI · 3 commits granulares · tests verde · typecheck 0 erros.
 
 ### Release v0.29.0 (2026-05-03) — Conversas Polish v3 (X duplo, X chips, colunas truncate)
 
