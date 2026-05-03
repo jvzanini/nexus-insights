@@ -143,13 +143,22 @@ export async function buildConversasXlsxBuffer(
   const dynamicHeaders = attrKeys.map((k) => `Atr: ${k}`);
   const headers = [...FIXED_HEADERS, ...dynamicHeaders];
 
-  ws.columns = headers.map((h) => ({ header: h, key: h, width: 18 }));
-  ws.getRow(1).font = { bold: true };
-  ws.getRow(1).fill = {
+  // v0.35 fix: header via addRow direto. Setar `ws.columns = [...]` em ExcelJS
+  // combinado com `views: [{ frozen, ySplit: 1 }]` pré-aloca rows fantasma no
+  // arquivo final (o Excel renderiza linhas vazias extras). addRow + getColumn
+  // mantém o frozen pane sem efeito colateral.
+  const headerRow = ws.addRow(headers);
+  headerRow.font = { bold: true };
+  headerRow.fill = {
     type: "pattern",
     pattern: "solid",
     fgColor: { argb: "FFEFEFEF" },
   };
+
+  // Widths individuais (1-based em ExcelJS)
+  for (let i = 0; i < headers.length; i++) {
+    ws.getColumn(i + 1).width = 18;
+  }
 
   for (const r of rows) {
     const fixed = [

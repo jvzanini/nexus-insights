@@ -191,3 +191,37 @@ describe("conversas-xlsx", () => {
     expect(dashCount).toBeGreaterThanOrEqual(4);
   });
 });
+
+describe("buildConversasXlsxBuffer v0.35 — sem rows fantasma", () => {
+  it("0 rows gera só 1 row (header)", async () => {
+    const { buffer } = await buildConversasXlsxBuffer({ rows: [] });
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buffer as unknown as ArrayBuffer);
+    const ws = wb.getWorksheet("Conversas")!;
+    expect(ws.actualRowCount).toBe(1);
+    expect(ws.rowCount).toBe(1);
+  });
+
+  it("1 row de dados gera EXATAMENTE 2 rows (header + 1)", async () => {
+    const { buffer } = await buildConversasXlsxBuffer({ rows: [baseRow] });
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buffer as unknown as ArrayBuffer);
+    const ws = wb.getWorksheet("Conversas")!;
+    expect(ws.actualRowCount).toBe(2);
+    expect(ws.rowCount).toBe(2);
+  });
+
+  it("3 rows geram 4 rows total (header + 3)", async () => {
+    const { buffer } = await buildConversasXlsxBuffer({
+      rows: [
+        baseRow,
+        { ...baseRow, id: 2, display_id: 2 },
+        { ...baseRow, id: 3, display_id: 3 },
+      ],
+    });
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buffer as unknown as ArrayBuffer);
+    const ws = wb.getWorksheet("Conversas")!;
+    expect(ws.actualRowCount).toBe(4);
+  });
+});
