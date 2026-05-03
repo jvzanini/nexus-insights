@@ -17,24 +17,43 @@ interface Props {
   className?: string;
 }
 
+type PageItem = number | "ellipsis";
+
 /**
- * Algoritmo v0.25: simplificado, sem reticências.
+ * Algoritmo v0.27 (volta da v0.23 com reticências):
  * - 0 págs: []
- * - 1 pág: [1]
- * - 2-4 págs: todas
- * - 5+ atual=1 ou N: [1, N]
- * - 5+ atual no meio: [1, page, N]
+ * - 1..4 págs: todas as páginas explícitas
+ * - 5+ atual=1 ou N: [1, ellipsis, N]
+ * - 5+ atual no meio: [1, ellipsis, page, ellipsis, N]
  *
- * Atual no meio → Popover dropdown com 1..N (atual destacada com check).
+ * Cada `ellipsis` é renderizada como Popover dropdown com o range
+ * adjacente (esquerda ou direita); a página atual no meio também
+ * é renderizada como dropdown com 1..N.
  */
-export function buildPageItems(page: number, totalPages: number): number[] {
+export function buildPageItems(page: number, totalPages: number): PageItem[] {
   if (totalPages <= 0) return [];
   if (totalPages === 1) return [1];
   if (totalPages === 2) return [1, 2];
   if (totalPages === 3) return [1, 2, 3];
   if (totalPages === 4) return [1, 2, 3, 4];
-  if (page === 1 || page === totalPages) return [1, totalPages];
-  return [1, page, totalPages];
+  if (page === 1 || page === totalPages) return [1, "ellipsis", totalPages];
+  return [1, "ellipsis", page, "ellipsis", totalPages];
+}
+
+/**
+ * Retorna o array de páginas inteiras dado um range [from, to] inclusivo.
+ * Filtra valores fora de [1, totalPages] como segurança.
+ */
+function rangeToPages(
+  from: number,
+  to: number,
+  totalPages: number,
+): number[] {
+  const pages: number[] = [];
+  const lo = Math.max(1, Math.min(from, to));
+  const hi = Math.min(totalPages, Math.max(from, to));
+  for (let p = lo; p <= hi; p++) pages.push(p);
+  return pages;
 }
 
 function CurrentPageDropdown({
@@ -91,7 +110,58 @@ function CurrentPageDropdown({
 }
 
 /**
- * Barra de paginação numerada com setinhas e atual-dropdown.
+ * Dropdown da reticência: abre Popover com o range de páginas passado.
+ * Se o range estiver vazio, retorna null pra não renderizar dropdown vazio.
+ */
+function EllipsisDropdown({
+  pages,
+  onPageChange,
+  ariaLabel,
+}: {
+  pages: number[];
+  onPageChange: (p: number) => void;
+  ariaLabel: string;
+}) {
+  const [open, setOpen] = useState(false);
+  if (pages.length === 0) return null;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={(props) => (
+          <button
+            {...props}
+            type="button"
+            aria-label={ariaLabel}
+            className="inline-flex h-9 min-w-9 cursor-pointer items-center justify-center rounded-md border border-border/50 px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40"
+          >
+            …
+          </button>
+        )}
+      />
+      <PopoverContent className="w-32 p-1">
+        <ul role="list" className="max-h-64 overflow-y-auto">
+          {pages.map((p) => (
+            <li key={p}>
+              <button
+                type="button"
+                onClick={() => {
+                  onPageChange(p);
+                  setOpen(false);
+                }}
+                className="flex w-full cursor-pointer items-center justify-between rounded-md px-2 py-1.5 text-sm tabular-nums hover:bg-muted"
+              >
+                {p}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/**
+ * Barra de paginação numerada com setinhas, reticências-dropdown e atual-dropdown.
  * Não renderiza nada quando totalPages <= 1.
  */
 export function ConversasPagination({
@@ -102,6 +172,7 @@ export function ConversasPagination({
 }: Props) {
   if (totalPages <= 1) return null;
   const items = buildPageItems(page, totalPages);
+  const ellipsisCount = items.filter((it) => it === "ellipsis").length;
 
   return (
     <nav
@@ -119,7 +190,35 @@ export function ConversasPagination({
         <ChevronLeft className="h-4 w-4" aria-hidden />
       </button>
 
-      {items.map((it) => {
+      {items.map((it, idx) => {
+        if (it === "ellipsis") {
+          // Quando há 1 reticência, ela cobre o miolo entre 2 e N-1.
+          // Quando há 2, idx=1 cobre [2..page-1] (esquerda) e
+          // idx=3 cobre [page+1..N-1] (direita).
+          let pages: number[] = [];
+          let ariaLabel = "Selecionar página";
+          if (ellipsisCount === 1) {
+            pages = rangeToPages(2, totalPages - 1, totalPages);
+            ariaLabel = "Selecionar página intermediária";
+          } else if (ellipsisCount === 2) {
+            if (idx === 1) {
+              pages = rangeToPages(2, page - 1, totalPages);
+              ariaLabel = "Selecionar página anterior à atual";
+            } else {
+              pages = rangeToPages(page + 1, totalPages - 1, totalPages);
+              ariaLabel = "Selecionar página posterior à atual";
+            }
+          }
+          return (
+            <EllipsisDropdown
+              key={`ellipsis-${idx}`}
+              pages={pages}
+              onPageChange={onPageChange}
+              ariaLabel={ariaLabel}
+            />
+          );
+        }
+
         const isCurrent = page === it;
         const isEdge = it === 1 || it === totalPages;
         if (isCurrent && !isEdge) {

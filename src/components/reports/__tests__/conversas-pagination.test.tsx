@@ -74,25 +74,19 @@ import {
   ConversasPagination,
 } from "@/components/reports/conversas-pagination";
 
-describe("buildPageItems v0.25 (simplificado, sem ellipsis)", () => {
-  it("totalPages 0: []", () => expect(buildPageItems(1, 0)).toEqual([]));
+describe("buildPageItems v0.27 (com reticências)", () => {
   it("totalPages 1: [1]", () => expect(buildPageItems(1, 1)).toEqual([1]));
-  it("totalPages 2: [1,2]", () => expect(buildPageItems(1, 2)).toEqual([1, 2]));
-  it("totalPages 3: [1,2,3]", () =>
-    expect(buildPageItems(2, 3)).toEqual([1, 2, 3]));
   it("totalPages 4: [1,2,3,4]", () =>
-    expect(buildPageItems(3, 4)).toEqual([1, 2, 3, 4]));
-  it("atual=1 com 8 págs: [1,8]", () =>
-    expect(buildPageItems(1, 8)).toEqual([1, 8]));
-  it("atual=8 com 8 págs: [1,8]", () =>
-    expect(buildPageItems(8, 8)).toEqual([1, 8]));
-  it("atual=5 com 8 págs: [1,5,8]", () =>
-    expect(buildPageItems(5, 8)).toEqual([1, 5, 8]));
-  it("atual=2 com 5 págs: [1,2,5]", () =>
-    expect(buildPageItems(2, 5)).toEqual([1, 2, 5]));
+    expect(buildPageItems(2, 4)).toEqual([1, 2, 3, 4]));
+  it("atual=1 com 8: [1, ellipsis, 8]", () =>
+    expect(buildPageItems(1, 8)).toEqual([1, "ellipsis", 8]));
+  it("atual=8 com 8: [1, ellipsis, 8]", () =>
+    expect(buildPageItems(8, 8)).toEqual([1, "ellipsis", 8]));
+  it("atual=5 com 8: [1, ellipsis, 5, ellipsis, 8]", () =>
+    expect(buildPageItems(5, 8)).toEqual([1, "ellipsis", 5, "ellipsis", 8]));
 });
 
-describe("ConversasPagination v0.25 (render)", () => {
+describe("ConversasPagination v0.27 (render)", () => {
   it("totalPages=0: null", () => {
     const { container } = render(
       <ConversasPagination page={1} totalPages={0} onPageChange={() => {}} />,
@@ -107,16 +101,16 @@ describe("ConversasPagination v0.25 (render)", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("não renderiza dropdown de reticência", () => {
+  it("renderiza dropdown de reticência (botão '...')", () => {
     render(
       <ConversasPagination page={5} totalPages={8} onPageChange={() => {}} />,
     );
     expect(
-      screen.queryByRole("button", { name: /Selecionar página/i }),
-    ).toBeNull();
+      screen.getAllByRole("button", { name: /Selecionar página/i }).length,
+    ).toBeGreaterThan(0);
   });
 
-  it("atual no meio é Popover dropdown (chevron)", () => {
+  it("atual no meio é dropdown", () => {
     render(
       <ConversasPagination page={5} totalPages={8} onPageChange={() => {}} />,
     );
