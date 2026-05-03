@@ -307,26 +307,25 @@ describe("ConversasTable v0.25 — pipeline client", () => {
     expect(marks.length).toBeGreaterThan(0);
   });
 
-  it("colunas Estado/Departamento/Atendente NÃO truncam (v0.29)", () => {
+  it("colunas Estado/Departamento/Atendente NÃO quebram linha (single-line) v0.30", () => {
     const longRow: ConversaRow = {
       ...baseRow(1, 100),
-      inbox: { id: 1, name: "Distrito Federal Brasília Capital Nacional" },
-      team: { id: 1, name: "Departamento de Atendimento Comercial" },
-      assignee: { id: 1, name: "Maria Eduarda Carvalho Silva Santos" },
+      inbox: { id: 1, name: "DF-Distrito Federal" },
+      team: { id: 1, name: "Atendimento Comercial" },
+      assignee: { id: 1, name: "Maria Eduarda Carvalho" },
     };
     const { container } = render(
       <ConversasTable {...baseProps} initialRows={[longRow]} />,
     );
-    // Pelo menos um span/dd deve ter whitespace-normal (cells multi-line v0.29).
+    // v0.30: regressão do v0.29 — cells (mobile + desktop) não têm
+    // whitespace-normal nem break-words em conteúdo de linha.
+    // (jsdom não renderiza tbody do virtualizer; o mobile <ul> renderiza sempre.)
     const wraps = container.querySelectorAll(".whitespace-normal");
-    expect(wraps.length).toBeGreaterThan(0);
-    // tbody NÃO deve ter mais .truncate.max-w-[160px] (cells antigas removidas).
-    const tbody = container.querySelector("tbody");
-    if (tbody) {
-      const oldTruncate160 = tbody.querySelectorAll(
-        '.truncate[class*="max-w-[160px]"]',
-      );
-      expect(oldTruncate160.length).toBe(0);
-    }
+    expect(wraps.length).toBe(0);
+    const breakWords = container.querySelectorAll(".break-words");
+    expect(breakWords.length).toBe(0);
+    // whitespace-nowrap aplicado (single-line) em pelo menos um lugar.
+    const nowraps = container.querySelectorAll(".whitespace-nowrap");
+    expect(nowraps.length).toBeGreaterThan(0);
   });
 });
