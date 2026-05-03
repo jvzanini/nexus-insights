@@ -63,6 +63,7 @@ describe("IDENTITY_BASE", () => {
 describe("composeSystemPrompt", () => {
   it("usa apenas IDENTITY_BASE com tudo vazio + KB off + sem accountUrls", () => {
     const cfg: NexPromptConfig = {
+      identityBase: null,
       personality: "",
       tone: "",
       guardrails: [],
@@ -77,6 +78,7 @@ describe("composeSystemPrompt", () => {
   it("compõe personality + tone + guardrails", () => {
     const out = composeSystemPrompt(
       {
+        identityBase: null,
         personality: "amigável",
         tone: "informal",
         guardrails: ["não fale finanças", "não invente"],
@@ -96,6 +98,7 @@ describe("composeSystemPrompt", () => {
   it("advancedOverride substitui tudo (mesmo se KB on)", () => {
     const out = composeSystemPrompt(
       {
+        identityBase: null,
         personality: "x",
         tone: "y",
         guardrails: ["z"],
@@ -111,6 +114,7 @@ describe("composeSystemPrompt", () => {
   it("KB desabilitada não injeta", () => {
     const out = composeSystemPrompt(
       {
+        identityBase: null,
         personality: "",
         tone: "",
         guardrails: [],
@@ -126,6 +130,7 @@ describe("composeSystemPrompt", () => {
   it("KB habilitada injeta com header", () => {
     const out = composeSystemPrompt(
       {
+        identityBase: null,
         personality: "",
         tone: "",
         guardrails: [],
@@ -148,6 +153,7 @@ describe("composeSystemPrompt", () => {
     const big = "x".repeat(MAX_KB_TOTAL_CHARS);
     const out = composeSystemPrompt(
       {
+        identityBase: null,
         personality: "",
         tone: "",
         guardrails: [],
@@ -167,6 +173,7 @@ describe("composeSystemPrompt", () => {
   it("injeta seção '## URLs públicas das contas' quando accountUrls > 0", () => {
     const out = composeSystemPrompt(
       {
+        identityBase: null,
         personality: "",
         tone: "",
         guardrails: [],
@@ -184,6 +191,7 @@ describe("composeSystemPrompt", () => {
   it("usa label quando fornecido no accountUrl", () => {
     const out = composeSystemPrompt(
       {
+        identityBase: null,
         personality: "",
         tone: "",
         guardrails: [],
@@ -204,6 +212,7 @@ describe("composeSystemPrompt", () => {
   it("override ativo NÃO injeta accountUrls", () => {
     const out = composeSystemPrompt(
       {
+        identityBase: null,
         personality: "",
         tone: "",
         guardrails: [],
@@ -221,6 +230,7 @@ describe("composeSystemPrompt", () => {
   it("accountUrls vazio NÃO injeta seção", () => {
     const out = composeSystemPrompt(
       {
+        identityBase: null,
         personality: "",
         tone: "",
         guardrails: [],
@@ -240,6 +250,7 @@ describe("getNexPromptConfig", () => {
     q.mockResolvedValueOnce({
       rows: [
         {
+          identity_base: null,
           personality: "p",
           tone: "t",
           guardrails: ["g"],
@@ -252,6 +263,7 @@ describe("getNexPromptConfig", () => {
     } as never);
     const cfg = await getNexPromptConfig();
     expect(cfg).toMatchObject({
+      identityBase: null,
       personality: "p",
       tone: "t",
       guardrails: ["g"],
@@ -261,10 +273,30 @@ describe("getNexPromptConfig", () => {
     });
   });
 
+  it("retorna identityBase quando setado no row (v0.28)", async () => {
+    q.mockResolvedValueOnce({
+      rows: [
+        {
+          identity_base: "Você é um assistente customizado.",
+          personality: "",
+          tone: "",
+          guardrails: [],
+          advanced_override: null,
+          audio_input_enabled: false,
+          kb_enabled: true,
+        },
+      ],
+      rowCount: 1,
+    } as never);
+    const cfg = await getNexPromptConfig();
+    expect(cfg.identityBase).toBe("Você é um assistente customizado.");
+  });
+
   it("retorna defaults quando não há row", async () => {
     q.mockResolvedValueOnce({ rows: [], rowCount: 0 } as never);
     const cfg = await getNexPromptConfig();
     expect(cfg).toEqual({
+      identityBase: null,
       personality: "",
       tone: "",
       guardrails: [],
@@ -279,6 +311,7 @@ describe("saveNexPromptConfig", () => {
   it("rejeita personality > 500", async () => {
     await expect(
       saveNexPromptConfig({
+        identityBase: null,
         personality: "x".repeat(501),
         tone: "",
         guardrails: [],
@@ -292,6 +325,7 @@ describe("saveNexPromptConfig", () => {
   it("rejeita > 20 guardrails", async () => {
     await expect(
       saveNexPromptConfig({
+        identityBase: null,
         personality: "",
         tone: "",
         guardrails: Array(21).fill("x"),
@@ -305,6 +339,7 @@ describe("saveNexPromptConfig", () => {
   it("rejeita override > MAX_PROMPT_LEN", async () => {
     await expect(
       saveNexPromptConfig({
+        identityBase: null,
         personality: "",
         tone: "",
         guardrails: [],
@@ -318,6 +353,7 @@ describe("saveNexPromptConfig", () => {
   it("UPSERT singleton", async () => {
     q.mockResolvedValueOnce({ rows: [], rowCount: 1 } as never);
     await saveNexPromptConfig({
+      identityBase: null,
       personality: "ok",
       tone: "ok",
       guardrails: ["uma"],

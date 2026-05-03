@@ -27,6 +27,7 @@ jest.mock("@/lib/reports/exclude-matrix-ia", () => ({
 // @/lib/nex/kb. Mockamos para isolar o orquestrador dos efeitos de DB/server-only.
 jest.mock("@/lib/nex/prompt", () => ({
   getNexPromptConfig: jest.fn(async () => ({
+    identityBase: null,
     personality: "",
     tone: "",
     guardrails: [],

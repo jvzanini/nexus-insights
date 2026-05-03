@@ -26,6 +26,7 @@ jest.mock("@/components/agente-nex/prompt-config-form", () => ({
 import { PromptPreviewCard } from "../prompt-preview-card";
 
 const baseConfig: NexPromptConfig = {
+  identityBase: null,
   personality: "",
   tone: "",
   guardrails: [],

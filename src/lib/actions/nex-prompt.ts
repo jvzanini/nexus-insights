@@ -464,3 +464,95 @@ export async function refreshKbUrlAction(
     };
   }, "refresh-kb-url");
 }
+
+// ---------------------------------------------------------------------------
+// v0.28.0 — Identity base (T-E1c): saveIdentityBaseAction + resetIdentityBaseAction
+// ---------------------------------------------------------------------------
+
+const MAX_IDENTITY_BASE_LEN = 5_000;
+
+/**
+ * Persiste um override de `identity_base` na coluna `nex_settings.identity_base`.
+ *
+ * Apenas super_admin. Trim aplicado; vazio rejeitado. Tamanho > 5000 chars
+ * rejeitado. Demais campos da config são preservados (read-modify-write).
+ */
+export async function saveIdentityBaseAction(
+  text: string,
+): Promise<ActionResult> {
+  return safeAction(async () => {
+    const guard = await requireSuperAdmin();
+    if (!guard.ok) return { ok: false, error: guard.error };
+    const trimmed = (text ?? "").trim();
+    if (trimmed.length === 0) {
+      return { ok: false, error: "Identity base não pode ficar vazia" };
+    }
+    if (trimmed.length > MAX_IDENTITY_BASE_LEN) {
+      return {
+        ok: false,
+        error: `Identity base excede ${MAX_IDENTITY_BASE_LEN} caracteres`,
+      };
+    }
+    const current = await getNexPromptConfig();
+    try {
+      await saveNexPromptConfig(
+        { ...current, identityBase: trimmed },
+        guard.userId,
+      );
+    } catch (err) {
+      return {
+        ok: false,
+        error:
+          err instanceof Error
+            ? err.message
+            : "Erro ao salvar identity base do Agente Nex",
+      };
+    }
+    await logAudit({
+      userId: guard.userId,
+      action: "setting_updated",
+      targetType: "nex_prompt",
+      details: {
+        identityBaseLength: trimmed.length,
+        identityBaseAction: "save",
+      },
+    });
+    return { ok: true };
+  }, "save-identity-base");
+}
+
+/**
+ * Remove o override de `identity_base` (volta para o IDENTITY_BASE hardcoded).
+ *
+ * Apenas super_admin. Persiste `identityBase: null`, demais campos preservados.
+ */
+export async function resetIdentityBaseAction(): Promise<ActionResult> {
+  return safeAction(async () => {
+    const guard = await requireSuperAdmin();
+    if (!guard.ok) return { ok: false, error: guard.error };
+    const current = await getNexPromptConfig();
+    try {
+      await saveNexPromptConfig(
+        { ...current, identityBase: null },
+        guard.userId,
+      );
+    } catch (err) {
+      return {
+        ok: false,
+        error:
+          err instanceof Error
+            ? err.message
+            : "Erro ao resetar identity base do Agente Nex",
+      };
+    }
+    await logAudit({
+      userId: guard.userId,
+      action: "setting_updated",
+      targetType: "nex_prompt",
+      details: {
+        identityBaseAction: "reset",
+      },
+    });
+    return { ok: true };
+  }, "reset-identity-base");
+}

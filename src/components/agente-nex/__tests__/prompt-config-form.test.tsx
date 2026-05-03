@@ -51,6 +51,7 @@ import {
 import { PromptConfigForm } from "../prompt-config-form";
 
 const baseInitial: NexPromptConfig = {
+  identityBase: null,
   personality: "",
   tone: "",
   guardrails: [],

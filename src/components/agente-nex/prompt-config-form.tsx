@@ -123,6 +123,7 @@ export function PromptConfigForm({ initial, onSaved }: PromptConfigFormProps) {
   // Snapshot do form pra enviar ao server.
   const currentConfig: NexPromptConfig = useMemo(
     () => ({
+      identityBase: initial.identityBase,
       personality,
       tone,
       guardrails: guardrails.map((g) => g.trim()).filter((g) => g.length > 0),
@@ -136,6 +137,7 @@ export function PromptConfigForm({ initial, onSaved }: PromptConfigFormProps) {
       guardrails,
       overrideOn,
       override,
+      initial.identityBase,
       initial.audioInputEnabled,
       initial.kbEnabled,
     ],

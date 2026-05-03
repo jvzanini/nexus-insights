@@ -34,6 +34,7 @@ function asStrArray(v: unknown): string[] {
 export async function getNexPromptConfig(): Promise<NexPromptConfig> {
   await ensureNexTables();
   const r = await pgPool.query<{
+    identity_base: string | null;
     personality: string;
     tone: string;
     guardrails: unknown;
@@ -41,11 +42,12 @@ export async function getNexPromptConfig(): Promise<NexPromptConfig> {
     audio_input_enabled: boolean;
     kb_enabled: boolean;
   }>(
-    `SELECT personality, tone, guardrails, advanced_override, audio_input_enabled, kb_enabled
+    `SELECT identity_base, personality, tone, guardrails, advanced_override, audio_input_enabled, kb_enabled
      FROM nex_settings WHERE id = 'global' LIMIT 1`,
   );
   if (r.rowCount === 0) {
     return {
+      identityBase: null,
       personality: "",
       tone: "",
       guardrails: [],
@@ -56,6 +58,7 @@ export async function getNexPromptConfig(): Promise<NexPromptConfig> {
   }
   const row = r.rows[0];
   return {
+    identityBase: row.identity_base,
     personality: row.personality ?? "",
     tone: row.tone ?? "",
     guardrails: asStrArray(row.guardrails),
@@ -88,9 +91,10 @@ export async function saveNexPromptConfig(
   }
   await ensureNexTables();
   await pgPool.query(
-    `INSERT INTO nex_settings (id, personality, tone, guardrails, advanced_override, audio_input_enabled, kb_enabled, updated_at, updated_by_id)
-     VALUES ('global', $1, $2, $3::jsonb, $4, $5, $6, NOW(), $7)
+    `INSERT INTO nex_settings (id, identity_base, personality, tone, guardrails, advanced_override, audio_input_enabled, kb_enabled, updated_at, updated_by_id)
+     VALUES ('global', $1, $2, $3, $4::jsonb, $5, $6, $7, NOW(), $8)
      ON CONFLICT (id) DO UPDATE SET
+       identity_base = EXCLUDED.identity_base,
        personality = EXCLUDED.personality,
        tone = EXCLUDED.tone,
        guardrails = EXCLUDED.guardrails,
@@ -100,6 +104,7 @@ export async function saveNexPromptConfig(
        updated_at = NOW(),
        updated_by_id = EXCLUDED.updated_by_id`,
     [
+      cfg.identityBase ?? null,
       cfg.personality,
       cfg.tone,
       JSON.stringify(cfg.guardrails),

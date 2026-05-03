@@ -33,12 +33,15 @@ import {
   deleteKbDocumentAction,
   addKbUrlAction,
   refreshKbUrlAction,
+  saveIdentityBaseAction,
+  resetIdentityBaseAction,
 } from "../nex-prompt";
 
 const mockedAuth = auth as jest.MockedFunction<typeof auth>;
 const mockedLogAudit = logAudit as jest.MockedFunction<typeof logAudit>;
 
 const baseCfg: promptLib.NexPromptConfig = {
+  identityBase: null,
   personality: "calmo",
   tone: "direto",
   guardrails: ["sempre PT-BR"],
@@ -455,5 +458,129 @@ describe("refreshKbUrlAction", () => {
       charCount: "texto novo".length,
       truncated: false,
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T-E1c (v0.28) — saveIdentityBaseAction + resetIdentityBaseAction
+// ---------------------------------------------------------------------------
+
+describe("saveIdentityBaseAction (v0.28)", () => {
+  it("super_admin: persiste identity_base no DB com user.id", async () => {
+    const result = await saveIdentityBaseAction("Novo prompt customizado");
+    expect(result.ok).toBe(true);
+    expect(promptLib.saveNexPromptConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ identityBase: "Novo prompt customizado" }),
+      "u-1",
+    );
+  });
+
+  it("não-superadmin (viewer): nega com erro de permissão", async () => {
+    mockedAuth.mockResolvedValueOnce({
+      user: { id: "u-x", platformRole: "viewer" },
+    } as never);
+    const result = await saveIdentityBaseAction("x");
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/super_admin|permissão/i);
+    expect(promptLib.saveNexPromptConfig).not.toHaveBeenCalled();
+  });
+
+  it("texto vazio (após trim): nega", async () => {
+    const result = await saveIdentityBaseAction("   ");
+    expect(result.ok).toBe(false);
+    expect(promptLib.saveNexPromptConfig).not.toHaveBeenCalled();
+  });
+
+  it("texto > 5000 chars: nega", async () => {
+    const tooLong = "a".repeat(5_001);
+    const result = await saveIdentityBaseAction(tooLong);
+    expect(result.ok).toBe(false);
+    expect(promptLib.saveNexPromptConfig).not.toHaveBeenCalled();
+  });
+
+  it("preserva demais campos da config existente", async () => {
+    (promptLib.getNexPromptConfig as jest.Mock).mockResolvedValueOnce({
+      ...baseCfg,
+      personality: "antiga",
+      tone: "antigo",
+      guardrails: ["existente"],
+    });
+    const result = await saveIdentityBaseAction("Novo identity");
+    expect(result.ok).toBe(true);
+    expect(promptLib.saveNexPromptConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        identityBase: "Novo identity",
+        personality: "antiga",
+        tone: "antigo",
+        guardrails: ["existente"],
+      }),
+      "u-1",
+    );
+  });
+
+  it("loga audit setting_updated com targetType=nex_prompt", async () => {
+    const result = await saveIdentityBaseAction("Novo prompt");
+    expect(result.ok).toBe(true);
+    expect(mockedLogAudit).toHaveBeenCalledTimes(1);
+    const audit = mockedLogAudit.mock.calls[0][0];
+    expect(audit.action).toBe("setting_updated");
+    expect(audit.targetType).toBe("nex_prompt");
+    expect(audit.userId).toBe("u-1");
+  });
+});
+
+describe("resetIdentityBaseAction (v0.28)", () => {
+  it("super_admin: persiste identityBase=null", async () => {
+    (promptLib.getNexPromptConfig as jest.Mock).mockResolvedValueOnce({
+      ...baseCfg,
+      identityBase: "custom anterior",
+    });
+    const result = await resetIdentityBaseAction();
+    expect(result.ok).toBe(true);
+    expect(promptLib.saveNexPromptConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ identityBase: null }),
+      "u-1",
+    );
+  });
+
+  it("não-superadmin: nega com erro de permissão", async () => {
+    mockedAuth.mockResolvedValueOnce({
+      user: { id: "u-y", platformRole: "viewer" },
+    } as never);
+    const result = await resetIdentityBaseAction();
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/super_admin|permissão/i);
+    expect(promptLib.saveNexPromptConfig).not.toHaveBeenCalled();
+  });
+
+  it("preserva demais campos da config existente", async () => {
+    (promptLib.getNexPromptConfig as jest.Mock).mockResolvedValueOnce({
+      ...baseCfg,
+      identityBase: "custom",
+      personality: "p",
+      tone: "t",
+      guardrails: ["g"],
+    });
+    const result = await resetIdentityBaseAction();
+    expect(result.ok).toBe(true);
+    expect(promptLib.saveNexPromptConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        identityBase: null,
+        personality: "p",
+        tone: "t",
+        guardrails: ["g"],
+      }),
+      "u-1",
+    );
+  });
+
+  it("loga audit setting_updated com targetType=nex_prompt", async () => {
+    const result = await resetIdentityBaseAction();
+    expect(result.ok).toBe(true);
+    expect(mockedLogAudit).toHaveBeenCalledTimes(1);
+    const audit = mockedLogAudit.mock.calls[0][0];
+    expect(audit.action).toBe("setting_updated");
+    expect(audit.targetType).toBe("nex_prompt");
+    expect(audit.userId).toBe("u-1");
   });
 });

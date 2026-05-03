@@ -75,6 +75,7 @@ import { previewSystemPromptAction } from "@/lib/actions/nex-prompt";
 import { PlaygroundSheet, MAX_HISTORY_MSGS } from "../playground-sheet";
 
 const baseConfig: NexPromptConfig = {
+  identityBase: null,
   personality: "Direto",
   tone: "Profissional",
   guardrails: [],
@@ -285,6 +286,7 @@ describe("PlaygroundSheet — v0.26 bubble UX", () => {
   });
 
   const audioConfig: NexPromptConfig = {
+    identityBase: null,
     personality: "",
     tone: "",
     guardrails: [],
