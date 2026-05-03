@@ -484,9 +484,9 @@ export function AdvancedFilters({
               type="button"
               onClick={handleResetFiltersOnly}
               aria-label="Limpar todos os filtros"
-              className="absolute -right-1.5 -top-1.5 z-10 inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-full border border-destructive/40 bg-destructive/15 text-destructive shadow-sm transition-colors hover:bg-destructive/25 hover:border-destructive/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-150"
+              className="absolute -right-1 -top-1 z-10 inline-flex h-4 w-4 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-150"
             >
-              <X className="h-3 w-3" aria-hidden="true" />
+              <X className="h-2.5 w-2.5" aria-hidden="true" />
             </button>
           ) : null}
         </div>
@@ -522,9 +522,9 @@ export function AdvancedFilters({
               type="button"
               onClick={() => onSortStackChange([])}
               aria-label="Limpar ordenação"
-              className="absolute -right-1.5 -top-1.5 z-10 inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-full border border-destructive/40 bg-destructive/15 text-destructive shadow-sm transition-colors hover:bg-destructive/25 hover:border-destructive/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-150"
+              className="absolute -right-1 -top-1 z-10 inline-flex h-4 w-4 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-150"
             >
-              <X className="h-3 w-3" aria-hidden="true" />
+              <X className="h-2.5 w-2.5" aria-hidden="true" />
             </button>
           ) : null}
         </div>
