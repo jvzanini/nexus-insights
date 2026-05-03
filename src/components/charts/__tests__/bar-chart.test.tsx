@@ -283,7 +283,7 @@ describe("InteractiveBarChart — providersByModel custom XAxis tick", () => {
     expect(x.height).toBe(50);
   });
 
-  it("custom tick renderiza nome do modelo + Badge SVG com provider em uppercase (sem parênteses)", () => {
+  it("custom tick renderiza nome do modelo + Badge SVG com provider em case-mixed (v0.26: OpenAI/Anthropic/Gemini/OpenRouter — sem .toUpperCase)", () => {
     const providersByModel = { "gpt-5.4-nano": "openai" };
     render(
       <InteractiveBarChart
@@ -302,13 +302,36 @@ describe("InteractiveBarChart — providersByModel custom XAxis tick", () => {
     const { container } = render(<svg>{node}</svg>);
     const html = container.innerHTML;
     expect(html).toContain("gpt-5.4-nano");
-    // Badge: provider em uppercase, sem parênteses
-    expect(html).toContain("OPENAI");
+    // v0.26: Badge case-mixed (sem .toUpperCase)
+    expect(html).toContain("OpenAI");
+    expect(html).not.toContain("OPENAI");
     expect(html).not.toContain("(OpenAI)");
-    expect(html).not.toContain("(openai)");
     // Badge container <rect> sem fill (transparent) + stroke currentColor
     expect(html).toMatch(/<rect[^>]*fill="transparent"/);
     expect(html).toMatch(/<rect[^>]*stroke="currentColor"/);
+  });
+
+  it("v0.26: badge 'Gemini' (sem 'GEMINI' nem 'Google Gemini')", () => {
+    const providersByModel = { "gemini-2.5-flash": "gemini" };
+    render(
+      <InteractiveBarChart
+        data={[{ name: "gemini-2.5-flash", v: 1 }]}
+        series={series}
+        providersByModel={providersByModel}
+      />,
+    );
+    const x = getCaptured().xAxisProps[0];
+    const TickFn = x.tick as (props: {
+      x: number;
+      y: number;
+      payload: { value: string };
+    }) => React.ReactElement;
+    const node = TickFn({ x: 0, y: 0, payload: { value: "gemini-2.5-flash" } });
+    const { container } = render(<svg>{node}</svg>);
+    const html = container.innerHTML;
+    expect(html).toContain("Gemini");
+    expect(html).not.toContain("GEMINI");
+    expect(html).not.toContain("Google Gemini");
   });
 
   it("custom tick trunca nome de modelo > 24 chars com ellipsis", () => {
@@ -354,6 +377,8 @@ describe("InteractiveBarChart — providersByModel custom XAxis tick", () => {
     const { container } = render(<svg>{node}</svg>);
     const html = container.innerHTML;
     expect(html).toContain("gpt-5.4-nano");
+    // v0.26: case-mixed — verificar ausência de "OpenAI" também
+    expect(html).not.toContain("OpenAI");
     expect(html).not.toContain("OPENAI");
     expect(html).not.toContain("(OpenAI)");
     expect(html).not.toContain("(openai)");

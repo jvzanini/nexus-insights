@@ -132,9 +132,10 @@ function makeCustomBarTick(providersByModel?: Record<string, string>) {
     const providerLabel = provider
       ? (PROVIDER_LABELS[provider as keyof typeof PROVIDER_LABELS] ?? provider)
       : "";
-    const badgeText = providerLabel.toUpperCase();
-    // Heurística: cada char ≈ 5.5px em uppercase + 12px padding total.
-    const badgeWidth = badgeText.length * 5.5 + 12;
+    // v0.26.0: case-mixed (OpenAI, Anthropic, Gemini, OpenRouter) — sem .toUpperCase()
+    const badgeText = providerLabel;
+    // Heurística case-mixed: ~6px/char + 14px padding total (case-mixed ocupa mais que all-caps).
+    const badgeWidth = badgeText.length * 6 + 14;
     return (
       <g transform={`translate(${numX},${numY})`}>
         <text
@@ -166,8 +167,8 @@ function makeCustomBarTick(providersByModel?: Record<string, string>) {
               textAnchor="middle"
               fontSize={9}
               fill="currentColor"
-              opacity={0.6}
-              letterSpacing={0.5}
+              opacity={0.7}
+              letterSpacing={0.3}
             >
               {badgeText}
             </text>
