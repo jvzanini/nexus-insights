@@ -439,3 +439,93 @@ describe("PlaygroundSheet — v0.28 sendNexMessage com histórico", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("PlaygroundSheet — isPlayground + SuggestionsBar (v0.31)", () => {
+  beforeEach(() => {
+    toastMock.success.mockReset();
+    toastMock.error.mockReset();
+    (sendNexMessage as jest.Mock).mockReset();
+    (sendNexMessage as jest.Mock).mockImplementation(async () => ({
+      ok: true,
+      message: "ok",
+      suggestions: [],
+    }));
+    (previewSystemPromptAction as jest.Mock).mockReset();
+    (previewSystemPromptAction as jest.Mock).mockImplementation(async () => ({
+      ok: true,
+      data: { composedPrompt: "PROMPT COMPOSTO" },
+    }));
+  });
+
+  it("envia isPlayground=true via sendNexMessage options", async () => {
+    (sendNexMessage as jest.Mock).mockResolvedValue({
+      ok: true,
+      message: "ok",
+      suggestions: [],
+    });
+    render(<ControlledHarness />);
+    fireEvent.change(screen.getByPlaceholderText(/Pergunte ao agente Nex/i), {
+      target: { value: "x" },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Enviar/i }));
+    });
+    await waitFor(() => expect(sendNexMessage).toHaveBeenCalled());
+    expect((sendNexMessage as jest.Mock).mock.calls[0][1]).toEqual({
+      isPlayground: true,
+    });
+  });
+
+  it("renderiza SuggestionsBar quando assistant retorna suggestions", async () => {
+    (sendNexMessage as jest.Mock).mockResolvedValue({
+      ok: true,
+      message: "12 resolvidas",
+      suggestions: ["A", "B"],
+    });
+    render(<ControlledHarness />);
+    fireEvent.change(screen.getByPlaceholderText(/Pergunte ao agente Nex/i), {
+      target: { value: "x" },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Enviar/i }));
+    });
+    await waitFor(() => screen.getByText(/12 resolvidas/i));
+    expect(screen.getByRole("button", { name: "A" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "B" })).toBeInTheDocument();
+  });
+
+  it("click numa sugestão envia como nova msg + consome botões + isPlayground=true", async () => {
+    (sendNexMessage as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      message: "12 resolvidas",
+      suggestions: ["Ver as abertas"],
+    });
+    render(<ControlledHarness />);
+    fireEvent.change(screen.getByPlaceholderText(/Pergunte ao agente Nex/i), {
+      target: { value: "x" },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Enviar/i }));
+    });
+    await waitFor(() =>
+      screen.getByRole("button", { name: /Ver as abertas/i }),
+    );
+
+    (sendNexMessage as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      message: "5 abertas",
+      suggestions: [],
+    });
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: /Ver as abertas/i }),
+      );
+    });
+    await waitFor(() =>
+      expect(sendNexMessage).toHaveBeenCalledTimes(2),
+    );
+    expect((sendNexMessage as jest.Mock).mock.calls[1][1]).toEqual({
+      isPlayground: true,
+    });
+  });
+});

@@ -32,7 +32,7 @@
  *    (string-match em providerLabel é frágil, evitado).
  */
 
-import {
+import React, {
   useCallback,
   useEffect,
   useMemo,
@@ -45,6 +45,7 @@ import { toast } from "sonner";
 
 import { AudioRecorder, type AudioRecorderHandle } from "@/components/nex/audio-recorder";
 import { NexMessage } from "@/components/nex/nex-message";
+import { SuggestionsBar } from "@/components/nex/suggestions-bar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -72,6 +73,8 @@ interface ChatItem {
   id: string;
   role: "user" | "assistant";
   content: string;
+  /** v0.31.0: sugestões clicáveis emitidas pelo agente após a resposta. */
+  suggestions?: string[];
 }
 
 export interface PlaygroundSheetProps {
@@ -194,7 +197,9 @@ export function PlaygroundSheet({
 
     startSend(async () => {
       try {
-        const r = await sendNexMessage(history);
+        // v0.31.0: isPlayground=true → log marcado, sem persistência de
+        // mensagens no histórico do bubble.
+        const r = await sendNexMessage(history, { isPlayground: true });
         if (!r.ok) {
           toast.error(
             `Erro: ${r.error}. Verifique chave/modelo em Configuração.`,
@@ -202,7 +207,12 @@ export function PlaygroundSheet({
           return;
         }
         appendItems([
-          { id: genId(), role: "assistant", content: r.message },
+          {
+            id: genId(),
+            role: "assistant",
+            content: r.message,
+            suggestions: r.suggestions,
+          },
         ]);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -212,6 +222,27 @@ export function PlaygroundSheet({
       }
     });
   }
+
+  /**
+   * v0.31.0 — consume + envia: limpa as sugestões da msg (pra não reaparecerem
+   * depois) e dispara `submitMessage(suggestion)` como nova msg do user.
+   * Idêntico ao handlePickSuggestion do nex-chat-panel.
+   */
+  const handlePickSuggestion = useCallback(
+    (msgId: string, suggestion: string) => {
+      setItems((prev) =>
+        prev.map((m) =>
+          m.id === msgId ? { ...m, suggestions: undefined } : m,
+        ),
+      );
+      submitMessage(suggestion);
+    },
+    // submitMessage é declarada inline (não memoizada). useCallback aqui só
+    // serve pra dar identidade estável ao handler — submitMessage lê state via
+    // closure de cada render, então a dep não muda comportamento.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
 
   function handleSendClick() {
     if (isRecording) {
@@ -362,13 +393,25 @@ export function PlaygroundSheet({
                 </p>
               </div>
             ) : (
-              items.map((item) => (
-                <NexMessage
-                  key={item.id}
-                  role={item.role}
-                  content={item.content}
-                />
-              ))
+              items.map((item, idx) => {
+                const isLastAssistant =
+                  item.role === "assistant" &&
+                  idx === items.length - 1 &&
+                  !isSending;
+                return (
+                  <React.Fragment key={item.id}>
+                    <NexMessage role={item.role} content={item.content} />
+                    {isLastAssistant &&
+                    item.suggestions &&
+                    item.suggestions.length > 0 ? (
+                      <SuggestionsBar
+                        suggestions={item.suggestions}
+                        onPick={(s) => handlePickSuggestion(item.id, s)}
+                      />
+                    ) : null}
+                  </React.Fragment>
+                );
+              })
             )}
             {isSending ? <NexMessage role="loading" content="" /> : null}
           </div>
