@@ -1,7 +1,7 @@
 import type { TourConfig } from "@/components/tour/tour-provider";
 
 export const conversasTour: TourConfig = {
-  id: "conversas-v4", // bump pra v4 — adiciona step pagination-top da v0.23
+  id: "conversas-v5", // bump pra v5 — reordena presets antes de export + Chatwoot→Nexus Chat
   title: "Tour do relatório de Conversas",
   steps: [
     {
@@ -44,19 +44,19 @@ export const conversasTour: TourConfig = {
       placement: "bottom",
     },
     {
-      id: "export",
-      targetSelector: "[data-tour='export']",
-      title: "Exportar",
-      description:
-        "Gera planilha XLSX com todos os resultados (até 50.000), respeitando filtros, ordenação e busca.",
-      placement: "bottom",
-    },
-    {
       id: "presets",
       targetSelector: "[data-tour='presets']",
       title: "Filtros salvos",
       description:
         "Salve combinações de filtros + ordenação como presets favoritos. Use o botão Atalhos (raio) para filtros rápidos do dia a dia.",
+      placement: "bottom",
+    },
+    {
+      id: "export",
+      targetSelector: "[data-tour='export']",
+      title: "Exportar",
+      description:
+        "Gera planilha XLSX com todos os resultados (até 50.000), respeitando filtros, ordenação e busca.",
       placement: "bottom",
     },
     {
@@ -94,9 +94,9 @@ export const conversasTour: TourConfig = {
     {
       id: "open-action",
       targetSelector: "[data-tour='open-action']",
-      title: "Abrir no Chatwoot",
+      title: "Abrir conversa no Nexus Chat",
       description:
-        "Clique no número da conversa (#) para abrir direto no Chatwoot, em uma nova aba.",
+        "Clique no número da conversa (#) para abrir direto no Nexus Chat, em uma nova aba.",
       placement: "right",
     },
     {
