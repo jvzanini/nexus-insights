@@ -105,7 +105,7 @@ function Field({
   mono = false,
   className,
 }: {
-  label: string;
+  label: React.ReactNode;
   value: React.ReactNode;
   mono?: boolean;
   className?: string;
@@ -239,8 +239,10 @@ function TokensSection({ row }: { row: UsageDetailRow }) {
       />
       {row.model === "whisper-1" ? (
         <p className="col-span-full text-xs italic text-muted-foreground">
-          Whisper é cobrado por minuto. Tokens não se aplicam a chamadas de
-          áudio (legado).
+          O modelo whisper-1 (legado) é cobrado por minuto de áudio, não por
+          tokens. Versões a partir de v0.20+ usam gpt-4o-mini-transcribe que
+          retorna tokens reais (input_token_details.audio_tokens). Veja runbook
+          agente-nex-audio-e-kb-url.md.
         </p>
       ) : null}
     </Section>
@@ -287,7 +289,14 @@ function CostSection({
         mono
       />
       <Field
-        label="Cotação aplicada (USD→BRL)"
+        label={
+          <span
+            className="cursor-help underline underline-offset-2 decoration-dotted decoration-muted-foreground/40"
+            title="Cotação USD/BRL gravada no momento da chamada via AwesomeAPI (cache 4h, fallback 5.50). Spread cartão atual aplicado."
+          >
+            Cotação aplicada (USD→BRL)
+          </span>
+        }
         value={
           hasRate ? (
             <span className="font-mono tabular-nums">

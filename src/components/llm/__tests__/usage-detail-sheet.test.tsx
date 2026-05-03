@@ -207,4 +207,55 @@ describe("UsageDetailSheet", () => {
     fireEvent.click(closeButtons[closeButtons.length - 1]);
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
+
+  // T5 v0.24.0
+  it("T5: 'Cotação aplicada (USD→BRL)' tem tooltip explicativo (atributo title)", () => {
+    render(
+      <UsageDetailSheet
+        open
+        onOpenChange={jest.fn()}
+        row={makeRow()}
+        currentSpread={1.0}
+      />,
+    );
+    const label = screen.getByText(/Cotação aplicada \(USD→BRL\)/i);
+    const tooltipHost = label.closest("[title]");
+    expect(tooltipHost).not.toBeNull();
+    expect(tooltipHost?.getAttribute("title")).toMatch(/AwesomeAPI/i);
+    expect(tooltipHost?.getAttribute("title")).toMatch(/cache 4h/i);
+    expect(tooltipHost?.getAttribute("title")).toMatch(/spread/i);
+  });
+
+  it("T5: nota whisper-1 cita '(legado)' + 'gpt-4o-mini-transcribe' + runbook", () => {
+    render(
+      <UsageDetailSheet
+        open
+        onOpenChange={jest.fn()}
+        row={makeRow({ model: "whisper-1", tokensInput: 0, tokensOutput: 0 })}
+      />,
+    );
+    expect(screen.getByText(/\(legado\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/gpt-4o-mini-transcribe/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/agente-nex-audio-e-kb-url\.md/i),
+    ).toBeInTheDocument();
+  });
+
+  it("T5: gpt-4o-mini-transcribe NÃO renderiza nota Whisper", () => {
+    render(
+      <UsageDetailSheet
+        open
+        onOpenChange={jest.fn()}
+        row={makeRow({
+          model: "gpt-4o-mini-transcribe",
+          tokensInput: 150,
+          tokensOutput: 80,
+        })}
+      />,
+    );
+    expect(
+      screen.queryByText(/agente-nex-audio-e-kb-url\.md/i),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/\(legado\)/i)).not.toBeInTheDocument();
+  });
 });
