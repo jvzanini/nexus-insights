@@ -113,6 +113,12 @@ export interface AdvancedFiltersProps {
   appliedReportFilters: ReportFilters;
   /** Quantidade de linhas atualmente mostradas — disable do export quando 0. */
   tableRowCount: number;
+  /**
+   * v0.25: busca client-side instantânea (UI). Estado vive em
+   * `<ConversasPageClient>`; aqui ela é apenas exibida e propagada.
+   */
+  searchClient: string;
+  onSearchClientChange: (next: string) => void;
 }
 
 export function AdvancedFilters({
@@ -133,6 +139,8 @@ export function AdvancedFilters({
   onOpenPresetsManager,
   appliedReportFilters,
   tableRowCount,
+  searchClient,
+  onSearchClientChange,
 }: AdvancedFiltersProps) {
   const router = useRouter();
   const { startTransition } = useFilterTransition();
@@ -356,10 +364,6 @@ export function AdvancedFilters({
     [applied, pushUrl],
   );
 
-  const updateSearch = (value: string) => {
-    setDraft((prev) => ({ ...prev, search: value || undefined }));
-  };
-
   return (
     <section
       ref={sectionRef}
@@ -392,22 +396,29 @@ export function AdvancedFilters({
           />
           <Input
             type="search"
-            value={draft.search ?? ""}
-            onChange={(e) => updateSearch(e.currentTarget.value)}
+            value={searchClient}
+            onChange={(e) => onSearchClientChange(e.currentTarget.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") {
+              if (e.key === "Escape") {
+                // preventDefault evita comportamento UA-default (Safari Mac
+                // limpa input em Esc) — queremos consistência cross-browser
+                // delegando o clear ao callback.
                 e.preventDefault();
-                handleApply();
+                onSearchClientChange("");
               }
             }}
             placeholder="Buscar..."
             aria-label="Buscar conversas"
-            className="h-10 pl-9 pr-[112px]"
+            className={cn(
+              "h-10 cursor-text pl-9",
+              searchClient.trim() !== "" ? "pr-[88px]" : "pr-3",
+            )}
           />
-          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-            Pressione
-            <kbd className="font-semibold text-violet-500 tabular-nums">↵ Enter</kbd>
-          </span>
+          {searchClient.trim() !== "" ? (
+            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 rounded-md border border-violet-500/30 bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-medium text-violet-500">
+              Filtrando
+            </span>
+          ) : null}
         </div>
 
         <PresetsPopover
@@ -513,6 +524,7 @@ export function AdvancedFilters({
           filters={appliedReportFilters}
           accountId={accountId ?? 9}
           rowCount={tableRowCount}
+          searchClientActive={searchClient.trim() !== ""}
         />
       </div>
 

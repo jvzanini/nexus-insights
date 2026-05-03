@@ -12,6 +12,13 @@ interface ExportButtonProps {
   filters: ReportFilters;
   accountId: number;
   rowCount: number;
+  /**
+   * v0.25: indica se a busca client-side instantânea está ativa. Quando
+   * true, o botão exibe um title HTML explicando que a exportação é
+   * server-side e ignora a busca instantânea (apenas filtros aplicados
+   * entram no XLSX). Não desabilita o botão — só esclarece o escopo.
+   */
+  searchClientActive?: boolean;
 }
 
 /**
@@ -46,6 +53,7 @@ export function ExportButton({
   filters,
   accountId,
   rowCount,
+  searchClientActive,
 }: ExportButtonProps) {
   const [pending, startTransition] = useTransition();
   const [internalLoading, setInternalLoading] = useState(false);
@@ -91,6 +99,11 @@ export function ExportButton({
       disabled={disabled}
       aria-label="Exportar conversas para planilha XLSX"
       aria-busy={loading}
+      title={
+        searchClientActive
+          ? "A exportação inclui os filtros aplicados, não a busca atual."
+          : undefined
+      }
       className="relative h-10 cursor-pointer px-4 disabled:cursor-not-allowed"
     >
       {loading ? (
