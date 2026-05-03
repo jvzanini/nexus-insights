@@ -35,6 +35,38 @@ const MAX_ITERATIONS = 5;
 /** Cap defensivo para `promptOverride` (Playground). */
 const MAX_PROMPT_OVERRIDE_LEN = 50_000;
 
+/**
+ * v0.31.0: regex ANCORADA em início-de-linha — exige que `[[suggestions]]`
+ * esteja em sua própria linha (não no meio de texto). Aceita início de string
+ * OU `\n` antes. Sem flag `s` (compatível ES2017).
+ */
+const SUGGESTIONS_RE = /(?:^|\n)\[\[suggestions\]\]:([^\n]+?)(?:\n|$)/;
+const MAX_SUGGESTIONS = 4;
+const MAX_SUGGESTION_LEN = 80;
+
+/**
+ * Extrai sugestões do sufixo `[[suggestions]]:item1|item2|...` quando
+ * presente em linha própria no fim da resposta. Retorna `message` sem o
+ * sufixo + array de sugestões (cap 4 itens, ≤80 chars cada).
+ *
+ * Quando não há sufixo, devolve a mensagem intacta + array vazio.
+ */
+export function extractSuggestions(text: string): {
+  message: string;
+  suggestions: string[];
+} {
+  const match = text.match(SUGGESTIONS_RE);
+  if (!match) return { message: text, suggestions: [] };
+  const raw = match[1].trim();
+  const suggestions = raw
+    .split("|")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && s.length <= MAX_SUGGESTION_LEN)
+    .slice(0, MAX_SUGGESTIONS);
+  const message = text.replace(match[0], "").trimEnd();
+  return { message, suggestions };
+}
+
 /** Fallback usado se a leitura de `nex_settings` ou da KB falhar. */
 const FALLBACK_SYSTEM_PROMPT = "Você é o Agente Nex.";
 
@@ -77,7 +109,7 @@ export interface RunNexInput {
 }
 
 export type RunNexResult =
-  | { ok: true; message: string; usage: ChatUsage }
+  | { ok: true; message: string; suggestions: string[]; usage: ChatUsage }
   | { ok: false; error: string };
 
 export async function runNexAgent(args: RunNexInput): Promise<RunNexResult> {
@@ -143,28 +175,33 @@ export async function runNexAgent(args: RunNexInput): Promise<RunNexResult> {
     // agregava em 1 row no fim, mascarando chamadas intermediárias de
     // tool-calling.
     //
-    // T8: quando `isPlayground === true`, NUNCA logamos — é só teste manual.
-    if (!args.isPlayground) {
-      void logUsage({
-        provider: client.provider,
-        model: client.model,
-        tokensInput: result.usage.tokensInput,
-        tokensOutput: result.usage.tokensOutput,
-        costUsd: result.usage.costUsd,
-        promptChars: i === 0 ? JSON.stringify(args.messages).length : 0,
-        responseChars: result.message.length,
-        userId: args.userId,
-        durationMs: Date.now() - iterStart,
-        errorMessage:
-          i === MAX_ITERATIONS - 1 && result.toolCalls?.length
-            ? "max_iterations_exceeded"
-            : undefined,
-      });
-    }
+    // v0.31.0: SEMPRE logamos (remove skip de v0.16). Propaga `isPlayground`
+    // como flag — `usage-logger` (T-D2) persiste em `llm_usage.is_playground`
+    // pra distinguir Bubble (false) vs Playground (true) no dashboard. Cast
+    // intencional: a signature de `logUsage` ganha `isPlayground` em T-D2;
+    // até lá, esta task escreve o payload completo pro mock dos testes
+    // validar o contract end-to-end.
+    void logUsage({
+      provider: client.provider,
+      model: client.model,
+      tokensInput: result.usage.tokensInput,
+      tokensOutput: result.usage.tokensOutput,
+      costUsd: result.usage.costUsd,
+      promptChars: i === 0 ? JSON.stringify(args.messages).length : 0,
+      responseChars: result.message.length,
+      userId: args.userId,
+      durationMs: Date.now() - iterStart,
+      errorMessage:
+        i === MAX_ITERATIONS - 1 && result.toolCalls?.length
+          ? "max_iterations_exceeded"
+          : undefined,
+      isPlayground: args.isPlayground ?? false,
+    } as Parameters<typeof logUsage>[0] & { isPlayground: boolean });
 
     if (!result.toolCalls?.length) {
-      // Resposta final.
-      return { ok: true, message: result.message, usage: totalUsage };
+      // Resposta final — extrai sufixo `[[suggestions]]` se presente (v0.31).
+      const { message, suggestions } = extractSuggestions(result.message);
+      return { ok: true, message, suggestions, usage: totalUsage };
     }
 
     // Adiciona assistant com tool_calls.
