@@ -174,14 +174,16 @@ export function AdvancedFilters({
     return () => ro.disconnect();
   }, []);
 
-  // v0.19: separa search do "pending banner". Banner conta apenas filtros
-  // não-search; search vira "pending" via hint sutil abaixo do input.
-  const withoutSearch = (s: FilterState): FilterState => ({
-    ...s,
-    search: undefined,
-  });
+  // v0.32 T10: separa search do "pending banner" (search é client-side e não
+  // deve subir contador) E ignora mode (trocar tab Simples↔Avançado também
+  // não conta como pending — bug reportado pelo João v0.32: contador subia +1
+  // ao trocar de tab sem nenhuma seleção real).
   const pendingDiffExSearch = useMemo(
-    () => diffFilterStates(withoutSearch(draft), withoutSearch(applied)),
+    () =>
+      diffFilterStates(draft, applied, {
+        ignoreMode: true,
+        ignoreSearch: true,
+      }),
     [draft, applied],
   );
   const hasPendingNonSearch = pendingDiffExSearch > 0;
