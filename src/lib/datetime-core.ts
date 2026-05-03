@@ -89,10 +89,27 @@ export function getPeriodInTz(
           'getPeriodInTz: customRange é obrigatório para key="custom"',
         );
       }
-      const startInTz = toZonedTime(customRange.start, tz);
-      const endInTz = toZonedTime(customRange.end, tz);
-      const startLocal = startOfDay(startInTz);
-      const endLocal = endOfDay(endInTz);
+      // FIX v0.23: o caller (resolvePeriod) faz `new Date("yyyy-mm-dd")`,
+      // que vira UTC midnight. Em SP (UTC-3) isso recua um dia (21h do dia
+      // anterior), e startOfDay/endOfDay no tz local capturavam o dia
+      // errado — single-day 21/03→21/03 retornava range em 20/03.
+      //
+      // Solução: extrair Y/M/D em UTC da entrada (a forma "civil" como o
+      // user enxerga "21 de março") e construir 00:00 local nesse dia no tz.
+      const startLocal = startOfDay(
+        new Date(
+          customRange.start.getUTCFullYear(),
+          customRange.start.getUTCMonth(),
+          customRange.start.getUTCDate(),
+        ),
+      );
+      const endLocal = endOfDay(
+        new Date(
+          customRange.end.getUTCFullYear(),
+          customRange.end.getUTCMonth(),
+          customRange.end.getUTCDate(),
+        ),
+      );
       return {
         start: fromZonedTime(startLocal, tz),
         end: fromZonedTime(endLocal, tz),
