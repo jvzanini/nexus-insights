@@ -20,7 +20,7 @@ import {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowUpDown, Filter, Search } from "lucide-react";
+import { ArrowUpDown, Filter, Search, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -239,6 +239,25 @@ export function AdvancedFilters({
     pushUrl(EMPTY_FILTER_STATE);
   }, [pushUrl]);
 
+  // T15 v0.23: X adesivo do chip Filtros — limpa SOMENTE filtros (caixa de
+  // entrada, departamento, atendente, status, prioridade, etiquetas, grupo
+  // avançado) preservando search, period, customRange, mode e page.
+  const handleResetFiltersOnly = useCallback(() => {
+    const next: FilterState = {
+      ...applied,
+      inboxIds: [],
+      teamIds: [],
+      assigneeIds: [],
+      statuses: [],
+      priorities: [],
+      labelIds: [],
+      conditionGroup: undefined,
+    };
+    setApplied(next);
+    setDraft(next);
+    pushUrl(next);
+  }, [applied, pushUrl]);
+
   // Aplicar do dialog: promove draft → applied e atualiza URL.
   const handleDialogApply = useCallback(
     (next: FilterState) => {
@@ -407,63 +426,87 @@ export function AdvancedFilters({
           />
         </div>
 
-        <Button
-          data-tour="filters-chip"
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setFiltersOpen(true)}
-          aria-label={`Abrir filtros${
-            appliedCount > 0 ? ` (${appliedCount} aplicados)` : ""
-          }`}
-          className={cn(
-            "relative h-10 px-4",
-            appliedCount > 0 && "border-violet-500/40 text-foreground",
-          )}
-        >
-          <Filter aria-hidden="true" />
-          Filtros
+        <div className="relative inline-block">
+          <Button
+            data-tour="filters-chip"
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setFiltersOpen(true)}
+            aria-label={`Abrir filtros${
+              appliedCount > 0 ? ` (${appliedCount} aplicados)` : ""
+            }`}
+            className={cn(
+              "relative h-10 px-4",
+              appliedCount > 0 && "border-violet-500/40 text-foreground",
+            )}
+          >
+            <Filter aria-hidden="true" />
+            Filtros
+            {appliedCount > 0 ? (
+              <Badge
+                variant="default"
+                className="ml-1 h-5 min-w-5 px-1.5 tabular-nums"
+              >
+                {appliedCount}
+              </Badge>
+            ) : null}
+            {hasPendingNonSearch ? (
+              <span
+                aria-hidden="true"
+                className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-primary ring-2 ring-card"
+              />
+            ) : null}
+          </Button>
           {appliedCount > 0 ? (
-            <Badge
-              variant="default"
-              className="ml-1 h-5 min-w-5 px-1.5 tabular-nums"
+            <button
+              type="button"
+              onClick={handleResetFiltersOnly}
+              aria-label="Limpar todos os filtros"
+              className="absolute -right-1.5 -top-1.5 z-10 inline-flex h-4 w-4 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-all hover:scale-110 hover:border-destructive hover:bg-destructive hover:text-destructive-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40 motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-90 motion-safe:duration-150"
             >
-              {appliedCount}
-            </Badge>
+              <X className="h-2.5 w-2.5" aria-hidden="true" />
+            </button>
           ) : null}
-          {hasPendingNonSearch ? (
-            <span
-              aria-hidden="true"
-              className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-primary ring-2 ring-card"
-            />
-          ) : null}
-        </Button>
+        </div>
 
-        <Button
-          data-tour="sorting-chip"
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setSortingOpen(true)}
-          aria-label={`Abrir ordenação${
-            sortCount > 0 ? ` (${sortCount} critérios)` : ""
-          }`}
-          className={cn(
-            "relative h-10 px-4",
-            sortCount > 0 && "border-violet-500/40 text-foreground",
-          )}
-        >
-          <ArrowUpDown aria-hidden="true" />
-          Ordenação
+        <div className="relative inline-block">
+          <Button
+            data-tour="sorting-chip"
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setSortingOpen(true)}
+            aria-label={`Abrir ordenação${
+              sortCount > 0 ? ` (${sortCount} critérios)` : ""
+            }`}
+            className={cn(
+              "relative h-10 px-4",
+              sortCount > 0 && "border-violet-500/40 text-foreground",
+            )}
+          >
+            <ArrowUpDown aria-hidden="true" />
+            Ordenação
+            {sortCount > 0 ? (
+              <Badge
+                variant="default"
+                className="ml-1 h-5 min-w-5 px-1.5 tabular-nums"
+              >
+                {sortCount}
+              </Badge>
+            ) : null}
+          </Button>
           {sortCount > 0 ? (
-            <Badge
-              variant="default"
-              className="ml-1 h-5 min-w-5 px-1.5 tabular-nums"
+            <button
+              type="button"
+              onClick={() => onSortStackChange([])}
+              aria-label="Limpar ordenação"
+              className="absolute -right-1.5 -top-1.5 z-10 inline-flex h-4 w-4 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-all hover:scale-110 hover:border-destructive hover:bg-destructive hover:text-destructive-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40 motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-90 motion-safe:duration-150"
             >
-              {sortCount}
-            </Badge>
+              <X className="h-2.5 w-2.5" aria-hidden="true" />
+            </button>
           ) : null}
-        </Button>
+        </div>
 
         <ExportButton
           filters={appliedReportFilters}

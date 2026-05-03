@@ -121,18 +121,25 @@ describe("AppliedFiltersChips", () => {
     expect(onRemove).toHaveBeenCalledWith("teamIds");
   });
 
-  it("Limpar filtros chama onClearAll quando há filtros aplicados", () => {
-    const onClearAll = jest.fn();
+  it("T15 v0.23: NÃO renderiza mais botões 'Limpar filtros' e 'Limpar ordenação' (movidos para X adesivo no chip do toolbar)", () => {
     render(
       <AppliedFiltersChips
         meta={META}
         applied={makeApplied({ statuses: [0, 1] })}
         onRemove={() => {}}
-        onClearAll={onClearAll}
+        onClearAll={() => {}}
+        sortStack={[{ key: "status", direction: "asc" }]}
+        sortOptions={[{ key: "status", label: "Status" }]}
+        onRemoveSort={() => {}}
+        onClearAllSort={() => {}}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /Limpar filtros/ }));
-    expect(onClearAll).toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: /Limpar filtros/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Limpar ordenação/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("renderiza chips de ordenação separadamente quando sortStack tem critérios", () => {
@@ -165,10 +172,11 @@ describe("AppliedFiltersChips", () => {
       }),
     );
     expect(onRemoveSort).toHaveBeenCalledWith("status");
-    fireEvent.click(
-      screen.getByRole("button", { name: /Limpar ordenação/ }),
-    );
-    expect(onClearAllSort).toHaveBeenCalled();
+    // T15 v0.23: botão "Limpar ordenação" foi removido — agora vive como X
+    // adesivo no chip do toolbar (advanced-filters.tsx).
+    expect(
+      screen.queryByRole("button", { name: /Limpar ordenação/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("status mostra label legível (não o id numérico)", () => {

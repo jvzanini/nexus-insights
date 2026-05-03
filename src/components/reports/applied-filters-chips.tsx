@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Trash2, X, Zap } from "lucide-react";
+import { ArrowDown, ArrowUp, X, Zap } from "lucide-react";
 
 import { FilterChipListPopover } from "@/components/reports/filter-chip-list-popover";
 import type { FilterState } from "@/lib/reports/filter-state";
@@ -315,28 +315,6 @@ export function AppliedFiltersChips({
           ) : null}
         </span>
       ))}
-
-      {chips.length > 0 ? (
-        <button
-          type="button"
-          onClick={onClearAll}
-          className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full border border-border/40 bg-muted/20 px-3 text-xs text-muted-foreground transition-colors hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-        >
-          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-          Limpar filtros
-        </button>
-      ) : null}
-
-      {sortChips.length > 0 && onClearAllSort ? (
-        <button
-          type="button"
-          onClick={onClearAllSort}
-          className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full border border-border/40 bg-muted/20 px-3 text-xs text-muted-foreground transition-colors hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-        >
-          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-          Limpar ordenação
-        </button>
-      ) : null}
     </div>
   );
 }
