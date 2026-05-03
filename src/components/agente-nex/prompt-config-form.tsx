@@ -86,6 +86,7 @@ const MANUAL_WARNING_TEXT =
 
 interface PromptConfigFormProps {
   initial: NexPromptConfig;
+  onSaved?: () => void;
 }
 
 function counterClass(current: number, max: number): string {
@@ -95,7 +96,7 @@ function counterClass(current: number, max: number): string {
   return "text-muted-foreground";
 }
 
-export function PromptConfigForm({ initial }: PromptConfigFormProps) {
+export function PromptConfigForm({ initial, onSaved }: PromptConfigFormProps) {
   const router = useRouter();
 
   const [personality, setPersonality] = useState<string>(initial.personality);
@@ -204,6 +205,7 @@ export function PromptConfigForm({ initial }: PromptConfigFormProps) {
       }
       toast.success("Configuração do Agente Nex salva");
       router.refresh();
+      onSaved?.();
     });
   }
 

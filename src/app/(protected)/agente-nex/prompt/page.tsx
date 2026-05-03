@@ -46,6 +46,7 @@ export default async function Page() {
   const providerAtual = llmActive?.provider ?? null;
   const providerLabel = providerAtual ? PROVIDER_LABELS[providerAtual] : undefined;
   const modelLabel = llmActive?.model ?? undefined;
+  const isSuperAdmin = user.platformRole === "super_admin";
   const accountUrls =
     accountUrlsResult.ok && accountUrlsResult.data
       ? accountUrlsResult.data.map((row) => ({
@@ -75,6 +76,7 @@ export default async function Page() {
           config={cfg}
           kbDocs={kbForPrompt}
           accountUrls={accountUrls}
+          isSuperAdmin={isSuperAdmin}
         />
 
         <div id="prompt-edit-form" className="scroll-mt-4">

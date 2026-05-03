@@ -5,28 +5,20 @@
  *
  * Card com:
  * - Título "Prompt completo do Agente Nex" + subtítulo (atualização em tempo real).
- * - Banner italic deixando claro que o preview é somente leitura.
- * - Botões "Copiar" (clipboard + toast), "Maximizar" (Dialog centralizado) e
- *   "Editar" (smooth-scroll para `#prompt-edit-form`).
- * - Toggle "Ver identidade fixa do agente (somente leitura)" (collapsible
- *   default closed) com parágrafo explicativo + `IDENTITY_BASE` em destaque.
- * - `<pre>` em ScrollArea (max-h-[400px]) com o prompt completo composto.
- *   `overflow-x-hidden` na ScrollArea + `min-w-0` no `<pre>` previnem o
- *   overflow horizontal das tags pré-formatadas (ex.: `<Idioma>`).
+ * - Banner italic deixando claro que o preview é somente leitura, com microcopy
+ *   role-aware ("super_admin pode editar" vs "apenas super_admins podem editar").
+ * - Header com 2 botões: Copiar (todos) + Editar (super_admin only).
+ *   Editar abre Dialog max-edit (max-w-[1000px], max-h-[90vh]) com
+ *   `<PromptConfigForm>` dentro.
+ * - Toggle "Ver prompt completo (somente leitura)" (default fechado) que revela
+ *   o `<pre>` em ScrollArea com o prompt composto. Sem `aria-readonly`
+ *   (atributo inválido em HTML — apenas inputs/textarea aceitam).
  *
- * Importa do núcleo puro `@/lib/nex/prompt-compose` (NÃO de `prompt.ts`,
- * que é server-only com import de `pg`) — `composeSystemPrompt` é
- * isomórfico e roda no client sem custo.
+ * Importa de `@/lib/nex/prompt-compose` (núcleo puro / isomórfico, sem `pg`).
  */
 
 import { useMemo, useState } from "react";
-import {
-  BookText,
-  ChevronRight,
-  Copy,
-  Maximize2,
-  Pencil,
-} from "lucide-react";
+import { BookText, ChevronRight, Copy, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -40,11 +32,13 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { PromptConfigForm } from "@/components/agente-nex/prompt-config-form";
 import {
-  IDENTITY_BASE,
   composeSystemPrompt,
   type AccountUrlSnippet,
   type KbDocSnippet,
@@ -56,15 +50,17 @@ interface PromptPreviewCardProps {
   config: NexPromptConfig;
   kbDocs: KbDocSnippet[];
   accountUrls: AccountUrlSnippet[];
+  isSuperAdmin: boolean;
 }
 
 export function PromptPreviewCard({
   config,
   kbDocs,
   accountUrls,
+  isSuperAdmin,
 }: PromptPreviewCardProps) {
-  const [maximized, setMaximized] = useState<boolean>(false);
-  const [showIdentity, setShowIdentity] = useState<boolean>(false);
+  const [editOpen, setEditOpen] = useState<boolean>(false);
+  const [showFull, setShowFull] = useState<boolean>(false);
 
   const prompt = useMemo(
     () => composeSystemPrompt(config, kbDocs, accountUrls),
@@ -78,21 +74,6 @@ export function PromptPreviewCard({
     } catch {
       toast.error("Não foi possível copiar.");
     }
-  }
-
-  function handleEditScroll() {
-    document
-      .getElementById("prompt-edit-form")
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
-  function handleEditFromMaximized() {
-    setMaximized(false);
-    setTimeout(() => {
-      document
-        .getElementById("prompt-edit-form")
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 150);
   }
 
   return (
@@ -122,114 +103,74 @@ export function PromptPreviewCard({
               <Copy className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
               Copiar
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setMaximized(true)}
-              className="cursor-pointer"
-              aria-label="Maximizar prompt em painel centralizado"
-            >
-              <Maximize2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-              Maximizar
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handleEditScroll}
-              className="cursor-pointer"
-              aria-label="Ir para os campos de edição"
-            >
-              <Pencil className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-              Editar
-            </Button>
+            {isSuperAdmin ? (
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                onClick={() => setEditOpen(true)}
+                className="cursor-pointer"
+              >
+                <Pencil className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                Editar
+              </Button>
+            ) : null}
           </div>
         </CardHeader>
 
         <CardContent className="space-y-3">
           <p className="text-xs italic text-muted-foreground">
-            Preview somente leitura. Para editar, use os campos abaixo
-            (Personalidade · Tom · Guardrails · Modo manual).
+            Preview somente leitura.{" "}
+            {isSuperAdmin
+              ? "Use Editar para ajustar Personalidade · Tom · Guardrails · Modo manual."
+              : "Apenas super_admins podem editar."}
           </p>
 
           <button
             type="button"
-            onClick={() => setShowIdentity((v) => !v)}
-            aria-expanded={showIdentity}
+            onClick={() => setShowFull((v) => !v)}
+            aria-expanded={showFull}
             className="inline-flex cursor-pointer items-center gap-1.5 rounded-md text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
           >
             <ChevronRight
               className={cn(
                 "h-3.5 w-3.5 transition-transform duration-200",
-                showIdentity && "rotate-90",
+                showFull && "rotate-90",
               )}
               aria-hidden="true"
             />
-            {showIdentity
-              ? "Ocultar identidade fixa"
-              : "Ver identidade fixa do agente (somente leitura)"}
+            {showFull
+              ? "Ocultar prompt completo"
+              : "Ver prompt completo (somente leitura)"}
           </button>
 
-          {showIdentity ? (
-            <>
-              <p className="text-xs text-muted-foreground">
-                Texto-base imutável que blinda a identidade do Agente Nex.
-                Personalidade e Tom (campos abaixo) são camadas adicionais que
-                VOCÊ controla.
-              </p>
+          {showFull ? (
+            <ScrollArea className="max-h-[400px] w-full overflow-x-hidden rounded-lg border border-border bg-muted/40">
               <pre
-                data-testid="identity-base"
-                className="max-h-[200px] min-w-0 overflow-auto rounded-lg border border-violet-500/30 bg-violet-500/5 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words text-foreground/90 dark:bg-violet-500/10"
+                data-testid="prompt-preview"
+                className="min-w-0 cursor-text p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words text-foreground"
               >
-                {IDENTITY_BASE}
+                {prompt}
               </pre>
-            </>
+            </ScrollArea>
           ) : null}
-
-          <ScrollArea className="max-h-[400px] w-full overflow-x-hidden rounded-lg border border-border bg-muted/40">
-            <pre
-              data-testid="prompt-preview"
-              aria-readonly="true"
-              className="min-w-0 cursor-text p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words text-foreground"
-            >
-              {prompt}
-            </pre>
-          </ScrollArea>
         </CardContent>
       </Card>
 
-      <Dialog open={maximized} onOpenChange={setMaximized}>
-        <DialogContent className="flex max-h-[85vh] max-w-[min(900px,92vw)] flex-col gap-3 p-6 sm:max-w-[min(900px,92vw)]">
-          <div className="flex items-start justify-between gap-2 pr-9">
-            <DialogTitle>Prompt completo do Agente Nex</DialogTitle>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleCopy}
-                className="cursor-pointer"
-              >
-                <Copy className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-                Copiar
-              </Button>
-              <Button
-                type="button"
-                variant="default"
-                size="sm"
-                onClick={handleEditFromMaximized}
-                className="cursor-pointer"
-              >
-                <Pencil className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-                Editar prompt
-              </Button>
-            </div>
-          </div>
-          <ScrollArea className="min-h-0 flex-1 w-full overflow-x-hidden rounded-lg border border-border bg-muted/40">
-            <pre className="min-w-0 cursor-text p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words text-foreground">
-              {prompt}
-            </pre>
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="flex max-h-[90vh] max-w-[min(1000px,95vw)] flex-col gap-3 p-6 sm:max-w-[min(1000px,95vw)]">
+          <DialogHeader>
+            <DialogTitle>Editar prompt do Agente Nex</DialogTitle>
+            <DialogDescription>
+              Personalidade, Tom, Guardrails e Modo prompt manual. Salvar
+              atualiza imediatamente.
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="min-h-0 w-full flex-1 pr-2">
+            <PromptConfigForm
+              initial={config}
+              onSaved={() => setEditOpen(false)}
+            />
           </ScrollArea>
         </DialogContent>
       </Dialog>
