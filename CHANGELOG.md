@@ -1,5 +1,22 @@
 # Changelog
 
+## [v0.29.0] 2026-05-03 — Conversas Polish v3 (X duplo, X chips, colunas truncate)
+
+> 3 fixes pontuais reportados pelo João via screenshots após v0.27/v0.28 LIVE. Workflow rigoroso (plan v1→v2→v3 com 28 achados em 2 pentes-finos REAIS · subagent-driven-development com TDD em T2/T3 · ui-ux-pro-max em todas tasks UI · code review aprovado). 4 commits granulares (T1-T3 + release) · 308/308 tests verde · typecheck 0 erros.
+
+### Fixes
+
+- **F1 — Esconde X nativo do `<input type="search">`:** input de busca mostrava DOIS X (nativo macOS/Webkit + custom violet h-5 da v0.27). CSS global em `globals.css` oculta `::-webkit-search-cancel-button` + `::-webkit-search-decoration` via `-webkit-appearance: none + appearance: none + display: none`. Aplicado em todos os search inputs da plataforma.
+- **F2 — X chips Filtros/Ordenação discreto idle + hover vermelho + menor:** João pediu mesmo comportamento do X do search input — idle discreto (sem bg/border, só ícone cinza `text-muted-foreground`) e hover vermelho (`hover:bg-destructive/15 + hover:text-destructive`). Tamanho diminuído sutilmente: h-5 → h-4 + ícone X 3 → X 2.5. Offset ajustado pra h-4 (`-right-1 -top-1`). Mantém: cursor-pointer, focus-visible:ring, motion-safe animate-in, aria-label.
+- **F3 — Colunas Estado/Departamento/Atendente sem truncate:** texto cortado com "..." impedia ver nomes completos. Fix: trocar `truncate` por `whitespace-normal break-words` (multi-line quando necessário); remover `max-w-[Xpx]` redundante (substituído pelo colgroup); aumentar `COLUMN_WIDTHS` — name 220→240, inbox 140→180, team 140→160, assignee 140→200. Cells ganham `align-top` para alinhamento consistente com cells single-line. Virtualizer `measureElement` (já existente) recalcula altura dinâmica. Aplicado em desktop + mobile (8 lugares + h3/Field auxiliares).
+
+### Trade-offs
+
+- F2 sem bg idle reduz affordance — mitigação via cursor-pointer + aria-label + hover claro.
+- F3 textos muito longos (40+ chars) wrappam em 2-3 linhas; rows ficam com altura variável (virtualizer mede dinamicamente).
+
+---
+
 ## [v0.28.0] 2026-05-03 — Suite Agente Nex Polish v4 (correções v0.26)
 
 > Correções de UX/funcionalidade da v0.26 reportadas pelo super_admin (6 fixes críticos). Workflow rigoroso (plan v1→v2→v3 com 14+5 achados em 2 pentes-finos REAIS · subagent-driven-development com TDD em cada task · ui-ux-pro-max em todas as tasks UI). 9 commits granulares (E1a/E1b/E1c/E2/E3+E4/E5/E6) · todos tests verde · typecheck 0 erros · 1 schema additive (column `identity_base`).

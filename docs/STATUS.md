@@ -1,12 +1,18 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-05-03
-**Versão atual em produção:** v0.28.0
+**Versão atual em produção:** v0.29.0
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.28.0)
+## Em produção (v0.29.0)
+
+### Release v0.29.0 (2026-05-03) — Conversas Polish v3 (X duplo, X chips, colunas truncate)
+
+3 fixes pontuais reportados pelo João via screenshots após v0.27/v0.28 LIVE: (1) X duplo no input de busca — esconde X nativo `<input type="search">` via CSS global; (2) X chips Filtros/Ordenação volta ao comportamento "discreto idle + hover vermelho" igual ao X do search (h-4 + X h-2.5 — diminuído sutilmente); (3) colunas Estado/Departamento/Atendente sem truncate (whitespace-normal + larguras maiores: 180/160/200 px) mostrando texto completo via wrap multi-line; virtualizer measureElement remede altura dinâmica.
+
+Workflow rigoroso: plan v1→v2→v3 com 28 achados em 2 pentes-finos REAIS · subagent-driven-development com TDD em T2/T3 · ui-ux-pro-max em todas tasks UI · 4 commits granulares · 308/308 tests verde · typecheck 0 erros.
 
 ### Release v0.28.0 (2026-05-03) — Suite Agente Nex Polish v4 (correções v0.26)
 
