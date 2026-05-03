@@ -39,6 +39,7 @@ function makeRow(overrides: Partial<UsageDetailRow> = {}): UsageDetailRow {
     responseChars: 1600,
     userId: "user-uuid-1",
     errorMessage: null,
+    isPlayground: false,
     ...overrides,
   };
 }

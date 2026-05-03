@@ -47,6 +47,8 @@ export async function fetchUsageDetails(args: {
   offset?: number;
   provider?: string | null;
   model?: string | null;
+  /** v0.31.0: true = só Playground; false = só Bubble; null/undefined = ambos. */
+  isPlayground?: boolean | null;
 }): Promise<UsageDetailsResult> {
   await ensureSuperAdmin();
   return getUsageDetails({
@@ -56,6 +58,7 @@ export async function fetchUsageDetails(args: {
     offset: args.offset,
     provider: args.provider,
     model: args.model,
+    isPlayground: args.isPlayground,
   });
 }
 

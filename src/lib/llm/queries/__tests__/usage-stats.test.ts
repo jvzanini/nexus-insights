@@ -248,11 +248,12 @@ describe("getUsageDetails", () => {
     });
 
     const firstCall = mockQuery.mock.calls[0] as [string, unknown[]];
-    // Params: [start, end, provider, model, limit, offset]
-    expect(firstCall[1][4]).toBe(200); // limit clamped
-    expect(firstCall[1][5]).toBe(0); // offset clamped
+    // Params v0.31: [start, end, provider, model, isPlayground, limit, offset]
+    expect(firstCall[1][5]).toBe(200); // limit clamped
+    expect(firstCall[1][6]).toBe(0); // offset clamped
     expect(firstCall[1][2]).toBeNull(); // provider default
     expect(firstCall[1][3]).toBeNull(); // model default
+    expect(firstCall[1][4]).toBeNull(); // isPlayground default
   });
 
   it("mapeia rows com camelCase e converte created_at para ISO string", async () => {
@@ -601,6 +602,178 @@ describe("usage-stats — BRL aggregates (v0.12.0)", () => {
 
     expect(result.totalCostBrl).toBe(0);
     expect(result.byDay[0].costBrl).toBe(0);
+  });
+});
+
+describe("getUsageDetails — isPlayground filter (v0.31)", () => {
+  it("filtra is_playground=true quando arg=true", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ total: "0" }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            sum_cost_usd: 0,
+            sum_cost_brl: 0,
+            sum_tokens_input: 0,
+            sum_tokens_output: 0,
+            sum_duration_ms: 0,
+          },
+        ],
+      });
+
+    await getUsageDetails({
+      start: new Date("2026-04-01"),
+      end: new Date("2026-05-01"),
+      isPlayground: true,
+    });
+
+    const rowsCall = mockQuery.mock.calls[0] as [string, unknown[]];
+    const countCall = mockQuery.mock.calls[1] as [string, unknown[]];
+    const totalsCall = mockQuery.mock.calls[2] as [string, unknown[]];
+    const rowsSql = String(rowsCall[0]);
+    expect(rowsSql).toMatch(/is_playground/i);
+    // Params: [start, end, provider, model, isPlayground, limit, offset]
+    expect(rowsCall[1][4]).toBe(true);
+    expect(countCall[1][4]).toBe(true);
+    expect(totalsCall[1][4]).toBe(true);
+  });
+
+  it("filtra is_playground=false quando arg=false (Bubble)", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ total: "0" }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            sum_cost_usd: 0,
+            sum_cost_brl: 0,
+            sum_tokens_input: 0,
+            sum_tokens_output: 0,
+            sum_duration_ms: 0,
+          },
+        ],
+      });
+
+    await getUsageDetails({
+      start: new Date("2026-04-01"),
+      end: new Date("2026-05-01"),
+      isPlayground: false,
+    });
+
+    const rowsCall = mockQuery.mock.calls[0] as [string, unknown[]];
+    expect(rowsCall[1][4]).toBe(false);
+  });
+
+  it("não filtra is_playground quando arg=null/undefined (default)", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ total: "0" }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            sum_cost_usd: 0,
+            sum_cost_brl: 0,
+            sum_tokens_input: 0,
+            sum_tokens_output: 0,
+            sum_duration_ms: 0,
+          },
+        ],
+      });
+
+    await getUsageDetails({
+      start: new Date("2026-04-01"),
+      end: new Date("2026-05-01"),
+    });
+
+    const rowsCall = mockQuery.mock.calls[0] as [string, unknown[]];
+    expect(rowsCall[1][4]).toBeNull();
+  });
+
+  it("UsageDetailRow inclui isPlayground (mapper snake→camel)", async () => {
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "row-pg",
+            provider: "openai",
+            model: "gpt-5",
+            tokens_input: 0,
+            tokens_output: 0,
+            cost_usd: 0,
+            cost_brl: null,
+            usd_to_brl_rate: null,
+            duration_ms: null,
+            created_at: new Date("2026-04-29T12:00:00Z"),
+            prompt_chars: null,
+            response_chars: null,
+            user_id: null,
+            error_message: null,
+            is_playground: true,
+          },
+          {
+            id: "row-bb",
+            provider: "openai",
+            model: "gpt-5",
+            tokens_input: 0,
+            tokens_output: 0,
+            cost_usd: 0,
+            cost_brl: null,
+            usd_to_brl_rate: null,
+            duration_ms: null,
+            created_at: new Date("2026-04-29T12:00:00Z"),
+            prompt_chars: null,
+            response_chars: null,
+            user_id: null,
+            error_message: null,
+            is_playground: false,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [{ total: "2" }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            sum_cost_usd: 0,
+            sum_cost_brl: 0,
+            sum_tokens_input: 0,
+            sum_tokens_output: 0,
+            sum_duration_ms: 0,
+          },
+        ],
+      });
+
+    const result = await getUsageDetails({
+      start: new Date("2026-04-01"),
+      end: new Date("2026-05-01"),
+    });
+    expect(result.rows[0].isPlayground).toBe(true);
+    expect(result.rows[1].isPlayground).toBe(false);
+  });
+
+  it("rowsRes SELECT inclui coluna is_playground", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ total: "0" }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            sum_cost_usd: 0,
+            sum_cost_brl: 0,
+            sum_tokens_input: 0,
+            sum_tokens_output: 0,
+            sum_duration_ms: 0,
+          },
+        ],
+      });
+
+    await getUsageDetails({
+      start: new Date("2026-04-01"),
+      end: new Date("2026-05-01"),
+    });
+
+    const rowsCall = mockQuery.mock.calls[0] as [string, unknown[]];
+    expect(String(rowsCall[0])).toMatch(/is_playground/);
   });
 });
 

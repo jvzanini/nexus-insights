@@ -199,6 +199,16 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
     },
   );
   const [filterModel, setFilterModel] = useState<string | undefined>();
+  // v0.31.0: filtro Ambiente (Bubble/Playground). Sincroniza com URL ?env=...
+  const [ambiente, setAmbiente] = useState<"all" | "bubble" | "playground">(
+    () => {
+      if (typeof window === "undefined") return "all";
+      const v = new URLSearchParams(window.location.search).get("env");
+      return v === "playground" || v === "bubble" ? v : "all";
+    },
+  );
+  const isPlaygroundFilter =
+    ambiente === "all" ? null : ambiente === "playground";
   const [providers, setProviders] = useState<string[]>([]);
   const [modelsByProvider, setModelsByProvider] = useState<
     Record<string, string[]>
@@ -216,7 +226,15 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
   // Reseta paginação ao trocar período / filtros / pageSize.
   useEffect(() => {
     setPage(0);
-  }, [pill, customRange, globalProvider, filterProvider, filterModel, pageSize]);
+  }, [
+    pill,
+    customRange,
+    globalProvider,
+    filterProvider,
+    filterModel,
+    ambiente,
+    pageSize,
+  ]);
 
   // Sincroniza filtro global com URL (?provider=...).
   useEffect(() => {
@@ -226,6 +244,15 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
     else url.searchParams.delete("provider");
     window.history.replaceState({}, "", url.toString());
   }, [globalProvider]);
+
+  // v0.31.0: sincroniza filtro Ambiente com URL (?env=...).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (ambiente === "all") url.searchParams.delete("env");
+    else url.searchParams.set("env", ambiente);
+    window.history.replaceState({}, "", url.toString());
+  }, [ambiente]);
 
   // Quando o filtro global muda, espelha no filtro da tabela e reseta o modelo
   // (evita estado inválido onde modelo pertence a outro provider).
@@ -255,6 +282,7 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
             offset: page * pageSize,
             provider: filterProvider ?? null,
             model: filterModel ?? null,
+            isPlayground: isPlaygroundFilter,
           }),
         ]);
         if (cancelled) return;
@@ -273,7 +301,7 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [range.start.getTime(), range.end.getTime(), page, pageSize, globalProvider, filterProvider, filterModel]);
+  }, [range.start.getTime(), range.end.getTime(), page, pageSize, globalProvider, filterProvider, filterModel, isPlaygroundFilter]);
 
   // Fetch lista de providers no range (para filtros cascade).
   useEffect(() => {
@@ -452,6 +480,19 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
             ]}
             triggerClassName="min-h-[36px] h-9 w-[200px]"
             aria-label="Filtrar por provider (global)"
+          />
+          <CustomSelect
+            value={ambiente}
+            onChange={(v) =>
+              setAmbiente(v as "all" | "bubble" | "playground")
+            }
+            options={[
+              { value: "all", label: "Todos os ambientes" },
+              { value: "bubble", label: "Agente Nex" },
+              { value: "playground", label: "Playground" },
+            ]}
+            triggerClassName="min-h-[36px] h-9 w-[200px]"
+            aria-label="Filtrar por ambiente"
           />
         </div>
         {isPending ? (
@@ -651,6 +692,7 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Data/hora</TableHead>
+                  <TableHead>Origem</TableHead>
                   <TableHead>Provider</TableHead>
                   <TableHead className="hidden md:table-cell">Modelo</TableHead>
                   <TableHead
@@ -676,7 +718,7 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
                 {/* Linha de TOTAL no topo — sutil (label uppercase, sem ícone) */}
                 {detailsTotals && detailsTotals.count > 0 ? (
                   <TableRow className="sticky top-0 z-[1] bg-violet-500/5 dark:bg-violet-500/10 border-b border-border/60 text-foreground font-bold text-sm">
-                    <TableCell colSpan={3} className="whitespace-nowrap">
+                    <TableCell colSpan={4} className="whitespace-nowrap">
                       <span>Total no filtro</span>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
@@ -700,7 +742,7 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
                 {details.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={8}
+                      colSpan={9}
                       className="py-8 text-center text-sm text-muted-foreground"
                     >
                       {isPending
@@ -723,6 +765,18 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
                             aria-hidden="true"
                           />
                           {dateTimeFmt.format(new Date(row.createdAt))}
+                        </TableCell>
+                        <TableCell>
+                          <span
+                            className={cn(
+                              "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
+                              row.isPlayground
+                                ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                                : "bg-violet-500/10 text-violet-700 dark:text-violet-300",
+                            )}
+                          >
+                            {row.isPlayground ? "Playground" : "Agente Nex"}
+                          </span>
                         </TableCell>
                         <TableCell>{providerLabel(row.provider)}</TableCell>
                         <TableCell className="hidden md:table-cell font-mono text-xs">

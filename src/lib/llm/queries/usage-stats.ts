@@ -280,6 +280,8 @@ export interface UsageDetailRow {
   userId: string | null;
   /** Mensagem de erro quando a chamada falhou. `null` em chamadas com sucesso. */
   errorMessage: string | null;
+  /** v0.31.0: true = chamada do Playground; false = Bubble (Agente Nex). */
+  isPlayground: boolean;
 }
 
 export interface UsageDetailsTotals {
@@ -318,6 +320,8 @@ export async function getUsageDetails(args: {
   offset?: number;
   provider?: string | null;
   model?: string | null;
+  /** v0.31.0: true = só Playground; false = só Bubble; null/undefined = ambos. */
+  isPlayground?: boolean | null;
 }): Promise<UsageDetailsResult> {
   await ensureLlmTables();
   const { start, end } = args;
@@ -329,11 +333,14 @@ export async function getUsageDetails(args: {
   const provider =
     args.provider != null && args.provider !== "" ? args.provider : null;
   const model = args.model != null && args.model !== "" ? args.model : null;
+  const isPlayground =
+    typeof args.isPlayground === "boolean" ? args.isPlayground : null;
 
   // Predicado comum: range temporal + filtros opcionais via IS NULL OR =.
   const whereClause = `created_at >= $1 AND created_at < $2
     AND ($3::text IS NULL OR provider = $3)
-    AND ($4::text IS NULL OR model = $4)`;
+    AND ($4::text IS NULL OR model = $4)
+    AND ($5::boolean IS NULL OR is_playground = $5)`;
 
   const [rowsRes, countRes, totalsRes] = await Promise.all([
     pgPool.query<{
@@ -351,21 +358,23 @@ export async function getUsageDetails(args: {
       response_chars: number | string | null;
       user_id: string | null;
       error_message: string | null;
+      is_playground: boolean | null;
     }>(
       `SELECT id, provider, model, tokens_input, tokens_output, cost_usd,
               cost_brl, usd_to_brl_rate, duration_ms, created_at,
-              prompt_chars, response_chars, user_id, error_message
+              prompt_chars, response_chars, user_id, error_message,
+              is_playground
          FROM llm_usage
         WHERE ${whereClause}
         ORDER BY created_at DESC
-        LIMIT $5 OFFSET $6`,
-      [start, end, provider, model, limit, offset],
+        LIMIT $6 OFFSET $7`,
+      [start, end, provider, model, isPlayground, limit, offset],
     ),
     pgPool.query<{ total: string | number }>(
       `SELECT COUNT(*) AS total
          FROM llm_usage
         WHERE ${whereClause}`,
-      [start, end, provider, model],
+      [start, end, provider, model, isPlayground],
     ),
     pgPool.query<{
       sum_cost_usd: string | number | null;
@@ -382,7 +391,7 @@ export async function getUsageDetails(args: {
          COALESCE(SUM(duration_ms), 0) AS sum_duration_ms
        FROM llm_usage
        WHERE ${whereClause}`,
-      [start, end, provider, model],
+      [start, end, provider, model, isPlayground],
     ),
   ]);
 
@@ -417,6 +426,7 @@ export async function getUsageDetails(args: {
         : toNumber(r.response_chars as string | number),
     userId: r.user_id ?? null,
     errorMessage: r.error_message ?? null,
+    isPlayground: !!r.is_playground,
   }));
 
   const total = toNumber(countRes.rows[0]?.total ?? 0);

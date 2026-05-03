@@ -147,6 +147,7 @@ function makeDetails(overrides: Partial<UsageDetailsResult> = {}): UsageDetailsR
         responseChars: 1600,
         userId: "user-1",
         errorMessage: null,
+        isPlayground: false,
       },
       {
         id: "row-2",
@@ -163,6 +164,7 @@ function makeDetails(overrides: Partial<UsageDetailsResult> = {}): UsageDetailsR
         responseChars: null,
         userId: null,
         errorMessage: null,
+        isPlayground: false,
       },
     ],
     total: 2,
@@ -486,6 +488,157 @@ describe("ConsumoContent — refactor T6d v0.16.0", () => {
     // Default pill é "mes_atual" → "Custo por dia".
     expect(await screen.findByText(/Custo por dia/i)).toBeInTheDocument();
     expect(screen.queryByText(/Custo por hora/i)).not.toBeInTheDocument();
+  });
+
+  // ----- T-E3 v0.31.0 — Coluna Origem + filtro Ambiente -----------------
+
+  it("T-E3: renderiza coluna 'Origem' na tabela", async () => {
+    render(<ConsumoContent minDate="2026-01-01T00:00:00.000Z" />);
+
+    await waitFor(() => expect(fetchUsageDetailsMock).toHaveBeenCalled());
+    await screen.findByText(/Hist[oó]rico de chamadas/i);
+
+    expect(
+      await screen.findByRole("columnheader", { name: /Origem/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("T-E3: renderiza filtro 'Ambiente' (CustomSelect) ao lado do Provider", async () => {
+    render(<ConsumoContent minDate="2026-01-01T00:00:00.000Z" />);
+
+    await waitFor(() => expect(fetchUsageStatsMock).toHaveBeenCalled());
+
+    expect(
+      await screen.findByRole("button", {
+        name: /Filtrar por ambiente/i,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("T-E3: badge 'Agente Nex' violet quando row.isPlayground=false", async () => {
+    fetchUsageDetailsMock.mockResolvedValue(
+      makeDetails({
+        rows: [
+          {
+            id: "row-bb",
+            provider: "openai",
+            model: "gpt-5.4",
+            tokensInput: 100,
+            tokensOutput: 200,
+            costUsd: 0.001,
+            costBrl: 0.005,
+            usdToBrlRate: 5.5,
+            durationMs: 1500,
+            createdAt: "2026-04-29T12:34:56Z",
+            promptChars: null,
+            responseChars: null,
+            userId: null,
+            errorMessage: null,
+            isPlayground: false,
+          },
+        ],
+        total: 1,
+      }),
+    );
+
+    const { container } = render(
+      <ConsumoContent minDate="2026-01-01T00:00:00.000Z" />,
+    );
+
+    await waitFor(() => expect(fetchUsageDetailsMock).toHaveBeenCalled());
+    await screen.findByText(/Hist[oó]rico de chamadas/i);
+
+    // Badge "Agente Nex" presente em ALGUMA célula da tabela.
+    const cells = container.querySelectorAll("tbody td");
+    const found = Array.from(cells).some((c) =>
+      /Agente Nex/i.test(c.textContent ?? ""),
+    );
+    expect(found).toBe(true);
+
+    // Tom violet aplicado.
+    const badge = Array.from(
+      container.querySelectorAll("tbody td span"),
+    ).find((el) => /Agente Nex/i.test(el.textContent ?? ""));
+    expect(badge).toBeTruthy();
+    expect(badge!.className).toMatch(/violet/);
+  });
+
+  it("T-E3: badge 'Playground' amber quando row.isPlayground=true", async () => {
+    fetchUsageDetailsMock.mockResolvedValue(
+      makeDetails({
+        rows: [
+          {
+            id: "row-pg",
+            provider: "openai",
+            model: "gpt-5.4",
+            tokensInput: 100,
+            tokensOutput: 200,
+            costUsd: 0.001,
+            costBrl: 0.005,
+            usdToBrlRate: 5.5,
+            durationMs: 1500,
+            createdAt: "2026-04-29T12:34:56Z",
+            promptChars: null,
+            responseChars: null,
+            userId: null,
+            errorMessage: null,
+            isPlayground: true,
+          },
+        ],
+        total: 1,
+      }),
+    );
+
+    const { container } = render(
+      <ConsumoContent minDate="2026-01-01T00:00:00.000Z" />,
+    );
+
+    await waitFor(() => expect(fetchUsageDetailsMock).toHaveBeenCalled());
+    await screen.findByText(/Hist[oó]rico de chamadas/i);
+
+    const badge = Array.from(
+      container.querySelectorAll("tbody td span"),
+    ).find((el) => /Playground/i.test(el.textContent ?? ""));
+    expect(badge).toBeTruthy();
+    expect(badge!.className).toMatch(/amber/);
+  });
+
+  it("T-E3: filtro Ambiente=Playground propaga isPlayground=true ao fetch", async () => {
+    render(<ConsumoContent minDate="2026-01-01T00:00:00.000Z" />);
+
+    await waitFor(() => expect(fetchUsageDetailsMock).toHaveBeenCalled());
+
+    const trigger = await screen.findByRole("button", {
+      name: /Filtrar por ambiente/i,
+    });
+    fetchUsageDetailsMock.mockClear();
+
+    fireEvent.click(trigger);
+    const opt = await screen.findByRole("option", { name: /^Playground$/i });
+    fireEvent.click(opt);
+
+    await waitFor(() => expect(fetchUsageDetailsMock).toHaveBeenCalled());
+    const lastCall =
+      fetchUsageDetailsMock.mock.calls[
+        fetchUsageDetailsMock.mock.calls.length - 1
+      ]?.[0];
+    expect(lastCall?.isPlayground).toBe(true);
+  });
+
+  it("T-E3: linha Total tem colSpan=4 (Data + Origem + Provider + Modelo)", async () => {
+    const { container } = render(
+      <ConsumoContent minDate="2026-01-01T00:00:00.000Z" />,
+    );
+
+    await waitFor(() => expect(fetchUsageDetailsMock).toHaveBeenCalled());
+    await screen.findByText(/Hist[oó]rico de chamadas/i);
+
+    const totalLabel = await screen.findByText(/Total no filtro/i);
+    const totalCell = totalLabel.closest("td");
+    expect(totalCell).not.toBeNull();
+    expect(totalCell!.getAttribute("colspan")).toBe("4");
+    // Sanity: container existe.
+    expect(container).toBeTruthy();
   });
 
   it("3.F: stats é refeito com provider quando filtro global muda", async () => {
