@@ -69,9 +69,30 @@ jest.mock("@/components/ui/popover", () => {
   return { Popover, PopoverTrigger, PopoverContent };
 });
 
-import { ConversasPagination } from "@/components/reports/conversas-pagination";
+import {
+  buildPageItems,
+  ConversasPagination,
+} from "@/components/reports/conversas-pagination";
 
-describe("ConversasPagination v0.23 — algoritmo simplificado + Popover", () => {
+describe("buildPageItems v0.25 (simplificado, sem ellipsis)", () => {
+  it("totalPages 0: []", () => expect(buildPageItems(1, 0)).toEqual([]));
+  it("totalPages 1: [1]", () => expect(buildPageItems(1, 1)).toEqual([1]));
+  it("totalPages 2: [1,2]", () => expect(buildPageItems(1, 2)).toEqual([1, 2]));
+  it("totalPages 3: [1,2,3]", () =>
+    expect(buildPageItems(2, 3)).toEqual([1, 2, 3]));
+  it("totalPages 4: [1,2,3,4]", () =>
+    expect(buildPageItems(3, 4)).toEqual([1, 2, 3, 4]));
+  it("atual=1 com 8 págs: [1,8]", () =>
+    expect(buildPageItems(1, 8)).toEqual([1, 8]));
+  it("atual=8 com 8 págs: [1,8]", () =>
+    expect(buildPageItems(8, 8)).toEqual([1, 8]));
+  it("atual=5 com 8 págs: [1,5,8]", () =>
+    expect(buildPageItems(5, 8)).toEqual([1, 5, 8]));
+  it("atual=2 com 5 págs: [1,2,5]", () =>
+    expect(buildPageItems(2, 5)).toEqual([1, 2, 5]));
+});
+
+describe("ConversasPagination v0.25 (render)", () => {
   it("totalPages=0: null", () => {
     const { container } = render(
       <ConversasPagination page={1} totalPages={0} onPageChange={() => {}} />,
@@ -86,38 +107,37 @@ describe("ConversasPagination v0.23 — algoritmo simplificado + Popover", () =>
     expect(container.firstChild).toBeNull();
   });
 
-  it("totalPages=2: '1 2' sem elipsis", () => {
+  it("não renderiza dropdown de reticência", () => {
+    render(
+      <ConversasPagination page={5} totalPages={8} onPageChange={() => {}} />,
+    );
+    expect(
+      screen.queryByRole("button", { name: /Selecionar página/i }),
+    ).toBeNull();
+  });
+
+  it("atual no meio é Popover dropdown (chevron)", () => {
+    render(
+      <ConversasPagination page={5} totalPages={8} onPageChange={() => {}} />,
+    );
+    expect(
+      screen.getByRole("button", { name: /Página atual 5/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("totalPages=2: '1 2' sem reticência", () => {
     render(
       <ConversasPagination page={1} totalPages={2} onPageChange={() => {}} />,
     );
     expect(
-      screen.getByRole("button", { name: /ir para página 1/i }),
+      screen.getByRole("button", { name: /ir para página 1|página atual 1/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /ir para página 2/i }),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /selecionar página/i }),
-    ).not.toBeInTheDocument();
   });
 
-  it("totalPages=3: '1 2 3' sem elipsis", () => {
-    render(
-      <ConversasPagination page={2} totalPages={3} onPageChange={() => {}} />,
-    );
-    [1, 2, 3].forEach((p) => {
-      expect(
-        screen.getByRole("button", {
-          name: new RegExp(`ir para página ${p}|página atual ${p}`, "i"),
-        }),
-      ).toBeInTheDocument();
-    });
-    expect(
-      screen.queryByRole("button", { name: /selecionar página/i }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("totalPages=4: '1 2 3 4' sem elipsis", () => {
+  it("totalPages=4: '1 2 3 4' sem reticência", () => {
     render(
       <ConversasPagination page={2} totalPages={4} onPageChange={() => {}} />,
     );
@@ -128,69 +148,26 @@ describe("ConversasPagination v0.23 — algoritmo simplificado + Popover", () =>
         }),
       ).toBeInTheDocument();
     });
-    expect(
-      screen.queryByRole("button", { name: /selecionar página/i }),
-    ).not.toBeInTheDocument();
   });
 
-  it("totalPages=8 atual=1: '1 ... 8' (1 reticência)", () => {
-    render(
-      <ConversasPagination page={1} totalPages={8} onPageChange={() => {}} />,
-    );
-    expect(
-      screen.queryByRole("button", { name: /ir para página 2/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /ir para página 8/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getAllByRole("button", { name: /selecionar página/i }).length,
-    ).toBe(1);
-  });
-
-  it("totalPages=8 atual=8: '1 ... 8' (1 reticência)", () => {
-    render(
-      <ConversasPagination page={8} totalPages={8} onPageChange={() => {}} />,
-    );
-    expect(
-      screen.queryByRole("button", { name: /ir para página 7/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /ir para página 1/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getAllByRole("button", { name: /selecionar página/i }).length,
-    ).toBe(1);
-  });
-
-  it("totalPages=8 atual=4: '1 ... 4 ... 8' (2 reticências)", () => {
-    render(
-      <ConversasPagination page={4} totalPages={8} onPageChange={() => {}} />,
-    );
-    expect(
-      screen.getAllByRole("button", { name: /selecionar página/i }).length,
-    ).toBe(2);
-    expect(
-      screen.getByRole("button", { name: /página atual 4/i }),
-    ).toBeInTheDocument();
-  });
-
-  it("setinha < disabled em page=1", () => {
+  it("setinha < disabled em page=1 com cursor-not-allowed", () => {
     render(
       <ConversasPagination page={1} totalPages={5} onPageChange={() => {}} />,
     );
-    expect(
-      screen.getByRole("button", { name: /página anterior/i }),
-    ).toBeDisabled();
+    const prev = screen.getByRole("button", { name: /página anterior/i });
+    expect(prev).toBeDisabled();
+    expect(prev.className).toMatch(/disabled:cursor-not-allowed/);
+    expect(prev.className).toMatch(/cursor-pointer/);
   });
 
-  it("setinha > disabled em page=totalPages", () => {
+  it("setinha > disabled em page=totalPages com cursor-not-allowed", () => {
     render(
       <ConversasPagination page={5} totalPages={5} onPageChange={() => {}} />,
     );
-    expect(
-      screen.getByRole("button", { name: /próxima página/i }),
-    ).toBeDisabled();
+    const next = screen.getByRole("button", { name: /próxima página/i });
+    expect(next).toBeDisabled();
+    expect(next.className).toMatch(/disabled:cursor-not-allowed/);
+    expect(next.className).toMatch(/cursor-pointer/);
   });
 
   it("click em página simples chama onPageChange", () => {
@@ -200,15 +177,6 @@ describe("ConversasPagination v0.23 — algoritmo simplificado + Popover", () =>
       screen.getByRole("button", { name: /ir para página 3/i }),
     );
     expect(cb).toHaveBeenCalledWith(3);
-  });
-
-  it("click na reticência abre popover com lista de páginas no range", () => {
-    render(
-      <ConversasPagination page={1} totalPages={8} onPageChange={() => {}} />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: /selecionar página/i }));
-    expect(screen.getByRole("button", { name: /^2$/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^7$/ })).toBeInTheDocument();
   });
 
   it("click na atual no meio abre popover com 1..N e atual destacada", () => {
