@@ -254,3 +254,13 @@ html { font-size: var(--base-font-size); }
     overscroll-behavior-y: none;
   }
 }
+
+/* Esconde o X nativo do browser em <input type="search"> — usamos botão X
+ * custom no canto direito (advanced-filters.tsx). Evita o X duplo
+ * reportado pelo super_admin v0.28. */
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
