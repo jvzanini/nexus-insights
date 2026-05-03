@@ -188,6 +188,7 @@ export function ConversasPageClient({
             sortStack={sortStack}
             onSortStackChange={setSortStack}
             conditionGroup={composedConditionGroup}
+            searchTerm={reportFilters.search}
           />
         </div>
       </ContentLoadingWrapper>

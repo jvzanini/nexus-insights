@@ -2,6 +2,7 @@
 
 import { LabelsChips } from "@/components/reports/labels-chips";
 import { formatPhone } from "@/lib/utils/format-phone";
+import { HighlightedText } from "@/lib/utils/highlight-text";
 import type { ConversaRow } from "@/lib/chatwoot/queries/conversas-list";
 
 const ATTR_CAP = 200;
@@ -10,6 +11,11 @@ interface Props {
   row: ConversaRow;
   /** Mantido na interface por retro-compat com chamadas existentes; não usado. */
   accountId?: number;
+  /**
+   * Termo de busca atual. Quando presente, destaca (highlight em violet) suas
+   * ocorrências em telefone, etiquetas e chaves/valores de atributos.
+   */
+  searchTerm?: string;
 }
 
 /**
@@ -24,7 +30,9 @@ interface Props {
  * - Sem ver-mais/recolher (sempre mostra todos até cap defensivo 200).
  * - Cap 200 com nota "+N atributos não exibidos" em caso patológico.
  */
-export function ConversaDrillDown({ row }: Props) {
+export function ConversaDrillDown({ row, searchTerm }: Props) {
+  const trimmedTerm = searchTerm?.trim() ?? "";
+  const hasSearch = trimmedTerm.length > 0;
   const phone = row.contact.phone_number
     ? formatPhone(row.contact.phone_number) || row.contact.phone_number
     : null;
@@ -48,7 +56,11 @@ export function ConversaDrillDown({ row }: Props) {
           WhatsApp
         </span>
         <span className="font-mono text-[14px] tabular-nums text-foreground">
-          {phone ?? "—"}
+          {phone ? (
+            <HighlightedText text={phone} term={searchTerm} />
+          ) : (
+            "—"
+          )}
         </span>
       </div>
 
@@ -58,7 +70,21 @@ export function ConversaDrillDown({ row }: Props) {
           Etiquetas
         </span>
         {row.labels && row.labels.length > 0 ? (
-          <LabelsChips labels={row.labels} />
+          hasSearch ? (
+            <div className="inline-flex flex-wrap items-center gap-1.5">
+              {row.labels.map((l, idx) => (
+                <span
+                  key={`${l.name}-${idx}`}
+                  className="inline-flex items-center rounded-full border border-border/40 bg-card/80 px-2 py-0.5 text-[11px] text-foreground/90"
+                  title={l.name}
+                >
+                  <HighlightedText text={l.name} term={searchTerm} />
+                </span>
+              ))}
+            </div>
+          ) : (
+            <LabelsChips labels={row.labels} />
+          )
         ) : (
           <span className="text-muted-foreground">—</span>
         )}
@@ -89,9 +115,11 @@ export function ConversaDrillDown({ row }: Props) {
                   className="inline-flex items-baseline gap-x-1 break-all rounded-md border border-border/40 bg-card/80 px-2 py-1"
                 >
                   <span className="text-[11px] font-medium text-muted-foreground/80">
-                    {k}:
+                    <HighlightedText text={`${k}:`} term={searchTerm} />
                   </span>
-                  <span className="text-[12px] text-foreground/90">{raw}</span>
+                  <span className="text-[12px] text-foreground/90">
+                    <HighlightedText text={raw} term={searchTerm} />
+                  </span>
                 </span>
               );
             })}

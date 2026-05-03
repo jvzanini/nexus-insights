@@ -46,6 +46,7 @@ import { chatwootConversationUrl } from "@/lib/chatwoot/deep-link";
 import { formatPhone } from "@/lib/utils/format-phone";
 import { detectDocument } from "@/lib/utils/format-document";
 import { formatDuration } from "@/lib/utils/format-time";
+import { HighlightedText } from "@/lib/utils/highlight-text";
 import {
   nullableNumberCompare,
   nullableStringCompare,
@@ -77,6 +78,12 @@ interface ConversasTableProps {
    * sobre as rows já carregadas (não vai ao banco).
    */
   conditionGroup?: ConditionGroup;
+  /**
+   * Termo de busca atual (vindo do filterState.search). Usado para destacar
+   * (highlight em violet) as ocorrências do termo nas colunas pesquisáveis e
+   * no drill-down. Não filtra — filtragem já aconteceu no servidor.
+   */
+  searchTerm?: string;
 }
 
 type SortDirection = "asc" | "desc";
@@ -150,9 +157,10 @@ function durationTone(seconds: number | null): string {
 interface OpenIdLinkProps {
   accountId: number;
   displayId: number;
+  searchTerm?: string;
 }
 
-function OpenIdLink({ accountId, displayId }: OpenIdLinkProps) {
+function OpenIdLink({ accountId, displayId, searchTerm }: OpenIdLinkProps) {
   const href = chatwootConversationUrl(accountId, displayId);
   return (
     <a
@@ -172,7 +180,7 @@ function OpenIdLink({ accountId, displayId }: OpenIdLinkProps) {
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40 focus-visible:ring-offset-1",
       )}
     >
-      #{displayId}
+      <HighlightedText text={`#${displayId}`} term={searchTerm} />
     </a>
   );
 }
@@ -479,6 +487,7 @@ export function ConversasTable({
   sortStack,
   onSortStackChange,
   conditionGroup,
+  searchTerm,
 }: ConversasTableProps) {
   const [rows, setRows] = useState<ConversaRow[]>(initialRows);
   const [pending] = useTransition();
@@ -858,7 +867,70 @@ export function ConversasTable({
                             <OpenIdLink
                               accountId={accountId}
                               displayId={row.display_id}
+                              searchTerm={searchTerm}
                             />
+                          </TableCell>
+                        );
+                      }
+                      if (col.key === "name") {
+                        const name = row.contact.name ?? "—";
+                        return (
+                          <TableCell key={col.key}>
+                            <span
+                              className="block max-w-[220px] truncate text-sm font-medium text-foreground"
+                              title={name}
+                            >
+                              <HighlightedText text={name} term={searchTerm} />
+                            </span>
+                          </TableCell>
+                        );
+                      }
+                      if (col.key === "document") {
+                        const doc = getDocumentDisplay(row.contact);
+                        return (
+                          <TableCell key={col.key}>
+                            <span className="whitespace-nowrap font-mono text-[13px] text-muted-foreground tabular-nums">
+                              <HighlightedText text={doc} term={searchTerm} />
+                            </span>
+                          </TableCell>
+                        );
+                      }
+                      if (col.key === "inbox") {
+                        const name = row.inbox.name ?? "—";
+                        return (
+                          <TableCell key={col.key}>
+                            <span
+                              className="block max-w-[160px] truncate text-xs text-muted-foreground"
+                              title={name}
+                            >
+                              <HighlightedText text={name} term={searchTerm} />
+                            </span>
+                          </TableCell>
+                        );
+                      }
+                      if (col.key === "team") {
+                        const name = row.team.name ?? "—";
+                        return (
+                          <TableCell key={col.key}>
+                            <span
+                              className="block max-w-[160px] truncate text-xs text-muted-foreground"
+                              title={name}
+                            >
+                              <HighlightedText text={name} term={searchTerm} />
+                            </span>
+                          </TableCell>
+                        );
+                      }
+                      if (col.key === "assignee") {
+                        const name = row.assignee.name ?? "—";
+                        return (
+                          <TableCell key={col.key}>
+                            <span
+                              className="block max-w-[160px] truncate text-xs text-muted-foreground"
+                              title={name}
+                            >
+                              <HighlightedText text={name} term={searchTerm} />
+                            </span>
                           </TableCell>
                         );
                       }
@@ -885,7 +957,7 @@ export function ConversasTable({
                         colSpan={orderedColumns.length}
                         className="p-0"
                       >
-                        <ConversaDrillDown row={row} />
+                        <ConversaDrillDown row={row} searchTerm={searchTerm} />
                       </TableCell>
                     </TableRow>
                   ) : null}
@@ -935,21 +1007,22 @@ export function ConversasTable({
                     <OpenIdLink
                       accountId={accountId}
                       displayId={row.display_id}
+                      searchTerm={searchTerm}
                     />
                   </div>
                   <h3 className="mt-1 truncate text-sm font-semibold text-foreground">
-                    {contactName}
+                    <HighlightedText text={contactName} term={searchTerm} />
                   </h3>
                 </div>
                 <StatusBadge status={row.status} />
               </div>
 
               <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2">
-                <Field label="WhatsApp" value={phone} mono />
-                <Field label="Documento" value={doc} mono />
-                <Field label="Estado" value={inboxName} />
-                <Field label="Departamento" value={teamName} />
-                <Field label="Atendente" value={assigneeName} />
+                <Field label="WhatsApp" value={phone} mono searchTerm={searchTerm} />
+                <Field label="Documento" value={doc} mono searchTerm={searchTerm} />
+                <Field label="Estado" value={inboxName} searchTerm={searchTerm} />
+                <Field label="Departamento" value={teamName} searchTerm={searchTerm} />
+                <Field label="Atendente" value={assigneeName} searchTerm={searchTerm} />
                 <div className="flex flex-col gap-0.5">
                   <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
                     Prioridade
@@ -1011,9 +1084,10 @@ interface FieldProps {
   label: string;
   value: string;
   mono?: boolean;
+  searchTerm?: string;
 }
 
-function Field({ label, value, mono }: FieldProps) {
+function Field({ label, value, mono, searchTerm }: FieldProps) {
   return (
     <div className="flex flex-col gap-0.5 min-w-0">
       <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -1026,7 +1100,7 @@ function Field({ label, value, mono }: FieldProps) {
         )}
         title={value}
       >
-        {value}
+        <HighlightedText text={value} term={searchTerm} />
       </dd>
     </div>
   );
