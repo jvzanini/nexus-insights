@@ -1,7 +1,7 @@
 import type { TourConfig } from "@/components/tour/tour-provider";
 
 export const conversasTour: TourConfig = {
-  id: "conversas-v3", // bump pra forçar re-onboarding após revamp v0.17
+  id: "conversas-v4", // bump pra v4 — adiciona step pagination-top da v0.23
   title: "Tour do relatório de Conversas",
   steps: [
     {
@@ -66,6 +66,14 @@ export const conversasTour: TourConfig = {
       description:
         "Mostre ou oculte colunas conforme sua necessidade. Suas preferências ficam salvas localmente.",
       placement: "top",
+    },
+    {
+      id: "pagination-top",
+      targetSelector: "[data-tour='pagination-top']",
+      title: "Total + paginação",
+      description:
+        "No topo da tabela: total de conversas, indicador 'Mostrando X-Y de Z' e navegação entre páginas. Clique em '...' para escolher uma página específica.",
+      placement: "bottom",
     },
     {
       id: "table",
