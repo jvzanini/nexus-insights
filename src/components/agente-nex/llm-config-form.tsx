@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Save,
@@ -10,10 +10,8 @@ import {
   Plug,
   KeyRound,
   AlertCircle,
-  ExternalLink,
   CreditCard,
   AlertTriangle,
-  Coins,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -26,7 +24,6 @@ import {
   SearchableSelect,
   type SearchableSelectOption,
 } from "@/components/ui/searchable-select";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { TierBadge } from "@/components/llm/tier-badge";
@@ -40,26 +37,18 @@ import {
   testLlmCredentialAction,
   type TestLlmConnectionResult,
 } from "@/lib/actions/llm-credentials";
-import { setCardSpreadAction } from "@/lib/actions/exchange-rate";
 import type { CredentialSummary } from "@/lib/llm/credentials";
 import type { PublicLlmConfig } from "@/lib/llm/get-active-config";
-import type { UsdBrlRate } from "@/lib/llm/exchange-rate";
-import { UsdRateTicker } from "@/components/agente-nex/usd-rate-ticker";
 import { cn } from "@/lib/utils";
 
 interface LlmConfigFormProps {
   initial: PublicLlmConfig | null;
   initialNexEnabled: boolean;
   initialCredentials: CredentialSummary[];
-  initialSpread: number;
-  initialCommercialRate: number | null;
-  initialRateSource: UsdBrlRate["source"] | null;
-  initialFetchedAt: string | null;
 }
 
 const CUSTOM_MODEL_VALUE = "__custom__";
 const NEW_CREDENTIAL_VALUE = "__new__";
-const SPREAD_DEBOUNCE_MS = 500;
 
 const PROVIDER_OPTIONS: SelectOption[] = (
   Object.keys(PROVIDER_CATALOG) as LlmProvider[]
@@ -109,10 +98,6 @@ export function LlmConfigForm({
   initial,
   initialNexEnabled,
   initialCredentials,
-  initialSpread,
-  initialCommercialRate,
-  initialRateSource,
-  initialFetchedAt,
 }: LlmConfigFormProps) {
   const router = useRouter();
   const [provider, setProvider] = useState<LlmProvider>(
@@ -166,19 +151,6 @@ export function LlmConfigForm({
   const [isTesting, startTest] = useTransition();
   const [nexEnabled, setNexEnabled] = useState<boolean>(initialNexEnabled);
   const [isTogglingNex, startNexToggle] = useTransition();
-
-  // Spread cartão.
-  const [spreadInput, setSpreadInput] = useState<string>(
-    initialSpread.toFixed(2),
-  );
-  const [isSavingSpread, setIsSavingSpread] = useState<boolean>(false);
-  const lastSavedSpreadRef = useRef<number>(initialSpread);
-  const spreadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // `currentSpreadValue` é STATE (não useRef) porque o UsdRateTicker precisa
-  // re-renderizar quando o spread muda — useRef.current não dispara React update.
-  const [currentSpreadValue, setCurrentSpreadValue] =
-    useState<number>(initialSpread);
 
   const catalog = PROVIDER_CATALOG[provider];
 
@@ -403,66 +375,6 @@ export function LlmConfigForm({
     });
   }
 
-  function commitSpread(rawValue: string) {
-    const parsed = Number(rawValue);
-    if (!Number.isFinite(parsed)) {
-      toast.error("Spread inválido");
-      setSpreadInput(lastSavedSpreadRef.current.toFixed(2));
-      return;
-    }
-    if (parsed <= 0) {
-      toast.error("Spread deve ser maior que zero");
-      setSpreadInput(lastSavedSpreadRef.current.toFixed(2));
-      return;
-    }
-    if (Math.abs(parsed - lastSavedSpreadRef.current) < 1e-9) {
-      // Sem mudança real — apenas re-formata.
-      setSpreadInput(parsed.toFixed(2));
-      return;
-    }
-    setIsSavingSpread(true);
-    void (async () => {
-      try {
-        const result = await setCardSpreadAction(parsed);
-        if (!result.ok) {
-          toast.error(result.error ?? "Erro ao salvar spread");
-          setSpreadInput(lastSavedSpreadRef.current.toFixed(2));
-          return;
-        }
-        lastSavedSpreadRef.current = parsed;
-        setCurrentSpreadValue(parsed);
-        setSpreadInput(parsed.toFixed(2));
-        toast.success("Spread atualizado");
-        router.refresh();
-      } finally {
-        setIsSavingSpread(false);
-      }
-    })();
-  }
-
-  function handleSpreadChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const next = e.currentTarget.value;
-    setSpreadInput(next);
-    if (spreadDebounceRef.current) clearTimeout(spreadDebounceRef.current);
-    spreadDebounceRef.current = setTimeout(() => {
-      commitSpread(next);
-    }, SPREAD_DEBOUNCE_MS);
-  }
-
-  function handleSpreadBlur() {
-    if (spreadDebounceRef.current) {
-      clearTimeout(spreadDebounceRef.current);
-      spreadDebounceRef.current = null;
-    }
-    commitSpread(spreadInput);
-  }
-
-  useEffect(() => {
-    return () => {
-      if (spreadDebounceRef.current) clearTimeout(spreadDebounceRef.current);
-    };
-  }, []);
-
   const busy = isSaving || isTesting;
   const actionsDisabled = busy || hasNoCredentials || !credentialId;
 
@@ -471,13 +383,10 @@ export function LlmConfigForm({
 
   return (
     <div className="space-y-8">
-      {/* Toggle global da bolha do Agente Nex. */}
-      <div
-        className="flex items-center justify-between gap-4 rounded-xl border border-border bg-background/40 px-4 py-3"
-        role="group"
-        aria-labelledby="nex-bubble-toggle-title"
-      >
-        <div className="flex min-w-0 flex-1 items-center gap-3">
+      {/* Toggle Agente Nex ativo — v0.31: linha única, sem Card aninhado nem
+          role=group interno. id="nex-bubble-toggle" para vincular Label↔Switch. */}
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-muted/30 px-4 py-3">
+        <div className="flex min-w-0 items-center gap-3">
           <span
             aria-hidden
             className={cn(
@@ -488,12 +397,12 @@ export function LlmConfigForm({
             )}
           />
           <div className="min-w-0">
-            <p
-              id="nex-bubble-toggle-title"
-              className="text-sm font-medium text-foreground"
+            <Label
+              htmlFor="nex-bubble-toggle"
+              className="cursor-pointer text-sm font-medium text-foreground"
             >
               {nexEnabled ? "Agente Nex ativo" : "Agente Nex desativado"}
-            </p>
+            </Label>
             <p className="text-xs text-muted-foreground">
               {!isConfigured
                 ? "Configure um provedor abaixo para liberar a bolha flutuante."
@@ -503,31 +412,13 @@ export function LlmConfigForm({
             </p>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {isTogglingNex ? (
-            <Loader2
-              className="h-4 w-4 animate-spin text-muted-foreground"
-              aria-hidden="true"
-            />
-          ) : null}
-          <span
-            className="relative inline-flex h-11 w-11 items-center justify-center"
-            title={
-              !isConfigured
-                ? "Configure um provedor para ativar"
-                : undefined
-            }
-          >
-            <Switch
-              checked={nexEnabled}
-              onCheckedChange={handleNexToggle}
-              disabled={isTogglingNex || !isConfigured}
-              aria-label={
-                nexEnabled ? "Desativar Agente Nex" : "Ativar Agente Nex"
-              }
-            />
-          </span>
-        </div>
+        <Switch
+          id="nex-bubble-toggle"
+          checked={nexEnabled}
+          onCheckedChange={handleNexToggle}
+          disabled={isTogglingNex || !isConfigured}
+          aria-label={nexEnabled ? "Desativar Agente Nex" : "Ativar Agente Nex"}
+        />
       </div>
 
       {/* Section: Conexão LLM. Wrapper com divisor sutil pra separar do toggle. */}
@@ -625,19 +516,11 @@ export function LlmConfigForm({
             : "Selecione qual chave salva o agente deve usar. As chaves são gerenciadas em 'Chaves de API'."}
         </p>
 
-        {/* Atalhos: criar API key + adicionar crédito (URLs do catálogo). */}
-        <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-          <a
-            href={catalog.apiKeyUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            data-testid="llm-shortcut-api-key"
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background/60 px-2 py-1 font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-          >
-            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-            Criar API key
-          </a>
-          {catalog.topUpUrl ? (
+        {/* Atalho: adicionar crédito (URL do catálogo).
+            v0.31: removido botão "Criar API key" inline — gerenciamento de
+            chaves vive em rota dedicada (acionado via "+ Nova chave" no select). */}
+        {catalog.topUpUrl ? (
+          <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
             <a
               href={catalog.topUpUrl}
               target="_blank"
@@ -648,8 +531,8 @@ export function LlmConfigForm({
               <CreditCard className="h-3.5 w-3.5" aria-hidden="true" />
               Adicionar crédito
             </a>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
       </div>
 
       {test.status !== "idle" && (
@@ -739,61 +622,6 @@ export function LlmConfigForm({
         </Button>
       </div>
 
-      </div>
-
-      {/* Section 3: USD Ticker — só renderiza quando há cotação carregada. */}
-      {initialCommercialRate !== null &&
-      initialRateSource !== null &&
-      initialFetchedAt !== null ? (
-        <div className="border-t border-border/50 pt-6">
-          <UsdRateTicker
-            commercialRate={initialCommercialRate}
-            spread={currentSpreadValue}
-            source={initialRateSource}
-            fetchedAt={initialFetchedAt}
-          />
-        </div>
-      ) : null}
-
-      {/* Section 4: Spread cartão — Card violet com helper expandido. */}
-      <div className="space-y-3 rounded-2xl border border-violet-500/20 bg-violet-500/5 p-4 dark:bg-violet-500/10">
-        <div className="flex items-center gap-2">
-          <Coins className="h-4 w-4 text-violet-500" />
-          <Label
-            htmlFor="llm-card-spread"
-            className="text-sm font-semibold text-foreground"
-          >
-            Spread cartão
-          </Label>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Multiplicador aplicado sobre a cotação comercial USD/BRL pra refletir
-          IOF + spread Visa/Master. Default 1,10 ≈ 10% acima da comercial.
-          Ajuste pra refletir seu cartão real (sem limite superior).
-        </p>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground" aria-hidden>
-            ×
-          </span>
-          <Input
-            id="llm-card-spread"
-            type="number"
-            step="0.01"
-            value={spreadInput}
-            onChange={handleSpreadChange}
-            onBlur={handleSpreadBlur}
-            disabled={isSavingSpread}
-            className="min-h-[44px] w-32"
-            aria-describedby="llm-card-spread-help"
-            aria-label="Spread cartão (multiplicador USD/BRL)"
-          />
-          {isSavingSpread ? (
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-          ) : null}
-        </div>
-        <p id="llm-card-spread-help" className="sr-only">
-          Multiplicador positivo, sem limite superior. Default 1.10.
-        </p>
       </div>
 
       {/* Hint para o leitor de tela / debug visual quando sem credenciais. */}

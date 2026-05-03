@@ -30,16 +30,6 @@ jest.mock("@/lib/actions/llm-credentials", () => ({
   })),
 }));
 
-jest.mock("@/lib/actions/exchange-rate", () => ({
-  setCardSpreadAction: jest.fn(async () => ({ ok: true })),
-}));
-
-// Mock UsdRateTicker pra cortar cadeia next-auth (importa exchange-rate-refresh
-// que importa @/lib/auth → next-auth ESM).
-jest.mock("@/components/agente-nex/usd-rate-ticker", () => ({
-  UsdRateTicker: () => null,
-}));
-
 const toastMock = {
   success: jest.fn(),
   error: jest.fn(),
@@ -69,10 +59,6 @@ function renderForm(overrides?: Partial<Parameters<typeof LlmConfigForm>[0]>) {
       initial={null}
       initialNexEnabled={false}
       initialCredentials={baseCreds}
-      initialSpread={1.1}
-      initialCommercialRate={null}
-      initialRateSource={null}
-      initialFetchedAt={null}
       {...overrides}
     />,
   );
@@ -234,5 +220,60 @@ describe("LlmConfigForm — customMode inline + 4 tiers", () => {
     expect(
       screen.queryByLabelText(/ID do modelo customizado/i),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("LlmConfigForm — v0.31 polish", () => {
+  beforeEach(() => {
+    refresh.mockReset();
+    push.mockReset();
+    toastMock.success.mockReset();
+    toastMock.error.mockReset();
+    toastMock.warning.mockReset();
+    toastMock.info.mockReset();
+  });
+
+  it("NÃO renderiza UsdRateTicker", () => {
+    renderForm();
+    expect(screen.queryByText(/USD\/BRL com spread/i)).not.toBeInTheDocument();
+  });
+
+  it("NÃO renderiza Spread cartão input", () => {
+    renderForm();
+    expect(screen.queryByLabelText(/Spread cartão/i)).not.toBeInTheDocument();
+  });
+
+  it("NÃO renderiza botão 'Criar API key' inline", () => {
+    renderForm();
+    expect(
+      screen.queryByRole("link", { name: /Criar API key/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("Toggle Nex ativo tem id='nex-bubble-toggle' e SEM role='group' aninhado", () => {
+    const { container } = renderForm();
+    // base-ui Switch renderiza <span role="switch"> + <input id="..."> hidden
+    // dentro do mesmo wrapper. O id do prop vai parar no <input>; o role=switch
+    // é aplicado ao <span> visual. Ambos vivem dentro do mesmo card linha-única.
+    const hiddenInput = container.querySelector("#nex-bubble-toggle");
+    expect(hiddenInput).not.toBeNull();
+
+    const switchSpan = container.querySelector("[role='switch']");
+    expect(switchSpan).not.toBeNull();
+
+    // Sobe até o card (rounded-xl) — o switch e o input devem estar nele.
+    const parent = switchSpan?.closest("div[class*='rounded-xl']");
+    expect(parent).not.toBeNull();
+    expect(parent).toContainElement(hiddenInput as HTMLElement);
+
+    // Não há role="group" aninhado no card.
+    expect(parent?.querySelector("[role='group']")).toBeNull();
+  });
+
+  it("Mantém botão 'Adicionar crédito' (topUpUrl) quando catalog tem topUpUrl", () => {
+    renderForm();
+    expect(
+      screen.getByRole("link", { name: /Adicionar crédito/i }),
+    ).toBeInTheDocument();
   });
 });

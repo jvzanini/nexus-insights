@@ -8,7 +8,6 @@ import { LlmConfigForm } from "@/components/agente-nex/llm-config-form";
 import { getCurrentUser } from "@/lib/auth";
 import { getPublicActiveLlmConfig } from "@/lib/llm/get-active-config";
 import { listCredentials } from "@/lib/llm/credentials";
-import { getUsdBrlRate, DEFAULT_CARD_SPREAD } from "@/lib/llm/exchange-rate";
 import { isNexBubbleEnabled } from "@/lib/llm/get-nex-bubble-enabled";
 
 export const metadata = { title: "Configuração — Agente Nex | Nexus Insights" };
@@ -19,21 +18,18 @@ export default async function Page() {
   if (!user) redirect("/login");
   if (user.platformRole !== "super_admin") redirect("/dashboard");
 
-  const [llmConfig, nexBubbleEnabled, initialCredentials, currentRate] =
-    await Promise.all([
-      getPublicActiveLlmConfig(),
-      isNexBubbleEnabled(),
-      listCredentials().catch(() => []),
-      getUsdBrlRate().catch(() => null),
-    ]);
-  const initialSpread = currentRate?.spread ?? DEFAULT_CARD_SPREAD;
+  const [llmConfig, nexBubbleEnabled, initialCredentials] = await Promise.all([
+    getPublicActiveLlmConfig(),
+    isNexBubbleEnabled(),
+    listCredentials().catch(() => []),
+  ]);
 
   return (
     <PageShell variant="narrow">
       <PageHeader
         icon={Sparkles}
         title="Configuração do Agente Nex"
-        subtitle="Provedor, modelo, chave em uso, cotação USD/BRL e spread cartão."
+        subtitle="Provedor, modelo e chave em uso pelo Agente Nex."
       />
       <Card className="rounded-2xl border border-border bg-muted/30 p-2">
         <CardContent>
@@ -41,12 +37,6 @@ export default async function Page() {
             initial={llmConfig}
             initialNexEnabled={nexBubbleEnabled}
             initialCredentials={initialCredentials}
-            initialSpread={initialSpread}
-            initialCommercialRate={currentRate?.commercial ?? null}
-            initialRateSource={currentRate?.source ?? null}
-            initialFetchedAt={
-              currentRate?.fetchedAt ? currentRate.fetchedAt.toISOString() : null
-            }
           />
         </CardContent>
       </Card>
