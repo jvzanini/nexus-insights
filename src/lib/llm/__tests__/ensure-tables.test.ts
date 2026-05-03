@@ -107,4 +107,16 @@ describe("ensureLlmTables — schema bootstrap", () => {
     expect(inserts.length).toBe(0);
     warn.mockRestore();
   });
+
+  it("ALTER TABLE adiciona is_playground BOOLEAN DEFAULT false (idempotente)", async () => {
+    mockedQuery.mockResolvedValue({ rows: [], rowCount: 0 } as never);
+    await ensureLlmTables();
+
+    const alterCall = mockedQuery.mock.calls.find((c) =>
+      String(c[0]).match(/ADD COLUMN IF NOT EXISTS\s+"?is_playground/i),
+    );
+    expect(alterCall).toBeDefined();
+    expect(String(alterCall![0])).toMatch(/BOOLEAN/i);
+    expect(String(alterCall![0])).toMatch(/DEFAULT\s+false/i);
+  });
 });

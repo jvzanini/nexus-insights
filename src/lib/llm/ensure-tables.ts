@@ -101,6 +101,13 @@ async function createTables(): Promise<void> {
     `ALTER TABLE "llm_usage" ADD COLUMN IF NOT EXISTS "usd_to_brl_rate" DECIMAL(10,4);`,
   );
 
+  // --- Novo em v0.31.0: is_playground — distingue chamadas do Bubble (false) vs Playground (true) ---
+  // Trade-off: rows pre-v0.31 todas com false default (sem como reconstruir histórico).
+  await pgPool.query(`
+    ALTER TABLE "llm_usage"
+      ADD COLUMN IF NOT EXISTS "is_playground" BOOLEAN NOT NULL DEFAULT false;
+  `);
+
   // --- Novo em v0.12.0: novos valores no enum AuditAction ---
   // ADD VALUE IF NOT EXISTS é idempotente; o cast COMMIT do enum acontece
   // automaticamente no transaction-less ALTER TYPE.
