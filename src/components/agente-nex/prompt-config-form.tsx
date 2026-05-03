@@ -31,6 +31,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  BookText,
   Eye,
   HelpCircle,
   Loader2,
@@ -78,6 +79,8 @@ const MAX_TONE = 500;
 const MAX_GUARDRAIL = 300;
 const MAX_GUARDRAILS = 20;
 const MAX_OVERRIDE = 50_000;
+const MAX_TERMINOLOGY = 50;
+const MAX_TERM_LEN = 100;
 
 const MANUAL_DISABLED_HELP =
   "Desativado pelo Modo manual ativo. Desligue acima para editar.";
@@ -109,6 +112,19 @@ export function PromptConfigForm({ initial, onSaved }: PromptConfigFormProps) {
   );
   const [override, setOverride] = useState<string>(initial.advancedOverride ?? "");
 
+  // v0.31.0 — Nomenclaturas (terminology) + toggle Sugestões em botões.
+  const [terminology, setTerminology] = useState<
+    Array<{ key: string; value: string }>
+  >(() =>
+    Object.entries(initial.terminology ?? {}).map(([key, value]) => ({
+      key,
+      value,
+    })),
+  );
+  const [suggestionsEnabled, setSuggestionsEnabled] = useState<boolean>(
+    initial.suggestionsEnabled ?? false,
+  );
+
   const [isSaving, startSave] = useTransition();
   const [isPreviewLoading, startPreview] = useTransition();
   const [previewOpen, setPreviewOpen] = useState<boolean>(false);
@@ -130,8 +146,12 @@ export function PromptConfigForm({ initial, onSaved }: PromptConfigFormProps) {
       advancedOverride: overrideOn ? override : null,
       audioInputEnabled: initial.audioInputEnabled,
       kbEnabled: initial.kbEnabled,
-      terminology: initial.terminology ?? {},
-      suggestionsEnabled: initial.suggestionsEnabled ?? false,
+      terminology: Object.fromEntries(
+        terminology
+          .filter((t) => t.key.trim() && t.value.trim())
+          .map((t) => [t.key.trim(), t.value.trim()]),
+      ),
+      suggestionsEnabled,
     }),
     [
       personality,
@@ -142,8 +162,8 @@ export function PromptConfigForm({ initial, onSaved }: PromptConfigFormProps) {
       initial.identityBase,
       initial.audioInputEnabled,
       initial.kbEnabled,
-      initial.terminology,
-      initial.suggestionsEnabled,
+      terminology,
+      suggestionsEnabled,
     ],
   );
 
@@ -165,6 +185,35 @@ export function PromptConfigForm({ initial, onSaved }: PromptConfigFormProps) {
 
   function handleRemoveGuardrail(idx: number) {
     setGuardrails((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  // v0.31.0 — Nomenclaturas e termos handlers.
+  function handleAddTerm() {
+    if (terminology.length >= MAX_TERMINOLOGY) {
+      toast.error(`Limite de ${MAX_TERMINOLOGY} termos atingido`);
+      return;
+    }
+    setTerminology((prev) => [...prev, { key: "", value: "" }]);
+  }
+
+  function handleTermKeyChange(idx: number, k: string) {
+    setTerminology((prev) => {
+      const copy = [...prev];
+      copy[idx] = { ...copy[idx], key: k };
+      return copy;
+    });
+  }
+
+  function handleTermValueChange(idx: number, v: string) {
+    setTerminology((prev) => {
+      const copy = [...prev];
+      copy[idx] = { ...copy[idx], value: v };
+      return copy;
+    });
+  }
+
+  function handleRemoveTerm(idx: number) {
+    setTerminology((prev) => prev.filter((_, i) => i !== idx));
   }
 
   function handleOverrideToggle(checked: boolean) {
@@ -302,6 +351,119 @@ export function PromptConfigForm({ initial, onSaved }: PromptConfigFormProps) {
             {MANUAL_DISABLED_HELP}
           </p>
         ) : null}
+      </div>
+
+      {/* v0.31.0 — Nomenclaturas e termos */}
+      <div className="space-y-2">
+        <Label className="gap-2">
+          <BookText className="h-3.5 w-3.5 text-muted-foreground" />
+          Nomenclaturas e termos ({terminology.length}/{MAX_TERMINOLOGY})
+        </Label>
+        <p className="text-xs text-muted-foreground">
+          Mapeia termos custom usados pelo seu time → significados oficiais.
+          Ex.: o usuário pergunta sobre &quot;estados&quot; e o agente entende
+          como &quot;inboxes&quot;.
+        </p>
+
+        {terminology.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border bg-background/40 px-3 py-4 text-center text-xs text-muted-foreground">
+            Nenhum termo configurado. Clique em &quot;Adicionar termo&quot; para
+            começar.
+          </div>
+        ) : (
+          <ul className="space-y-2">
+            {terminology.map((t, idx) => (
+              <li key={idx} className="flex items-start gap-2">
+                <Input
+                  aria-label={`Termo ${idx + 1}`}
+                  value={t.key}
+                  onChange={(e) =>
+                    handleTermKeyChange(idx, e.currentTarget.value)
+                  }
+                  placeholder="Termo (ex: estados)"
+                  disabled={fieldsDisabled}
+                  className="min-h-[40px] flex-1"
+                  maxLength={MAX_TERM_LEN}
+                />
+                <span className="self-center text-xs text-muted-foreground">
+                  →
+                </span>
+                <Input
+                  aria-label={`Significa ${idx + 1}`}
+                  value={t.value}
+                  onChange={(e) =>
+                    handleTermValueChange(idx, e.currentTarget.value)
+                  }
+                  placeholder="Significa (ex: inboxes)"
+                  disabled={fieldsDisabled}
+                  className="min-h-[40px] flex-1"
+                  maxLength={MAX_TERM_LEN}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => handleRemoveTerm(idx)}
+                  disabled={fieldsDisabled}
+                  aria-label={`Remover termo ${idx + 1}`}
+                  className="cursor-pointer text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleAddTerm}
+          disabled={fieldsDisabled}
+          aria-disabled={terminology.length >= MAX_TERMINOLOGY}
+          className="cursor-pointer"
+        >
+          <Plus className="mr-1.5 h-3.5 w-3.5" />
+          Adicionar termo
+        </Button>
+        {overrideOn ? (
+          <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+            {MANUAL_DISABLED_HELP}
+          </p>
+        ) : null}
+      </div>
+
+      {/* v0.31.0 — Sugestões em botões */}
+      <div className="space-y-3 rounded-xl border border-border bg-background/40 p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <Label
+              htmlFor="nex-suggestions-toggle"
+              className="cursor-pointer text-sm font-medium text-foreground"
+            >
+              Sugestões em botões
+            </Label>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Quando ativo, o Agente Nex oferece ações em botões clicáveis no
+              fim de respostas que admitam continuidade (ex.: &quot;ver as
+              resolvidas também?&quot;).
+            </p>
+          </div>
+          <span className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center">
+            <Switch
+              id="nex-suggestions-toggle"
+              checked={suggestionsEnabled}
+              onCheckedChange={setSuggestionsEnabled}
+              disabled={busy}
+              aria-label={
+                suggestionsEnabled
+                  ? "Desativar sugestões em botões"
+                  : "Ativar sugestões em botões"
+              }
+            />
+          </span>
+        </div>
       </div>
 
       {/* Guardrails */}

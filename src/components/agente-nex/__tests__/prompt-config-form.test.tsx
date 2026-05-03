@@ -369,3 +369,80 @@ describe("PromptConfigForm", () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 });
+
+describe("PromptConfigForm — Nomenclaturas (v0.31)", () => {
+  beforeEach(() => {
+    refresh.mockReset();
+    toastMock.success.mockReset();
+    toastMock.error.mockReset();
+    toastMock.warning.mockReset();
+    toastMock.info.mockReset();
+    (saveNexPromptConfigAction as jest.Mock).mockClear();
+    (previewSystemPromptAction as jest.Mock).mockClear();
+  });
+
+  it("renderiza section 'Nomenclaturas e termos'", () => {
+    render(<PromptConfigForm initial={baseInitial} />);
+    expect(screen.getByText(/Nomenclaturas e termos/i)).toBeInTheDocument();
+  });
+
+  it("Adicionar termo cria nova linha com inputs vazios", () => {
+    render(<PromptConfigForm initial={baseInitial} />);
+    fireEvent.click(screen.getByRole("button", { name: /Adicionar termo/i }));
+    expect(screen.getByPlaceholderText(/Termo \(ex/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Significa \(ex/i)).toBeInTheDocument();
+  });
+
+  it("max 50 termos: bloqueia + toast", () => {
+    const filled: Record<string, string> = {};
+    for (let i = 0; i < 50; i++) filled[`k${i}`] = "v";
+    render(
+      <PromptConfigForm initial={{ ...baseInitial, terminology: filled }} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Adicionar termo/i }));
+    expect(toastMock.error).toHaveBeenCalledWith(expect.stringMatching(/50/));
+  });
+
+  it("renderiza terminology inicial como linhas pré-populadas", () => {
+    render(
+      <PromptConfigForm
+        initial={{ ...baseInitial, terminology: { estados: "inboxes" } }}
+      />,
+    );
+    expect(screen.getByDisplayValue("estados")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("inboxes")).toBeInTheDocument();
+  });
+});
+
+describe("PromptConfigForm — Sugestões em botões (v0.31)", () => {
+  beforeEach(() => {
+    refresh.mockReset();
+    toastMock.success.mockReset();
+    toastMock.error.mockReset();
+    toastMock.warning.mockReset();
+    toastMock.info.mockReset();
+    (saveNexPromptConfigAction as jest.Mock).mockClear();
+    (previewSystemPromptAction as jest.Mock).mockClear();
+  });
+
+  it("renderiza toggle 'Sugestões em botões'", () => {
+    render(<PromptConfigForm initial={baseInitial} />);
+    expect(
+      screen.getByRole("switch", {
+        name: /Sugestões em botões|Ativar sugestões|Desativar sugestões/i,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("toggle reflete initial.suggestionsEnabled=true", () => {
+    render(
+      <PromptConfigForm
+        initial={{ ...baseInitial, suggestionsEnabled: true }}
+      />,
+    );
+    const toggle = screen.getByRole("switch", {
+      name: /Sugestões em botões|Desativar sugestões/i,
+    });
+    expect(toggle).toBeChecked();
+  });
+});
