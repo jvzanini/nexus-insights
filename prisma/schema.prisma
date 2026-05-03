@@ -54,32 +54,32 @@ enum AuditAction {
 }
 
 model User {
-  id                  String               @id @default(uuid()) @db.Uuid
-  email               String               @unique
-  password            String
-  name                String
-  platformRole        PlatformRole         @default(viewer) @map("platform_role")
-  isOwner             Boolean              @default(false) @map("is_owner")
-  isActive            Boolean              @default(true) @map("is_active")
-  mustChangePassword  Boolean              @default(true) @map("must_change_password")
-  passwordChangedAt   DateTime?            @map("password_changed_at")
-  avatarUrl           String?              @map("avatar_url")
-  theme               Theme                @default(system)
-  emailVerifiedAt     DateTime?            @map("email_verified_at")
-  lastLoginAt         DateTime?            @map("last_login_at")
-  lastLoginIp         String?              @map("last_login_ip")
-  createdAt           DateTime             @default(now()) @map("created_at")
-  updatedAt           DateTime             @updatedAt @map("updated_at")
-  createdById         String?              @map("created_by_id") @db.Uuid
-  createdBy           User?                @relation("UserCreator", fields: [createdById], references: [id])
-  createdUsers        User[]               @relation("UserCreator")
-  accountAccess       UserAccountAccess[]
-  teamAccess          UserTeamAccess[]
-  audits              AuditLog[]
-  passwordResetTokens PasswordResetToken[]
-  emailChangeTokens   EmailChangeToken[]
-  integrationProfilesCreated IntegrationProfile[]    @relation("IntegrationProfileCreator")
-  integrationAuditEvents     IntegrationAuditLog[]   @relation("IntegrationAuditUser")
+  id                         String                @id @default(uuid()) @db.Uuid
+  email                      String                @unique
+  password                   String
+  name                       String
+  platformRole               PlatformRole          @default(viewer) @map("platform_role")
+  isOwner                    Boolean               @default(false) @map("is_owner")
+  isActive                   Boolean               @default(true) @map("is_active")
+  mustChangePassword         Boolean               @default(true) @map("must_change_password")
+  passwordChangedAt          DateTime?             @map("password_changed_at")
+  avatarUrl                  String?               @map("avatar_url")
+  theme                      Theme                 @default(system)
+  emailVerifiedAt            DateTime?             @map("email_verified_at")
+  lastLoginAt                DateTime?             @map("last_login_at")
+  lastLoginIp                String?               @map("last_login_ip")
+  createdAt                  DateTime              @default(now()) @map("created_at")
+  updatedAt                  DateTime              @updatedAt @map("updated_at")
+  createdById                String?               @map("created_by_id") @db.Uuid
+  createdBy                  User?                 @relation("UserCreator", fields: [createdById], references: [id])
+  createdUsers               User[]                @relation("UserCreator")
+  accountAccess              UserAccountAccess[]
+  teamAccess                 UserTeamAccess[]
+  audits                     AuditLog[]
+  passwordResetTokens        PasswordResetToken[]
+  emailChangeTokens          EmailChangeToken[]
+  integrationProfilesCreated IntegrationProfile[]  @relation("IntegrationProfileCreator")
+  integrationAuditEvents     IntegrationAuditLog[] @relation("IntegrationAuditUser")
 
   @@index([platformRole, isActive])
   @@index([email])
@@ -269,6 +269,9 @@ model ChatwootAccountUrl {
 model ChatwootFactsDailyByAccount {
   accountId      Int      @map("account_id")
   bucketDate     DateTime @map("bucket_date") @db.Date
+  // Multi-tenant: connection_id é nullable na Fase 1 (backfill via seed) e
+  // vira NOT NULL + parte da PK no Lote 9.
+  connectionId   String?  @map("connection_id") @db.Uuid
   received       Int      @default(0)
   resolved       Int      @default(0)
   openAtEod      Int      @default(0) @map("open_at_eod")
@@ -284,6 +287,7 @@ model ChatwootFactsDailyByAccount {
 
   @@id([accountId, bucketDate])
   @@index([accountId, bucketDate(sort: Desc)])
+  @@index([connectionId, accountId])
   @@map("chatwoot_facts_daily_by_account")
 }
 
@@ -291,6 +295,7 @@ model ChatwootFactsDailyByInbox {
   accountId      Int      @map("account_id")
   bucketDate     DateTime @map("bucket_date") @db.Date
   inboxId        Int      @map("inbox_id")
+  connectionId   String?  @map("connection_id") @db.Uuid
   received       Int      @default(0)
   resolved       Int      @default(0)
   openAtEod      Int      @default(0) @map("open_at_eod")
@@ -307,6 +312,7 @@ model ChatwootFactsDailyByInbox {
   @@id([accountId, bucketDate, inboxId])
   @@index([accountId, bucketDate(sort: Desc)])
   @@index([accountId, inboxId, bucketDate(sort: Desc)])
+  @@index([connectionId, accountId])
   @@map("chatwoot_facts_daily_by_inbox")
 }
 
@@ -314,6 +320,7 @@ model ChatwootFactsDailyByAgent {
   accountId      Int      @map("account_id")
   bucketDate     DateTime @map("bucket_date") @db.Date
   agentId        Int      @map("agent_id")
+  connectionId   String?  @map("connection_id") @db.Uuid
   received       Int      @default(0)
   resolved       Int      @default(0)
   openAtEod      Int      @default(0) @map("open_at_eod")
@@ -331,6 +338,7 @@ model ChatwootFactsDailyByAgent {
   @@id([accountId, bucketDate, agentId])
   @@index([accountId, bucketDate(sort: Desc)])
   @@index([accountId, agentId, bucketDate(sort: Desc)])
+  @@index([connectionId, accountId])
   @@map("chatwoot_facts_daily_by_agent")
 }
 
@@ -339,6 +347,7 @@ model ChatwootFactsDailyByTeam {
   bucketDate     DateTime @map("bucket_date") @db.Date
   // teamId=0 sentinel for 'no team'
   teamId         Int      @default(0) @map("team_id")
+  connectionId   String?  @map("connection_id") @db.Uuid
   received       Int      @default(0)
   resolved       Int      @default(0)
   openAtEod      Int      @default(0) @map("open_at_eod")
@@ -355,6 +364,7 @@ model ChatwootFactsDailyByTeam {
   @@id([accountId, bucketDate, teamId])
   @@index([accountId, bucketDate(sort: Desc)])
   @@index([accountId, teamId, bucketDate(sort: Desc)])
+  @@index([connectionId, accountId])
   @@map("chatwoot_facts_daily_by_team")
 }
 
@@ -362,6 +372,7 @@ model ChatwootFactsHourlyByAccount {
   accountId      Int      @map("account_id")
   bucketDate     DateTime @map("bucket_date") @db.Date
   bucketHour     Int      @map("bucket_hour")
+  connectionId   String?  @map("connection_id") @db.Uuid
   received       Int      @default(0)
   resolved       Int      @default(0)
   messagesIn     Int      @default(0) @map("messages_in")
@@ -372,12 +383,14 @@ model ChatwootFactsHourlyByAccount {
 
   @@id([accountId, bucketDate, bucketHour])
   @@index([accountId, bucketDate(sort: Desc), bucketHour])
+  @@index([connectionId, accountId])
   @@map("chatwoot_facts_hourly_by_account")
 }
 
 model ChatwootFactsMeta {
   dimension        String
   accountId        Int       @map("account_id")
+  connectionId     String?   @map("connection_id") @db.Uuid
   lastRefreshAt    DateTime? @map("last_refresh_at")
   lastAttemptAt    DateTime? @map("last_attempt_at")
   lastError        String?   @map("last_error") @db.Text
@@ -387,6 +400,7 @@ model ChatwootFactsMeta {
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
   @@id([dimension, accountId])
+  @@index([connectionId, accountId])
   @@map("chatwoot_facts_meta")
 }
 
@@ -413,26 +427,26 @@ enum IntegrationAuditEvent {
 }
 
 model IntegrationProfile {
-  id                  String                       @id @default(uuid()) @db.Uuid
+  id                  String                   @id @default(uuid()) @db.Uuid
   kind                IntegrationKind
   name                String
-  description         String?                      @db.Text
-  status              IntegrationProfileStatus     @default(active)
-  pgUsername          String                       @unique @map("pg_username")
-  encryptedPgPassword String                       @map("encrypted_pg_password")
-  passwordLast4       String                       @map("password_last4")
-  allowedTables       Json                         @map("allowed_tables")
-  allowedColumns      Json                         @map("allowed_columns")
-  accountIdFilter     Json?                        @map("account_id_filter")
-  teamIdFilter        Json?                        @map("team_id_filter")
-  lastProvisionedAt   DateTime?                    @map("last_provisioned_at")
-  lastProvisionError  String?                      @map("last_provision_error") @db.Text
-  createdAt           DateTime                     @default(now()) @map("created_at")
-  updatedAt           DateTime                     @updatedAt @map("updated_at")
-  createdById         String?                      @db.Uuid @map("created_by_id")
-  createdBy           User?                        @relation("IntegrationProfileCreator", fields: [createdById], references: [id])
-  disabledAt          DateTime?                    @map("disabled_at")
-  deletedAt           DateTime?                    @map("deleted_at")
+  description         String?                  @db.Text
+  status              IntegrationProfileStatus @default(active)
+  pgUsername          String                   @unique @map("pg_username")
+  encryptedPgPassword String                   @map("encrypted_pg_password")
+  passwordLast4       String                   @map("password_last4")
+  allowedTables       Json                     @map("allowed_tables")
+  allowedColumns      Json                     @map("allowed_columns")
+  accountIdFilter     Json?                    @map("account_id_filter")
+  teamIdFilter        Json?                    @map("team_id_filter")
+  lastProvisionedAt   DateTime?                @map("last_provisioned_at")
+  lastProvisionError  String?                  @map("last_provision_error") @db.Text
+  createdAt           DateTime                 @default(now()) @map("created_at")
+  updatedAt           DateTime                 @updatedAt @map("updated_at")
+  createdById         String?                  @map("created_by_id") @db.Uuid
+  createdBy           User?                    @relation("IntegrationProfileCreator", fields: [createdById], references: [id])
+  disabledAt          DateTime?                @map("disabled_at")
+  deletedAt           DateTime?                @map("deleted_at")
 
   auditEvents IntegrationAuditLog[]
 
@@ -442,16 +456,68 @@ model IntegrationProfile {
 }
 
 model IntegrationAuditLog {
-  id        String                  @id @default(uuid()) @db.Uuid
-  profileId String                  @db.Uuid @map("profile_id")
-  profile   IntegrationProfile      @relation(fields: [profileId], references: [id], onDelete: NoAction)
+  id        String                @id @default(uuid()) @db.Uuid
+  profileId String                @map("profile_id") @db.Uuid
+  profile   IntegrationProfile    @relation(fields: [profileId], references: [id], onDelete: NoAction)
   event     IntegrationAuditEvent
-  userId    String?                 @db.Uuid @map("user_id")
-  user      User?                   @relation("IntegrationAuditUser", fields: [userId], references: [id])
+  userId    String?               @map("user_id") @db.Uuid
+  user      User?                 @relation("IntegrationAuditUser", fields: [userId], references: [id])
   details   Json?
-  ipAddress String?                 @map("ip_address")
-  createdAt DateTime                @default(now()) @map("created_at")
+  ipAddress String?               @map("ip_address")
+  createdAt DateTime              @default(now()) @map("created_at")
 
   @@index([profileId, createdAt(sort: Desc)])
   @@map("integration_audit_logs")
+}
+
+// ─── Multi-tenant: Nexus Chat connections + bindings (Fase 1) ──────────────
+
+/// Representa uma instalação física do Nexus Chat (1 banco Postgres).
+/// Webhook (token+secret) é compartilhado por toda a instalação — a
+/// roteamento por empresa acontece via `account_id` do payload + binding.
+model NexusChatConnection {
+  id               String    @id @default(uuid()) @db.Uuid
+  name             String
+  host             String
+  port             Int       @default(5432)
+  database         String
+  username         String
+  passwordEnc      String    @map("password_enc")
+  sslMode          String    @default("prefer") @map("ssl_mode")
+  applicationName  String    @default("nexus-insights") @map("application_name")
+  // Webhook é por instalação. Fase 1 deixa null; Fase 2 popula.
+  webhookToken     String?   @unique @map("webhook_token")
+  webhookSecretEnc String?   @map("webhook_secret_enc")
+  status           String    @default("active") @map("status")
+  lastTestAt       DateTime? @map("last_test_at")
+  lastTestError    String?   @map("last_test_error") @db.Text
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  deletedAt        DateTime? @map("deleted_at")
+  createdById      String?   @map("created_by_id") @db.Uuid
+
+  bindings CompanyChatBinding[]
+
+  @@index([status, deletedAt])
+  @@map("nexus_chat_connections")
+}
+
+/// Vincula uma empresa (account dentro de uma connection) à plataforma.
+/// É a unidade de tenancy a partir da Fase 1.
+model CompanyChatBinding {
+  id                String              @id @default(uuid()) @db.Uuid
+  connectionId      String              @map("connection_id") @db.Uuid
+  connection        NexusChatConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  chatwootAccountId Int                 @map("chatwoot_account_id")
+  displayName       String              @map("display_name")
+  enabled           Boolean             @default(true)
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  deletedAt         DateTime?           @map("deleted_at")
+  createdById       String?             @map("created_by_id") @db.Uuid
+
+  @@unique([connectionId, chatwootAccountId])
+  @@index([chatwootAccountId])
+  @@index([enabled, deletedAt])
+  @@map("company_chat_bindings")
 }
