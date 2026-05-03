@@ -35,7 +35,25 @@ const FACTS_TABLES = [
   "chatwoot_facts_meta",
 ] as const;
 
+const NEW_AUDIT_ENUM_VALUES = [
+  "nexus_chat_connection_created",
+  "nexus_chat_connection_updated",
+  "nexus_chat_connection_deleted",
+  "nexus_chat_connection_tested",
+  "company_chat_binding_created",
+  "company_chat_binding_updated",
+  "company_chat_binding_deleted",
+] as const;
+
 async function createTables(): Promise<void> {
+  // Adiciona valores novos ao enum AuditAction. Postgres exige ADD VALUE IF
+  // NOT EXISTS dentro de transação implícita. Operação aditiva, segura.
+  for (const v of NEW_AUDIT_ENUM_VALUES) {
+    await pgPool.query(
+      `ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS '${v}'`,
+    );
+  }
+
   await pgPool.query(`
     CREATE TABLE IF NOT EXISTS "nexus_chat_connections" (
       "id" UUID NOT NULL DEFAULT gen_random_uuid(),

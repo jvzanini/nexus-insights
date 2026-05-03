@@ -51,6 +51,13 @@ enum AuditAction {
   integration_password_revealed
   integration_password_rotated
   integration_provisioning_failed
+  nexus_chat_connection_created
+  nexus_chat_connection_updated
+  nexus_chat_connection_deleted
+  nexus_chat_connection_tested
+  company_chat_binding_created
+  company_chat_binding_updated
+  company_chat_binding_deleted
 }
 
 model User {
