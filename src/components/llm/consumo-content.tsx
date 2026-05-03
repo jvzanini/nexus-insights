@@ -359,13 +359,22 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
 
   // ---- Charts data --------------------------------------------------------
 
+  // v0.31.0: pill="hoje" usa byHour (24 buckets) quando disponível.
+  const isHourly = pill === "hoje" && stats?.byHour !== undefined;
+
   const areaData = useMemo<AreaChartData[]>(() => {
     if (!stats) return [];
+    if (isHourly && stats.byHour) {
+      return stats.byHour.map((h) => ({
+        name: `${String(h.hour).padStart(2, "0")}:00`,
+        Custo: Number(h.costBrl.toFixed(6)),
+      }));
+    }
     return stats.byDay.map((d) => ({
       name: dayLabelFmt.format(isoLocalToDate(d.day)).replace(".", ""),
       Custo: Number(d.costBrl.toFixed(6)),
     }));
-  }, [stats]);
+  }, [stats, isHourly]);
 
   const providerPieData = useMemo<PieChartData[]>(() => {
     if (!stats) return [];
@@ -531,7 +540,7 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Coins className="h-4 w-4 text-violet-500" />
-              Custo por dia
+              {isHourly ? "Custo por hora" : "Custo por dia"}
             </CardTitle>
           </CardHeader>
           <CardContent>

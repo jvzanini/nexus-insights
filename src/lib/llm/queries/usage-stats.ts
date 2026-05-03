@@ -34,6 +34,8 @@ export interface UsageSummary {
     costBrl: number;
     calls: number;
   }>;
+  /** v0.31.0: 24 buckets (hour 0..23) quando range <= 24h. Undefined caso contrário. */
+  byHour?: Array<{ hour: number; cost: number; costBrl: number; calls: number }>;
 }
 
 interface SummaryRow {
@@ -109,7 +111,22 @@ export async function getUsageStats(args: {
   const provider =
     args.provider != null && args.provider !== "" ? args.provider : null;
 
-  const [summaryRes, modelRes, dayRes, providerRes] = await Promise.all([
+  // v0.31.0: detecta range <= 24h pra ativar agregação hourly em paralelo.
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+  const hourlyMode = end.getTime() - start.getTime() <= ONE_DAY_MS + 1;
+
+  type HourRow = {
+    hour: number | string;
+    cost: string | number | null;
+    cost_brl: string | number | null;
+    calls: string | number | null;
+  };
+  const emptyHourRes: { rowCount: number; rows: HourRow[] } = {
+    rowCount: 0,
+    rows: [],
+  };
+
+  const [summaryRes, modelRes, dayRes, providerRes, hourRes] = await Promise.all([
     pgPool.query<SummaryRow>(
       `SELECT
          COALESCE(SUM(cost_usd), 0) AS total_cost,
@@ -165,7 +182,43 @@ export async function getUsageStats(args: {
        ORDER BY cost DESC`,
       [start, end, provider],
     ),
+    hourlyMode
+      ? pgPool.query<HourRow>(
+          `SELECT EXTRACT(HOUR FROM (created_at AT TIME ZONE $3))::int AS hour,
+                  COALESCE(SUM(cost_usd), 0) AS cost,
+                  COALESCE(SUM(cost_brl), 0) AS cost_brl,
+                  COUNT(*) AS calls
+             FROM llm_usage
+            WHERE created_at >= $1 AND created_at < $2
+              AND ($4::text IS NULL OR provider = $4)
+            GROUP BY hour
+            ORDER BY hour ASC`,
+          [start, end, TZ, provider],
+        )
+      : Promise.resolve(emptyHourRes),
   ]);
+
+  let byHour: UsageSummary["byHour"];
+  if (hourlyMode) {
+    // Inicializa 24 buckets zerados (00:00..23:00); buckets vazios mantêm 0.
+    byHour = Array.from({ length: 24 }, (_, hour) => ({
+      hour,
+      cost: 0,
+      costBrl: 0,
+      calls: 0,
+    }));
+    for (const r of hourRes.rows) {
+      const h = Number(r.hour);
+      if (Number.isFinite(h) && h >= 0 && h <= 23) {
+        byHour[h] = {
+          hour: h,
+          cost: toNumber(r.cost),
+          costBrl: toNumber(r.cost_brl),
+          calls: toNumber(r.calls),
+        };
+      }
+    }
+  }
 
   const summary = summaryRes.rows[0] ?? {
     total_cost: 0,
@@ -203,6 +256,7 @@ export async function getUsageStats(args: {
       costBrl: toNumber(r.cost_brl),
       calls: toNumber(r.calls),
     })),
+    byHour,
   };
 }
 

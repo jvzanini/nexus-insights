@@ -603,3 +603,64 @@ describe("usage-stats — BRL aggregates (v0.12.0)", () => {
     expect(result.byDay[0].costBrl).toBe(0);
   });
 });
+
+describe("getUsageStats — byHour (v0.31)", () => {
+  it("retorna byHour com 24 buckets quando range <= 24h", async () => {
+    const start = new Date("2026-05-03T00:00:00-03:00");
+    const end = new Date("2026-05-04T00:00:00-03:00");
+    // Ordem do Promise.all: [summary, byModel, byDay, byProvider, byHour].
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            total_cost: 0,
+            total_cost_brl: 0,
+            total_tokens_input: 0,
+            total_tokens_output: 0,
+            total_calls: 0,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({
+        rows: [{ hour: 10, cost: 0.5, cost_brl: 2.75, calls: 3 }],
+      });
+
+    const stats = await getUsageStats({ start, end });
+
+    expect(stats.byHour).toBeDefined();
+    expect(stats.byHour).toHaveLength(24);
+    expect(stats.byHour![10]).toMatchObject({ hour: 10, calls: 3 });
+    expect(stats.byHour![10].costBrl).toBeCloseTo(2.75);
+    const empties = stats.byHour!.filter((h) => h.calls === 0);
+    expect(empties).toHaveLength(23);
+    // Todos os 24 buckets em ordem 0..23.
+    stats.byHour!.forEach((h, i) => expect(h.hour).toBe(i));
+  });
+
+  it("byHour é undefined quando range > 24h", async () => {
+    const start = new Date("2026-04-01");
+    const end = new Date("2026-05-04");
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            total_cost: 0,
+            total_cost_brl: 0,
+            total_tokens_input: 0,
+            total_tokens_output: 0,
+            total_calls: 0,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const stats = await getUsageStats({ start, end });
+
+    expect(stats.byHour).toBeUndefined();
+  });
+});

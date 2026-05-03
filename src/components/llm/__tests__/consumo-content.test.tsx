@@ -448,6 +448,46 @@ describe("ConsumoContent — refactor T6d v0.16.0", () => {
     expect(trigger.textContent).toMatch(/Todos os providers/i);
   });
 
+  // ----- T-E2 v0.31.0 ----------------------------------------------------
+
+  it("T-E2: Card title 'Custo por hora' quando pill='hoje' e byHour disponível", async () => {
+    // Mocka stats com byHour de 24 buckets (1 bucket com calls > 0).
+    fetchUsageStatsMock.mockResolvedValue(
+      makeStats({
+        byHour: Array.from({ length: 24 }, (_, hour) => ({
+          hour,
+          cost: hour === 10 ? 0.01 : 0,
+          costBrl: hour === 10 ? 0.05 : 0,
+          calls: hour === 10 ? 3 : 0,
+        })),
+      }),
+    );
+
+    render(<ConsumoContent minDate="2026-01-01T00:00:00.000Z" />);
+
+    await waitFor(() => expect(fetchUsageStatsMock).toHaveBeenCalled());
+
+    // Default pill é "mes_atual" → mostra "Custo por dia". Troca pra "Hoje".
+    fireEvent.click(screen.getByRole("tab", { name: /^Hoje$/ }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/Custo por hora/i)).toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/Custo por dia/i)).not.toBeInTheDocument();
+  });
+
+  it("T-E2: Card title 'Custo por dia' quando pill='mes_atual' (não hourly)", async () => {
+    fetchUsageStatsMock.mockResolvedValue(makeStats());
+
+    render(<ConsumoContent minDate="2026-01-01T00:00:00.000Z" />);
+
+    await waitFor(() => expect(fetchUsageStatsMock).toHaveBeenCalled());
+
+    // Default pill é "mes_atual" → "Custo por dia".
+    expect(await screen.findByText(/Custo por dia/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Custo por hora/i)).not.toBeInTheDocument();
+  });
+
   it("3.F: stats é refeito com provider quando filtro global muda", async () => {
     render(<ConsumoContent minDate="2026-01-01T00:00:00.000Z" />);
 
