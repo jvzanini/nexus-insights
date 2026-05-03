@@ -50,6 +50,11 @@ async function createTables(): Promise<void> {
     ALTER TABLE "nex_settings"
       ADD COLUMN IF NOT EXISTS "seeded_v2_at" TIMESTAMPTZ NULL;
   `);
+  // v0.28.0: identity_base column — NULL = usa default hardcoded em prompt-compose.ts
+  await pgPool.query(`
+    ALTER TABLE "nex_settings"
+      ADD COLUMN IF NOT EXISTS "identity_base" TEXT NULL;
+  `);
   // v0.16.0: chatwoot_account_urls (mapping account_id → URL pública para deep-links do Agente Nex).
   await pgPool.query(`
     CREATE TABLE IF NOT EXISTS "chatwoot_account_urls" (

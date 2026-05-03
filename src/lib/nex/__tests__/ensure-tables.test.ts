@@ -77,3 +77,14 @@ describe("ensure-tables — guardrails seed v2 + backfill (v0.26)", () => {
     expect(String(backfillCall![0])).toMatch(/seeded_v2_at IS NULL/);
   });
 });
+
+describe("ensure-tables — identity_base column (v0.28)", () => {
+  it("adiciona column identity_base TEXT NULL via IF NOT EXISTS (idempotente)", async () => {
+    await ensureNexTables();
+    const alterCall = q.mock.calls.find((c) =>
+      String(c[0]).match(/ADD COLUMN IF NOT EXISTS\s+"?identity_base/i),
+    );
+    expect(alterCall).toBeDefined();
+    expect(String(alterCall![0])).toMatch(/TEXT/i);
+  });
+});
