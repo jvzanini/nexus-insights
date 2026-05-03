@@ -57,6 +57,7 @@ import { cn } from "@/lib/utils";
 
 import { AudioRecorder, type AudioRecorderHandle } from "./audio-recorder";
 import { NexMessage, type NexMessageRole } from "./nex-message";
+import { SuggestionsBar } from "./suggestions-bar";
 
 interface NexChatPanelProps {
   open: boolean;
@@ -82,6 +83,13 @@ interface UiMessage {
    * recriado em runtime via `getAudio(id)` → `URL.createObjectURL(blob)`.
    */
   hasStoredAudio?: boolean;
+  /**
+   * v0.31.0: sugestões clicáveis emitidas pelo agente Nex. Quando presentes
+   * (e a msg for a última assistant E !pending), renderiza `SuggestionsBar`
+   * abaixo do balão. São consumidas (limpas) ao clicar — viram disparo de
+   * `handleSend(suggestion)`.
+   */
+  suggestions?: string[];
 }
 
 const STORAGE_KEY = "nex-history-v1";
@@ -251,6 +259,7 @@ export function NexChatPanel({
               id: `a_${Date.now()}`,
               role: "assistant",
               content: res.message,
+              suggestions: res.suggestions,
             },
           ]);
         } else {
@@ -388,6 +397,7 @@ export function NexChatPanel({
                       id: `a_${Date.now()}`,
                       role: "assistant",
                       content: agentRes.message,
+                      suggestions: agentRes.suggestions,
                     }
                   : m,
               ),
@@ -469,6 +479,22 @@ export function NexChatPanel({
     // v0.15.4: zera IDB de áudios também — "Limpar conversa" deve apagar tudo.
     void clearAllAudios();
   }, []);
+
+  /**
+   * v0.31.0 — consume + envia: limpa as sugestões da msg (pra não reaparecerem
+   * depois) e dispara `handleSend(suggestion)` como nova msg do user.
+   */
+  const handlePickSuggestion = React.useCallback(
+    (msgId: string, suggestion: string) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === msgId ? { ...m, suggestions: undefined } : m,
+        ),
+      );
+      void handleSend(suggestion);
+    },
+    [handleSend],
+  );
 
   // Send button click handler (dynamic): idle → texto, recording → recorder.sendNow.
   const handleSendClick = React.useCallback(() => {
@@ -609,18 +635,33 @@ export function NexChatPanel({
             <WelcomeBlock onPick={handleSend} suggestions={SUGGESTIONS} />
           ) : (
             <div className="space-y-3">
-              {messages.map((m) => (
-                <NexMessage
-                  key={m.id}
-                  role={m.role}
-                  content={m.content}
-                  toolName={m.toolName}
-                  kind={m.kind}
-                  audioBlobUrl={m.audioBlobUrl}
-                  durationSeconds={m.durationSeconds}
-                  hasStoredAudio={m.hasStoredAudio}
-                />
-              ))}
+              {messages.map((m, idx) => {
+                const isLastAssistant =
+                  m.role === "assistant" &&
+                  idx === messages.length - 1 &&
+                  !pending;
+                return (
+                  <React.Fragment key={m.id}>
+                    <NexMessage
+                      role={m.role}
+                      content={m.content}
+                      toolName={m.toolName}
+                      kind={m.kind}
+                      audioBlobUrl={m.audioBlobUrl}
+                      durationSeconds={m.durationSeconds}
+                      hasStoredAudio={m.hasStoredAudio}
+                    />
+                    {isLastAssistant &&
+                    m.suggestions &&
+                    m.suggestions.length > 0 ? (
+                      <SuggestionsBar
+                        suggestions={m.suggestions}
+                        onPick={(s) => handlePickSuggestion(m.id, s)}
+                      />
+                    ) : null}
+                  </React.Fragment>
+                );
+              })}
               {pending ? (
                 <NexMessage role="loading" content="" />
               ) : null}
