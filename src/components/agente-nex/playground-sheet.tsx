@@ -11,16 +11,25 @@
  *    resposta a cada submit.
  *  - Header expõe provider + modelo selecionados, botões "Limpar histórico" e
  *    "Ver prompt usado", além do close padrão do Sheet.
- *  - Footer sticky com Textarea + Enviar (Loader2 quando sending).
+ *  - Footer sticky com input bar idêntico à bubble do Nex (Mic externo + inner
+ *    area unificada + Send violet gradient). Suporta áudio via Whisper quando
+ *    audioInputEnabled E providerKey === "openai".
  *  - Erros vêm via toast (sonner) — sem alert inline (Sheet é apertado).
  *  - Não persiste em localStorage; ao desmontar, perde a conversa.
+ *  - Dialog "Ver prompt usado" abre com z-[60] (DialogContent + overlay) para
+ *    sobrepor o Sheet (que é z-50).
  *
  * Decisões de UI/UX (validadas via ui-ux-pro-max):
- *  - Touch target ≥44px no botão Enviar.
+ *  - Touch target ≥44px no botão Enviar (h-9 w-9 + hit area implícita do form).
  *  - aria-live="polite" no body pra screen readers acompanharem novas msgs.
  *  - Loader2 com motion-reduce: respeitar prefers-reduced-motion.
  *  - Cap de input: 1000 chars (mesmo do action; valida no client antes).
  *  - FIFO: ao exceder 20 msgs, descartamos do INÍCIO do array (mais antigas).
+ *  - Send violet gradient: from-violet-600 to-violet-500 (bubble parity).
+ *  - Mic externo: só em idle E quando audioEnabled. Some em recording pra
+ *    liberar espaço pro embedded recorder.
+ *  - Whisper só funciona com OpenAI; gating via providerKey === "openai"
+ *    (string-match em providerLabel é frágil, evitado).
  */
 
 import {
@@ -31,9 +40,10 @@ import {
   useState,
   useTransition,
 } from "react";
-import { Eraser, Eye, Loader2, MessageSquare, Send } from "lucide-react";
+import { Eraser, Eye, Loader2, MessageSquare, Mic, Send } from "lucide-react";
 import { toast } from "sonner";
 
+import { AudioRecorder, type AudioRecorderHandle } from "@/components/nex/audio-recorder";
 import { NexMessage } from "@/components/nex/nex-message";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,6 +58,7 @@ import { Sheet, SheetBody, SheetFooter, SheetHeader } from "@/components/ui/shee
 import { Textarea } from "@/components/ui/textarea";
 import { testNexPromptAction } from "@/lib/actions/nex-chat";
 import { previewSystemPromptAction } from "@/lib/actions/nex-prompt";
+import type { LlmProvider } from "@/lib/llm/types";
 import type { NexPromptConfig } from "@/lib/nex/prompt";
 import { cn } from "@/lib/utils";
 
@@ -67,6 +78,8 @@ export interface PlaygroundSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   currentConfig: NexPromptConfig;
+  /** Key canonic do provider — usado pra gating de áudio (Whisper só OpenAI). */
+  providerKey: LlmProvider | null;
   /** Label legível do provider (ex.: "OpenAI"). */
   providerLabel?: string;
   /** Label legível do modelo (ex.: "GPT-5.4"). */
@@ -89,6 +102,7 @@ export function PlaygroundSheet({
   open,
   onOpenChange,
   currentConfig,
+  providerKey,
   providerLabel,
   modelLabel,
 }: PlaygroundSheetProps) {
@@ -100,12 +114,24 @@ export function PlaygroundSheet({
   const [previewOpen, setPreviewOpen] = useState<boolean>(false);
   const [previewText, setPreviewText] = useState<string>("");
 
+  // Áudio (paridade com nex-chat-panel).
+  const recorderRef = useRef<AudioRecorderHandle | null>(null);
+  const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [audioFlight, setAudioFlight] = useState<boolean>(false);
+
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
   const trimmed = message.trim();
   const overLimit = message.length > MAX_INPUT_LEN;
   const canSubmit =
     trimmed.length > 0 && !overLimit && !isSending && !isPreviewLoading;
+
+  /**
+   * Gating de áudio: toggle do prompt + provider OpenAI (único que tem Whisper).
+   * String-match em providerLabel seria frágil; usamos a key canonic.
+   */
+  const audioEnabled =
+    currentConfig.audioInputEnabled && providerKey === "openai";
 
   const cfgSnapshot = useMemo(() => currentConfig, [currentConfig]);
 
@@ -131,45 +157,102 @@ export function PlaygroundSheet({
     });
   }, []);
 
-  function handleSubmit() {
-    if (!trimmed) return;
-    if (overLimit) return;
-
-    const userItem: ChatItem = {
-      id: genId(),
-      role: "user",
-      content: trimmed,
-    };
-    // Renderiza msg do user imediatamente; resposta vem após o action.
-    appendItems([userItem]);
-    setMessage("");
-
-    startSend(async () => {
-      try {
-        const r = await testNexPromptAction(trimmed, cfgSnapshot);
-        if (!r.ok) {
-          toast.error(
-            `Erro: ${r.error}. Verifique chave/modelo em Configuração.`,
-          );
-          return;
-        }
-        appendItems([
-          { id: genId(), role: "assistant", content: r.message },
-        ]);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        toast.error(
-          `Erro: ${msg}. Verifique chave/modelo em Configuração.`,
-        );
+  /**
+   * Envia uma mensagem de texto direto (sem ler `message` state — evita closure
+   * stale quando chamado após `setMessage` no flow de áudio).
+   */
+  const submitMessage = useCallback(
+    (text: string) => {
+      const trimmedText = text.trim();
+      if (!trimmedText) return;
+      if (trimmedText.length > MAX_INPUT_LEN) {
+        toast.error(`Mensagem acima de ${MAX_INPUT_LEN} chars.`);
+        return;
       }
-    });
+      const userItem: ChatItem = {
+        id: genId(),
+        role: "user",
+        content: trimmedText,
+      };
+      appendItems([userItem]);
+      setMessage("");
+
+      startSend(async () => {
+        try {
+          const r = await testNexPromptAction(trimmedText, cfgSnapshot);
+          if (!r.ok) {
+            toast.error(
+              `Erro: ${r.error}. Verifique chave/modelo em Configuração.`,
+            );
+            return;
+          }
+          appendItems([
+            { id: genId(), role: "assistant", content: r.message },
+          ]);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          toast.error(
+            `Erro: ${msg}. Verifique chave/modelo em Configuração.`,
+          );
+        }
+      });
+    },
+    [appendItems, cfgSnapshot, startSend],
+  );
+
+  function handleSendClick() {
+    if (isRecording) {
+      recorderRef.current?.sendNow();
+      return;
+    }
+    submitMessage(message);
+  }
+
+  async function handleSendAudio(blob: Blob, _durationSeconds: number) {
+    if (audioFlight) return;
+    setAudioFlight(true);
+    try {
+      const fd = new FormData();
+      fd.append("audio", blob, "recording.webm");
+      fd.append("language", "pt");
+      const res = await fetch("/api/nex/transcribe", {
+        method: "POST",
+        body: fd,
+      });
+      if (!res.ok) {
+        let detail = `HTTP ${res.status}`;
+        try {
+          const data = (await res.json()) as { error?: string };
+          if (data?.error) detail = data.error;
+        } catch {
+          /* noop */
+        }
+        toast.error(`Falha ao transcrever áudio: ${detail}`);
+        return;
+      }
+      const data = (await res.json()) as { text?: string };
+      const text = (data?.text ?? "").trim();
+      if (!text) {
+        toast.error("Não conseguimos entender o áudio. Tente de novo.");
+        return;
+      }
+      submitMessage(text);
+    } catch (err) {
+      toast.error(
+        `Falha ao transcrever áudio: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
+      setAudioFlight(false);
+    }
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     // Enter envia; Shift+Enter quebra linha (padrão chat moderno).
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (canSubmit) handleSubmit();
+      if (!isSending && !isPreviewLoading && !audioFlight) {
+        submitMessage(message);
+      }
     }
   }
 
@@ -272,18 +355,100 @@ export function PlaygroundSheet({
         </SheetBody>
 
         <SheetFooter className="flex-col items-stretch gap-2 sm:flex-col sm:items-stretch">
-          <Textarea
-            value={message}
-            onChange={(e) => setMessage(e.currentTarget.value)}
-            onKeyDown={handleKeyDown}
-            maxLength={MAX_INPUT_LEN}
-            rows={2}
-            placeholder="Pergunte algo ao Nex…"
-            disabled={isSending}
-            aria-label="Mensagem para o Nex"
-            className="resize-none"
-          />
-          <div className="flex items-center justify-between gap-2">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSendClick();
+            }}
+            className="flex items-end gap-2"
+          >
+            {/*
+              Mic externo: aparece SÓ em idle (à esquerda da inner area). Some
+              quando gravando ou em flight pra liberar espaço pro embedded
+              recorder e evitar UX confuso.
+            */}
+            {audioEnabled && !isRecording && !audioFlight ? (
+              <button
+                type="button"
+                onClick={() => {
+                  void recorderRef.current?.start();
+                }}
+                aria-label="Gravar áudio"
+                className={cn(
+                  "flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors",
+                  "hover:bg-muted hover:text-foreground",
+                  "focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none",
+                )}
+              >
+                <Mic className="h-4 w-4" />
+              </button>
+            ) : null}
+
+            {/*
+              Inner area: container unificado idle/recording. Trocamos só o
+              conteúdo dentro: Textarea OU AudioRecorder embedded. Mesmo
+              padding/borda/focus-within ring da bubble.
+            */}
+            <div
+              className={cn(
+                "flex min-h-9 flex-1 items-center rounded-xl border border-input bg-background px-3 py-1 transition-colors",
+                "focus-within:border-violet-500/60 focus-within:ring-3 focus-within:ring-violet-400/30",
+              )}
+            >
+              {!isRecording ? (
+                <Textarea
+                  value={message}
+                  onChange={(e) => setMessage(e.currentTarget.value)}
+                  onKeyDown={handleKeyDown}
+                  maxLength={MAX_INPUT_LEN}
+                  rows={1}
+                  placeholder="Pergunte algo ao Nex…"
+                  disabled={isSending}
+                  aria-label="Mensagem para o Nex"
+                  className="resize-none bg-transparent text-sm leading-relaxed border-0 shadow-none focus-visible:ring-0 px-0 py-1 max-h-28"
+                />
+              ) : null}
+              {audioEnabled ? (
+                <AudioRecorder
+                  ref={recorderRef}
+                  mode="embedded"
+                  onSend={(blob, durationSeconds) => {
+                    void handleSendAudio(blob, durationSeconds);
+                  }}
+                  onRecordingStateChange={setIsRecording}
+                />
+              ) : null}
+            </div>
+
+            {/*
+              Send violet — sempre no mesmo lugar. Em idle envia texto; em
+              recording dispara recorder.sendNow() via handleSendClick.
+            */}
+            <button
+              type="submit"
+              aria-label={isRecording ? "Enviar áudio" : "Enviar pergunta"}
+              disabled={
+                isRecording ? false : !canSubmit || audioFlight
+              }
+              className={cn(
+                "flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-xl",
+                "bg-gradient-to-br from-violet-600 to-violet-500 text-white shadow-md shadow-violet-600/30",
+                "transition-all hover:from-violet-500 hover:to-violet-400 hover:shadow-lg",
+                "focus-visible:ring-3 focus-visible:ring-violet-400/50 focus-visible:outline-none",
+                "disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none",
+              )}
+            >
+              {isSending ? (
+                <Loader2
+                  className="h-4 w-4 animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
+              ) : (
+                <Send className="h-4 w-4" strokeWidth={2.25} />
+              )}
+            </button>
+          </form>
+          <div className="flex items-center justify-between gap-2 px-1">
             <span
               className={cn(
                 "text-xs tabular-nums",
@@ -293,29 +458,22 @@ export function PlaygroundSheet({
             >
               {message.length}/{MAX_INPUT_LEN}
             </span>
-            <Button
-              type="button"
-              onClick={handleSubmit}
-              disabled={!canSubmit}
-              className="cursor-pointer min-h-[44px]"
-            >
-              {isSending ? (
-                <Loader2
-                  className="mr-1.5 h-4 w-4 animate-spin motion-reduce:animate-none"
-                  aria-hidden="true"
-                />
-              ) : (
-                <Send className="mr-1.5 h-4 w-4" aria-hidden="true" />
+            <span
+              className={cn(
+                "text-[11px] text-muted-foreground",
+                isRecording && "invisible",
               )}
-              Enviar
-            </Button>
+            >
+              Enter envia · Shift+Enter quebra linha
+            </span>
           </div>
         </SheetFooter>
       </Sheet>
 
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent
-          className="sm:max-w-3xl"
+          className="sm:max-w-3xl z-[60]"
+          overlayClassName="z-[60]"
           aria-label="Prompt usado nesta sessão"
         >
           <DialogHeader>

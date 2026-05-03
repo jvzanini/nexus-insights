@@ -32,6 +32,34 @@ jest.mock("@/lib/actions/nex-prompt", () => ({
   })),
 }));
 
+// Mock do AudioRecorder pra evitar cadeia getUserMedia no jsdom.
+// Em mode="embedded" o componente real só renderiza conteúdo quando recording —
+// idle retorna null. O mock replica esse comportamento (sempre null) e expõe
+// um shape de Handle inerte via ref pra não quebrar o componente externo.
+jest.mock("@/components/nex/audio-recorder", () => {
+  const React = require("react");
+  return {
+    __esModule: true,
+    AudioRecorder: React.forwardRef(function AudioRecorderMock(
+      _props: unknown,
+      ref: React.Ref<{
+        start: () => Promise<void>;
+        pauseOrResume: () => void;
+        cancel: () => void;
+        sendNow: () => void;
+      }>,
+    ) {
+      React.useImperativeHandle(ref, () => ({
+        start: async () => {},
+        pauseOrResume: () => {},
+        cancel: () => {},
+        sendNow: () => {},
+      }));
+      return null;
+    }),
+  };
+});
+
 const toastMock = {
   success: jest.fn(),
   error: jest.fn(),
@@ -57,15 +85,18 @@ const baseConfig: NexPromptConfig = {
 
 function ControlledHarness(props: {
   initialOpen?: boolean;
+  providerKey?: "openai" | "anthropic" | "gemini" | "openrouter" | null;
   providerLabel?: string;
   modelLabel?: string;
+  config?: NexPromptConfig;
 }) {
   const [open, setOpen] = require("react").useState(props.initialOpen ?? true);
   return (
     <PlaygroundSheet
       open={open}
       onOpenChange={setOpen}
-      currentConfig={baseConfig}
+      currentConfig={props.config ?? baseConfig}
+      providerKey={props.providerKey ?? "openai"}
       providerLabel={props.providerLabel}
       modelLabel={props.modelLabel}
     />
@@ -113,6 +144,7 @@ describe("PlaygroundSheet", () => {
         open
         onOpenChange={onOpenChange}
         currentConfig={baseConfig}
+        providerKey="openai"
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: /Fechar/i }));
@@ -233,5 +265,119 @@ describe("PlaygroundSheet", () => {
       name: /Prompt usado nesta sessão/i,
     });
     expect(within(dialog).getByText("PROMPT COMPOSTO")).toBeInTheDocument();
+  });
+});
+
+describe("PlaygroundSheet — v0.26 bubble UX", () => {
+  beforeEach(() => {
+    toastMock.success.mockReset();
+    toastMock.error.mockReset();
+    (testNexPromptAction as jest.Mock).mockReset();
+    (testNexPromptAction as jest.Mock).mockImplementation(async () => ({
+      ok: true,
+      message: "resposta do agente",
+    }));
+    (previewSystemPromptAction as jest.Mock).mockReset();
+    (previewSystemPromptAction as jest.Mock).mockImplementation(async () => ({
+      ok: true,
+      data: { composedPrompt: "PROMPT COMPOSTO" },
+    }));
+  });
+
+  const audioConfig: NexPromptConfig = {
+    personality: "",
+    tone: "",
+    guardrails: [],
+    advancedOverride: null,
+    audioInputEnabled: true,
+    kbEnabled: false,
+  };
+
+  it("renderiza Mic externo quando audioInputEnabled + provider OpenAI + idle", () => {
+    render(
+      <PlaygroundSheet
+        open
+        onOpenChange={jest.fn()}
+        currentConfig={audioConfig}
+        providerKey="openai"
+        providerLabel="OpenAI"
+        modelLabel="gpt-5.4-nano"
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: /gravar áudio/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("não renderiza Mic se providerKey !== 'openai'", () => {
+    render(
+      <PlaygroundSheet
+        open
+        onOpenChange={jest.fn()}
+        currentConfig={audioConfig}
+        providerKey="anthropic"
+        providerLabel="Anthropic"
+        modelLabel="claude-3"
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: /gravar áudio/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("não renderiza Mic se audioInputEnabled = false (mesmo com OpenAI)", () => {
+    render(
+      <PlaygroundSheet
+        open
+        onOpenChange={jest.fn()}
+        currentConfig={{ ...audioConfig, audioInputEnabled: false }}
+        providerKey="openai"
+        providerLabel="OpenAI"
+        modelLabel="gpt-5.4-nano"
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: /gravar áudio/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("Send button usa gradient violet", () => {
+    render(
+      <PlaygroundSheet
+        open
+        onOpenChange={jest.fn()}
+        currentConfig={audioConfig}
+        providerKey="openai"
+        providerLabel="OpenAI"
+        modelLabel="gpt-5.4-nano"
+      />,
+    );
+    const sendBtn = screen.getByRole("button", {
+      name: /enviar pergunta|enviar áudio|^enviar$/i,
+    });
+    expect(sendBtn.className).toMatch(/bg-gradient/);
+    expect(sendBtn.className).toMatch(/violet/);
+  });
+
+  it("Dialog 'Ver prompt usado' tem className z-[60] no DialogContent", async () => {
+    render(
+      <PlaygroundSheet
+        open
+        onOpenChange={jest.fn()}
+        currentConfig={audioConfig}
+        providerKey="openai"
+        providerLabel="OpenAI"
+        modelLabel="gpt-5.4-nano"
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: /ver prompt usado/i }),
+      );
+    });
+    const dialog = await screen.findByRole("dialog", {
+      name: /Prompt usado nesta sessão/i,
+    });
+    expect(dialog.className).toMatch(/z-\[60\]/);
   });
 });
