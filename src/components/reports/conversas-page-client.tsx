@@ -63,7 +63,7 @@ interface Props {
   currentChatwootUserId: number | null;
 }
 
-const PAGE_SIZE_CLIENT = 100;
+const PAGE_SIZE_CLIENT = 1000;
 
 export function ConversasPageClient({
   inboxes,
