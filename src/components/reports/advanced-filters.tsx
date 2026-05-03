@@ -60,6 +60,7 @@ import type {
   FilterPreset,
   UseFilterPresets,
 } from "@/lib/hooks/use-filter-presets";
+import type { ConditionGroup } from "@/lib/utils/apply-conditions";
 
 // ---------------------------------------------------------------------------
 // Tipos públicos
@@ -120,6 +121,17 @@ export interface AdvancedFiltersProps {
    */
   searchClient: string;
   onSearchClientChange: (next: string) => void;
+  /**
+   * v0.32 F9: where-clause efetivo da tabela (composto = filterState ∩
+   * quickFilters virtuais). Usado pelo `<ExportButton>` para que o XLSX
+   * inclua exatamente as condições aplicadas — não apenas as do filterState.
+   */
+  exportConditionGroup?: ConditionGroup;
+  /**
+   * v0.32 F9: filtro Documento (cpf/cnpj/none) aplicado na tabela. Propagado
+   * ao `<ExportButton>` para incluí-lo no XLSX.
+   */
+  exportDocumentTypes?: DocumentTypeFilter[];
 }
 
 export function AdvancedFilters({
@@ -142,6 +154,8 @@ export function AdvancedFilters({
   tableRowCount,
   searchClient,
   onSearchClientChange,
+  exportConditionGroup,
+  exportDocumentTypes,
 }: AdvancedFiltersProps) {
   const router = useRouter();
   const { startTransition } = useFilterTransition();
@@ -557,6 +571,10 @@ export function AdvancedFilters({
           accountId={accountId ?? 9}
           rowCount={tableRowCount}
           searchClientActive={searchClient.trim() !== ""}
+          searchClient={searchClient}
+          conditionGroup={exportConditionGroup}
+          documentTypes={exportDocumentTypes}
+          sortStack={sortStack}
         />
       </div>
 

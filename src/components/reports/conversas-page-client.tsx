@@ -168,6 +168,8 @@ export function ConversasPageClient({
           tableRowCount={initialRows.length}
           searchClient={searchClient}
           onSearchClientChange={setSearchClient}
+          exportConditionGroup={composedConditionGroup}
+          exportDocumentTypes={filterState.documentTypes}
         />
       </div>
 
