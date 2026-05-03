@@ -348,7 +348,7 @@ describe("ConsumoContent — refactor T6d v0.16.0", () => {
     ).toBeInTheDocument();
   });
 
-  it("T4: linha total tem visual sutil (bg-muted/30) — sem violet, sem Sigma, sem (N)", async () => {
+  it("T4 v0.26: linha total destaque (bg-violet-500/5 dark:/10 + font-bold + text-sm + sem Sigma + sem N)", async () => {
     const { container } = render(
       <ConsumoContent minDate="2026-01-01T00:00:00.000Z" />,
     );
@@ -360,16 +360,18 @@ describe("ConsumoContent — refactor T6d v0.16.0", () => {
     const totalRow = totalLabel.closest("tr");
     expect(totalRow).not.toBeNull();
 
-    // Classe sutil nova.
-    expect(totalRow!.className).toMatch(/bg-muted\/30/);
-    expect(totalRow!.className).toMatch(/font-semibold/);
-    expect(totalRow!.className).toMatch(/uppercase/);
+    // v0.26: Total destaque com bg violet sutil + font-bold + text-sm + border-border/60.
+    expect(totalRow!.className).toMatch(/bg-violet-500\/5/);
+    expect(totalRow!.className).toMatch(/dark:bg-violet-500\/10/);
+    expect(totalRow!.className).toMatch(/font-bold/);
+    expect(totalRow!.className).toMatch(/text-sm/);
+    expect(totalRow!.className).toMatch(/border-border\/60/);
 
-    // Não deve mais ter violet nem font-bold.
-    expect(totalRow!.className).not.toMatch(/bg-violet-500\/15/);
-    expect(totalRow!.className).not.toMatch(/font-bold/);
+    // Não deve mais ter uppercase/font-semibold (era v0.24, agora v0.26 destaque).
+    expect(totalRow!.className).not.toMatch(/uppercase/);
+    expect(totalRow!.className).not.toMatch(/font-semibold/);
 
-    // Sigma removido da linha total.
+    // Sigma removido da linha total (mantém de v0.24).
     expect(container.querySelector(".lucide-sigma")).toBeNull();
 
     // Label sem "(N)" — só "Total no filtro" puro.

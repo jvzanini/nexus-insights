@@ -1,12 +1,24 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-05-03
-**Versão atual em produção:** v0.25.0
+**Versão atual em produção:** v0.26.0
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.25.0)
+## Em produção (v0.26.0)
+
+### Release v0.26.0 (2026-05-03) — Suite Agente Nex Polish v3
+
+Polimento dirigido por feedback do super_admin nos 4 submenus do Agente Nex. Workflow rigoroso (plan v1→v2→v3 com 28 achados em 2 pentes-finos REAIS · subagent-driven-development com TDD · ui-ux-pro-max em toda task UI · two-stage review automático após cada task). 14 commits granulares · todos tests verde · typecheck 0 erros · sem schema change destrutivo.
+
+**Configuração:** Reorg em 4 sections (Toggle Nex / LLM+ações inline / USD ticker reativo / Spread destacado violet card). `UsdRateTicker` novo client-side com auto-refresh hourly + manual + badge fonte (live/cache/fallback). Server Action `getCurrentUsdBrlRateAction` super_admin-gated. Dialog primitive ganha prop `overlayClassName` opcional pra override de z-index.
+
+**Prompt:** `IDENTITY_BASE` anti-Chatwoot (regra "Nunca use 'Chatwoot'" + sempre "Nexus Chat") + máximo 3 frases por resposta. Backfill idempotente removendo guardrail "Sempre cite a fonte do número" via flag `seeded_v2_at` (match EXATO preserva customs). `PromptPreviewCard` com collapse oculto default + remoção do Maximizar + Editar **só super_admin** (Dialog max-edit com PromptConfigForm dentro + onSaved callback). Help text dos guardrails atualizado.
+
+**Playground:** Botão "Abrir playground" destacado (variant=default violet + Sparkles + ring + min-h-44). PlaygroundSheet input bar refatorada igual à bubble (`nex-chat-panel`): Mic externo + inner area unificada + Send violet gradient + AudioRecorder embedded + transcribe API. `submitMessage(text)` único helper elimina closure stale. **Fix crítico:** Dialog "Ver prompt usado" agora com z-[60] (content + overlay) — abre POR CIMA do Sheet (era bug onde ficava por trás).
+
+**Consumo:** DonutWithCenter defaults bumped (innerR 60→80 / outerR 80→120 / height 320→360 — mais respiro). Total no filtro destaque (text-sm + bg-violet-500/5 dark:/10 + font-bold + border-border/60). CustomBarTick case-mixed (OpenAI/Anthropic/Gemini/OpenRouter — sem `.toUpperCase`; letterSpacing 0.3; largura length*6+14). `PROVIDER_LABELS.gemini` "Google Gemini" → "Gemini". `transcribe.ts` console.warn agora inclui body do erro 4xx do gpt-4o-mini-transcribe (debug em prod do motivo do fallback whisper-1).
 
 ### Release v0.25.0 (2026-05-03) — Conversas Polish + busca client-side global
 

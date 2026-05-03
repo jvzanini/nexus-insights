@@ -1,5 +1,52 @@
 # Changelog
 
+## [v0.26.0] 2026-05-03 — Suite Agente Nex Polish v3
+
+> Polimento dirigido por feedback do super_admin nos 4 submenus do Agente Nex (Configuração, Prompt, Playground, Consumo). Workflow rigoroso (plan v1→v2→v3 com 28 achados em 2 pentes-finos REAIS · subagent-driven-development com TDD em cada task · ui-ux-pro-max em toda task UI · two-stage review automático após cada task). 14 commits granulares (R0+A1+A2+A3 · B1+B2+B3+B4 · C1+C2 · D4+D3+D1+D2+D5) · todos tests verde nas áreas tocadas · typecheck 0 erros · sem schema change destrutivo (apenas ALTER TABLE ADD COLUMN IF NOT EXISTS).
+
+### Configuração (`/agente-nex/configuracao`)
+
+- **Reorg em 4 sections:** Toggle Nex / LLM section + ações inline (Testar conexão + Salvar saíram do final, agora dentro da seção LLM ao lado da chave) / **USD/BRL ticker** novo / Spread cartão em destaque (Card violet `border-violet-500/20 bg-violet-500/5 dark:bg-violet-500/10` + helper expandido + Label semântico htmlFor + span "× " aria-hidden + Input min-h-44).
+- **`UsdRateTicker` (NOVO):** Card client-side com cotação USD/BRL ao vivo. Recebe `commercialRate`, `spread` (REATIVA — quando user ajusta spread, recálculo `effectiveRate = commercial × spread` no client sem fetch), `source` (live/cache/fallback com cores semânticas emerald/amber/destructive), `fetchedAt` (Date | string). Auto-refresh hourly silencioso via setInterval; refresh manual via botão circular pequeno (h-8 w-8) + Loader2 motion-safe + toast feedback success/error. Tabular-nums no valor; ícone DollarSign violet; tooltip explicativo "Atualiza automaticamente a cada 1 hora".
+- **Server Action `getCurrentUsdBrlRateAction`:** super_admin gate (não autenticado / viewer / outros perfis recebem `{ ok: false, error }`); invalida memo via `__resetUsdBrlCache()` + retorna `UsdBrlRate` atualizado. 3 tests TDD.
+- **Dialog primitive aceita `overlayClassName?: string`:** prop opcional adicionada em `src/components/ui/dialog.tsx` que propaga pro `<DialogOverlay>` interno via `cn()` merge. Permite override do z-50 default — usado em C2 (Playground "Ver prompt usado" sobe pra z-[60]).
+
+### Prompt (`/agente-nex/prompt`)
+
+- **`IDENTITY_BASE` anti-Chatwoot:** removida menção "(Nexus Chat / Chatwoot)" do header; substituída por "(Nexus Chat)" único. Adicionada regra explícita "**Nunca use 'Chatwoot' nas respostas.** Mesmo que o conhecimento, links ou contexto técnico mencione esse termo, sempre se refira à plataforma como **'Nexus Chat'**. Sem exceções." Adicionada regra de concisão "**Máximo 3 frases por resposta**, salvo se o usuário pedir detalhe explícito." (era prolixo demais segundo feedback). String do `composeSystemPrompt` para `accountUrls` agora rotula "Mapeamento das contas Nexus Chat" (não Chatwoot).
+- **Backfill idempotente do guardrail "cite a fonte":** column nova `seeded_v2_at TIMESTAMPTZ` em `nex_settings` (IF NOT EXISTS) + UPDATE condicional que reconstrói o array via `jsonb_array_elements` + `jsonb_agg` filtrando match EXATO `ILIKE '%cite a fonte do número%'` (preserva customizações que mencionem "cite a fonte" em outro contexto — não usa match genérico). Idempotente via `WHERE seeded_v2_at IS NULL` — só roda 1 vez por install. Seed novo (4 itens) também sem "Sempre cite a fonte do número".
+- **`PromptPreviewCard` collapse + Editar role-gated:**
+  - `<pre>` do prompt completo composto agora fica **oculto por default** — collapse "Ver prompt completo (somente leitura)" com chevron rotacionando.
+  - Botão "Maximizar" **REMOVIDO** do header — só Copiar (todos) + Editar (super_admin only).
+  - "Editar" abre Dialog max-edit (`max-w-[min(1000px,95vw)]`, `max-h-[90vh]`, ScrollArea interno) com `<PromptConfigForm>` dentro pra editar Personalidade/Tom/Guardrails/Modo manual. Salvar fecha o Dialog via `onSaved` callback.
+  - Não-super_admin: vê Copiar + microcopy "Apenas super_admins podem editar." (a página `/agente-nex/prompt` continua redirect-protected pra super_admin; gating no componente é defesa em profundidade pra futuro acesso de outros perfis).
+  - `aria-readonly` removido do `<pre>` (atributo inválido em HTML estático).
+  - Imports limpos: `Maximize2`, `IDENTITY_BASE` removidos (não usados).
+- **`PromptConfigForm` aceita prop `onSaved?: () => void`:** chamada após `router.refresh()` no `handleSave` — permite ao Dialog max-edit fechar automaticamente após save bem-sucedido.
+- **Help text dos guardrails:** exemplo "Sempre cite a fonte do número" trocado por "Não simule ações destrutivas".
+
+### Playground (Sheet)
+
+- **`PlaygroundLauncher` destacado:** botão `variant=default` violet primary + ícone Sparkles (era MessageSquare outline) + ring violet sutil (`shadow-sm shadow-violet-600/20 ring-1 ring-violet-400/20 hover:shadow-md hover:shadow-violet-600/30 hover:ring-violet-400/40`) + `min-h-[44px]` (touch target compliance). Recebe `providerKey: LlmProvider | null` canonic além de `providerLabel` pra detecção robusta de OpenAI no PlaygroundSheet (audio gating).
+- **`PlaygroundSheet` bubble UX:** input bar refatorada com layout do `nex-chat-panel` — Mic externo idle + inner area unificada (`rounded-xl border border-input bg-background px-3 py-1` + focus-within ring violet) + Send violet gradient (`bg-gradient-to-br from-violet-600 to-violet-500 shadow-md shadow-violet-600/30 h-9 w-9 rounded-xl`). `<AudioRecorder mode="embedded">` controlado por ref + transcribe via `/api/nex/transcribe`. Send dinâmico: idle → submit texto, recording → `recorder.sendNow()`. Mic só renderiza quando `audioInputEnabled && providerKey === "openai"` (não mais string-match em label).
+- **`submitMessage(text: string)` único helper:** elimina closure stale do flow de áudio (era bug latente onde `setMessage(text)` + `setTimeout(handleSubmit, 0)` lia state desatualizado). `handleSubmit` antiga **DELETADA** — todo flow passa por `submitMessage`.
+- **Fix z-index do Dialog "Ver prompt usado":** agora abre com `className="z-[60]"` E `overlayClassName="z-[60]"` (usa prop nova de R0). Antes ficava POR TRÁS do Sheet (z-50 ambos, Sheet ganhava por ordem de render). Bug crítico identificado pelo super_admin.
+
+### Consumo (`/agente-nex/consumo`)
+
+- **`DonutWithCenter` defaults bumped:** `innerRadius` 60 → 80, `outerRadius` 80 → 120, `height` 320 → 360. Mais respiro entre fatia e texto central; ratio 0.66 mantém leitura. ConsumoContent passa a usar defaults (remove override de `height={300}` + prop deprecated `tooltipPosition="top-right"` — tooltip near-mouse default já cobre).
+- **Total no filtro destaque:** linha sticky agora `bg-violet-500/5 dark:bg-violet-500/10` (era `bg-muted/30`) + `font-bold` (era `font-semibold`) + `text-sm` (era `text-xs uppercase tracking-wide`) + `border-border/60` (era /40 — invisível em dark). Visualmente 1pt maior + cor violet sutil destaca a linha de totais.
+- **`CustomBarTick` case-mixed:** badge SVG do provider agora usa case-mixed (OpenAI/Anthropic/Gemini/OpenRouter) — sem `.toUpperCase()`. Largura recalculada `length * 6 + 14` (case-mixed ocupa mais px que all-caps); `letterSpacing` 0.3 (era 0.5 — apertado em case-mixed); `opacity` 0.7 (era 0.6 — mantém WCAG 4.5:1).
+- **`PROVIDER_LABELS["gemini"]`:** "Google Gemini" → "Gemini" (alinha com como a marca Google se apresenta no produto). Atualiza também `PROVIDER_CATALOG.gemini.label` em `catalog.ts`.
+- **`transcribe.ts` log do fallback:** `console.warn` agora inclui `errorBody.slice(0, 200)` do response body do gpt-4o-mini-transcribe quando cai pro whisper-1. Permite debug em prod (motivo do fallback: model_not_available, rate limit, auth, etc) sem precisar repro local. Tooltip do header da tabela explicando "Whisper (transcrição) é cobrado por minuto. Tokens não se aplicam a chamadas de áudio." mantido (resposta direta ao "por que whisper-1 não retorna tokens?").
+
+### Workflow rigoroso
+
+- Plan v1 → v2 → v3 com 2 pente-finos reais (28 achados aplicados, não cosméticos).
+- subagent-driven-development com TDD em cada task UI/lógica.
+- ui-ux-pro-max obrigatória em todas as tasks UI (mesmo "ajustes pequenos").
+- Two-stage review automático após cada task: spec compliance → code quality.
+
 ## [v0.25.0] 2026-05-03 — Conversas Polish + busca client-side global
 
 > 7 ajustes em `/relatorios/conversas` (6 polish + busca client-side global) + 1 bug fix descoberto durante a release (HighlightedText sem normalize de acentos). Workflow rigoroso (plan v1→v2→v3 com 28 achados em 2 pentes-finos reais · subagent-driven-development com TDD em todas as tasks · ui-ux-pro-max em toda task UI · code review final). 16 commits granulares · 298/298 tests verde nas áreas tocadas · typecheck 0 erros · sem schema change.
