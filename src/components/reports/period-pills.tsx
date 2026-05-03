@@ -201,7 +201,7 @@ function PickerPanel({
         onSelect={setRange}
         locale={ptBR}
         numberOfMonths={isMobile ? 1 : 2}
-        defaultMonth={range?.from ?? minDate}
+        defaultMonth={range?.from ?? today}
         disabled={disabledMatcher}
         startMonth={minDate}
         endMonth={today}
