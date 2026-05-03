@@ -688,19 +688,27 @@ export async function dashboardData(args: DashboardDataInput) {
           // que a query retorna valores inconsistentes entre granularities,
           // o fix vai pra hotfix v0.22.1.
           if (process.env.NODE_ENV !== "test") {
-            console.log("[dashboardData diag G2]", {
+            console.log("[dashboardData diag G2 v2]", {
               accountId: args.accountId,
               granularity,
               rangeStart: args.period.start.toISOString(),
               rangeEnd: args.period.end.toISOString(),
               chartLen: data.chart.length,
-              chartFirstBucket: data.chart[0]?.bucket,
-              chartLastBucket: data.chart[data.chart.length - 1]?.bucket,
-              chartTotalReceived: data.chart.reduce(
-                (acc, r) => acc + r.received,
-                0,
-              ),
               kpiReceived: received,
+              kpiOpen: open,
+              kpiResolved: resolved,
+              chartTotalReceived: data.chart.reduce((a, r) => a + r.received, 0),
+              chartTotalOpen: data.chart.reduce((a, r) => a + r.open, 0),
+              chartTotalResolved: data.chart.reduce((a, r) => a + r.resolved, 0),
+              chartTotalPending: data.chart.reduce((a, r) => a + r.pending, 0),
+              // Dump por bucket (max 35 entries cobre janela mensal)
+              chartBuckets: data.chart.slice(0, 35).map((b) => ({
+                bucket: b.bucket,
+                received: b.received,
+                open: b.open,
+                resolved: b.resolved,
+                pending: b.pending,
+              })),
             });
           }
 
