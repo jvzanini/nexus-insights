@@ -179,11 +179,9 @@ export function AppliedFiltersChips({
     });
   }
   if (applied.labelIds.length) {
-    // Mostra apenas a contagem porque os nomes das etiquetas podem ser
-    // longos e poluir o toolbar — o detalhamento é visto no <FiltersDialog>.
     chips.push({
       key: "labelIds",
-      label: `Etiquetas (${applied.labelIds.length})`,
+      label: summarize("Etiquetas", applied.labelIds, meta.labels ?? []),
     });
   }
 

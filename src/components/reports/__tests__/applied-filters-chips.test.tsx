@@ -191,18 +191,35 @@ describe("AppliedFiltersChips", () => {
     expect(screen.getByText(/Status: Resolvida/)).toBeInTheDocument();
   });
 
-  it("renderiza chip de Etiquetas com contagem quando há labelIds", () => {
-    const onRemove = jest.fn();
+  it("Etiquetas seguem padrão summarize (sem parênteses)", () => {
     render(
       <AppliedFiltersChips
-        meta={META}
-        applied={makeApplied({ labelIds: [1, 2, 3] })}
-        onRemove={onRemove}
+        meta={{
+          inboxes: [],
+          teams: [],
+          assignees: [],
+          labels: [
+            { id: 1, name: "hg" },
+            { id: 2, name: "vip" },
+            { id: 3, name: "novo" },
+            { id: 4, name: "bloqueado" },
+          ],
+        }}
+        applied={{ ...EMPTY_FILTER_STATE, labelIds: [1, 2, 3, 4] }}
+        onRemove={() => {}}
         onClearAll={() => {}}
+        onRemoveOne={() => {}}
       />,
     );
-    expect(screen.getByText(/Etiquetas \(3\)/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Remover Etiquetas/ }));
-    expect(onRemove).toHaveBeenCalledWith("labelIds");
+    expect(screen.queryByText(/Etiquetas \(4\)/)).toBeNull();
+    // "Etiquetas: hg" + "+3" são spans separados — verificar texto agregado
+    // do botão (popover trigger).
+    const trigger = screen
+      .getAllByRole("button")
+      .find((b) => /Etiquetas: hg/.test(b.textContent ?? ""));
+    expect(trigger).toBeTruthy();
+    expect(trigger?.textContent).toMatch(/Etiquetas: hg/);
+    expect(trigger?.textContent).toMatch(/\+3/);
   });
+
 });
