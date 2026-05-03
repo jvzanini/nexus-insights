@@ -45,6 +45,7 @@ import {
   diffFilterStates,
   isFilterStateEqual,
   serializeFilterState,
+  type DocumentTypeFilter,
   type FilterState,
 } from "@/lib/reports/filter-state";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
@@ -193,8 +194,9 @@ export function AdvancedFilters({
       applied.statuses.length +
       applied.priorities.length +
       applied.labelIds.length +
+      (applied.documentTypes ?? []).length +
       (applied.mode === "advanced" &&
-      applied.conditionGroup?.conditions?.length
+      applied.conditionGroup?.items?.length
         ? 1
         : 0),
     [applied],
@@ -260,6 +262,7 @@ export function AdvancedFilters({
       statuses: [],
       priorities: [],
       labelIds: [],
+      documentTypes: [],
       conditionGroup: undefined,
     };
     setApplied(next);
@@ -321,6 +324,9 @@ export function AdvancedFilters({
         case "labelIds":
           next.labelIds = [];
           break;
+        case "documentTypes":
+          next.documentTypes = [];
+          break;
         default:
           return;
       }
@@ -354,6 +360,21 @@ export function AdvancedFilters({
         case "priorities":
           next.priorities = applied.priorities.filter((x) => x !== id);
           break;
+        case "documentTypes": {
+          // O popover entrega o id numérico (1=cpf, 2=cnpj, 3=none); converte
+          // de volta para DocumentTypeFilter antes de remover.
+          const idToType: Record<number, DocumentTypeFilter | undefined> = {
+            1: "cpf",
+            2: "cnpj",
+            3: "none",
+          };
+          const targetType = idToType[id];
+          if (!targetType) return;
+          next.documentTypes = (applied.documentTypes ?? []).filter(
+            (t) => t !== targetType,
+          );
+          break;
+        }
         default:
           return;
       }

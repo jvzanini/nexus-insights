@@ -11,6 +11,7 @@ import {
   Activity,
   AlertCircle,
   Building2,
+  FileText,
   Filter,
   Inbox,
   RotateCcw,
@@ -40,6 +41,7 @@ import {
 import {
   diffFilterStates,
   isFilterStateEqual,
+  type DocumentTypeFilter,
   type FilterState,
 } from "@/lib/reports/filter-state";
 import type { MetaItem } from "@/lib/chatwoot/queries/meta-cache";
@@ -59,13 +61,35 @@ const PRIORITY_OPTIONS: MetaItem[] = [
   { id: 3, name: "Baixa" },
 ];
 
+// Documento: 3 opções binárias mapeadas pra DocumentTypeFilter.
+// MultiSelectCheckbox espera ids numéricos, então mantemos um mapping
+// interno bijetor (id ↔ string literal).
+const DOC_OPTIONS: MetaItem[] = [
+  { id: 1, name: "Com CPF" },
+  { id: 2, name: "Com CNPJ" },
+  { id: 3, name: "Sem documento" },
+];
+
+const ID_TO_DOC_TYPE: Record<number, DocumentTypeFilter | undefined> = {
+  1: "cpf",
+  2: "cnpj",
+  3: "none",
+};
+
+const DOC_TYPE_TO_ID: Record<DocumentTypeFilter, number> = {
+  cpf: 1,
+  cnpj: 2,
+  none: 3,
+};
+
 type SimpleSectionKey =
   | "inboxIds"
   | "teamIds"
   | "assigneeIds"
   | "statuses"
   | "priorities"
-  | "labelIds";
+  | "labelIds"
+  | "documentTypes";
 
 // Monta a lista de campos do query builder com base nos metadados disponíveis.
 // Cada campo declara seu tipo (string|number|select|multi_select|date) que dita
@@ -222,18 +246,20 @@ export function FiltersDialog({
       statuses: [],
       priorities: [],
       labelIds: [],
+      documentTypes: [],
     }));
   }
 
   // Botão "Limpar todos" só faz sentido quando há ao menos um filtro selecionado
-  // entre os 6 arrays do dialog (independe de período/mode).
+  // entre os 7 arrays do dialog (independe de período/mode).
   const hasAnyFilter =
     draft.inboxIds.length > 0 ||
     draft.teamIds.length > 0 ||
     draft.assigneeIds.length > 0 ||
     draft.statuses.length > 0 ||
     draft.priorities.length > 0 ||
-    draft.labelIds.length > 0;
+    draft.labelIds.length > 0 ||
+    (draft.documentTypes ?? []).length > 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -258,8 +284,12 @@ export function FiltersDialog({
             className="flex min-h-0 flex-1 flex-col"
           >
             <TabsList>
-              <TabsTrigger value="simple">Simples</TabsTrigger>
-              <TabsTrigger value="advanced">Avançado</TabsTrigger>
+              <TabsTrigger value="simple" className="cursor-pointer">
+                Simples
+              </TabsTrigger>
+              <TabsTrigger value="advanced" className="cursor-pointer">
+                Avançado
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent
@@ -383,6 +413,38 @@ export function FiltersDialog({
                   value={draft.labelIds}
                   onChange={(v) => update("labelIds", v)}
                   emptyLabel="Nenhuma etiqueta disponível."
+                  inline
+                />
+              </CollapsibleSection>
+
+              <CollapsibleSection
+                title="Documento"
+                count={(draft.documentTypes ?? []).length}
+                open={openSection === "documentTypes"}
+                onOpenChange={makeSectionToggle("documentTypes")}
+                icon={
+                  <FileText
+                    className="h-4 w-4 text-muted-foreground"
+                    aria-hidden
+                  />
+                }
+              >
+                <MultiSelectCheckbox
+                  label="Documento"
+                  options={DOC_OPTIONS}
+                  value={(draft.documentTypes ?? []).map(
+                    (t) => DOC_TYPE_TO_ID[t],
+                  )}
+                  onChange={(ids) =>
+                    update(
+                      "documentTypes",
+                      ids
+                        .map((id) => ID_TO_DOC_TYPE[id])
+                        .filter(
+                          (t): t is DocumentTypeFilter => t !== undefined,
+                        ),
+                    )
+                  }
                   inline
                 />
               </CollapsibleSection>

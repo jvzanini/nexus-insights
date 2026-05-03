@@ -3,7 +3,10 @@
 import { ArrowDown, ArrowUp, X, Zap } from "lucide-react";
 
 import { FilterChipListPopover } from "@/components/reports/filter-chip-list-popover";
-import type { FilterState } from "@/lib/reports/filter-state";
+import type {
+  DocumentTypeFilter,
+  FilterState,
+} from "@/lib/reports/filter-state";
 import type { MetaItem } from "@/lib/chatwoot/queries/meta-cache";
 import type {
   SortRule,
@@ -73,6 +76,31 @@ const PRIORITY_LABELS: Record<number, string> = {
   3: "Baixa",
 };
 
+// Documento: mantém um mapping bijetor entre id numérico (consumido por
+// summarize/popover de chip +N) e DocumentTypeFilter (storage no
+// FilterState). Mantido sincronizado com FiltersDialog.
+const DOC_TYPE_LABELS: Record<number, string> = {
+  1: "Com CPF",
+  2: "Com CNPJ",
+  3: "Sem documento",
+};
+
+const DOC_TYPE_TO_ID_LOCAL: Record<DocumentTypeFilter, number> = {
+  cpf: 1,
+  cnpj: 2,
+  none: 3,
+};
+
+const ID_TO_DOC_TYPE_LOCAL: Record<number, DocumentTypeFilter | undefined> = {
+  1: "cpf",
+  2: "cnpj",
+  3: "none",
+};
+
+function docTypesToIds(types: DocumentTypeFilter[]): number[] {
+  return types.map((t) => DOC_TYPE_TO_ID_LOCAL[t]);
+}
+
 function summarize(
   label: string,
   ids: number[],
@@ -130,6 +158,9 @@ function resolveItems(
   if (key === "priorities") {
     return ids.map((id) => ({ id, name: PRIORITY_LABELS[id] ?? `${id}` }));
   }
+  if (key === "documentTypes") {
+    return ids.map((id) => ({ id, name: DOC_TYPE_LABELS[id] ?? `${id}` }));
+  }
   return [];
 }
 
@@ -182,6 +213,13 @@ export function AppliedFiltersChips({
     chips.push({
       key: "labelIds",
       label: summarize("Etiquetas", applied.labelIds, meta.labels ?? []),
+    });
+  }
+  if (applied.documentTypes && applied.documentTypes.length) {
+    const docIds = docTypesToIds(applied.documentTypes);
+    chips.push({
+      key: "documentTypes",
+      label: summarize("Documento", docIds, DOC_TYPE_LABELS),
     });
   }
 
@@ -249,6 +287,8 @@ export function AppliedFiltersChips({
               return applied.priorities;
             case "labelIds":
               return applied.labelIds;
+            case "documentTypes":
+              return docTypesToIds(applied.documentTypes ?? []);
             default:
               return [];
           }

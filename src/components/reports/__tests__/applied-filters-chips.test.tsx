@@ -191,6 +191,50 @@ describe("AppliedFiltersChips", () => {
     expect(screen.getByText(/Status: Resolvida/)).toBeInTheDocument();
   });
 
+  it("renderiza chip Documento quando documentTypes preenchido (1 tipo)", () => {
+    render(
+      <AppliedFiltersChips
+        meta={META}
+        applied={makeApplied({ documentTypes: ["cpf"] })}
+        onRemove={() => {}}
+        onClearAll={() => {}}
+      />,
+    );
+    expect(screen.getByText(/Documento: Com CPF/)).toBeInTheDocument();
+  });
+
+  it("renderiza chip Documento com sufixo +N quando 2+ tipos", () => {
+    const onRemoveOne = jest.fn();
+    render(
+      <AppliedFiltersChips
+        meta={META}
+        applied={makeApplied({ documentTypes: ["cpf", "cnpj"] })}
+        onRemove={() => {}}
+        onClearAll={() => {}}
+        onRemoveOne={onRemoveOne}
+      />,
+    );
+    const trigger = screen
+      .getAllByRole("button")
+      .find((b) => /Documento: Com CPF/.test(b.textContent ?? ""));
+    expect(trigger).toBeTruthy();
+    expect(trigger?.textContent).toMatch(/\+1/);
+  });
+
+  it("X do chip Documento chama onRemove('documentTypes')", () => {
+    const onRemove = jest.fn();
+    render(
+      <AppliedFiltersChips
+        meta={META}
+        applied={makeApplied({ documentTypes: ["none"] })}
+        onRemove={onRemove}
+        onClearAll={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Remover Documento/ }));
+    expect(onRemove).toHaveBeenCalledWith("documentTypes");
+  });
+
   it("Etiquetas seguem padrão summarize (sem parênteses)", () => {
     render(
       <AppliedFiltersChips
