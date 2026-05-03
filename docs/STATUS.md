@@ -1,12 +1,20 @@
 # Status — Nexus Insights
 
-**Última atualização:** 2026-05-02
-**Versão atual em produção:** v0.22.0
+**Última atualização:** 2026-05-03
+**Versão atual em produção:** v0.24.0
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.22.0)
+## Em produção (v0.24.0)
+
+### Release v0.24.0 (2026-05-03) — Suite Agente Nex Polish v2
+
+Polish dirigido por feedback do super_admin (após v0.20.0 LIVE) na Suite Agente Nex. Workflow rigoroso (spec v3 com 25 achados em pente-fino + plan v3 com 9 tasks TDD + ui-ux-pro-max em todas as tasks UI). 6 commits granulares · 1311 testes PASS · typecheck 0 erros · sem schema change.
+
+**A. Consumo do Agente Nex** — `EmptyConsumoState` removido (dashboard SEMPRE renderiza zerado, com KPIs "0", `EmptyChartState` nos gráficos e "Nenhuma chamada no período." na tabela; tela "Ir para Configurações" escondia o dashboard inteiro); donut volta à espessura padrão (`innerRadius` 60 + `outerRadius` 80) + centro com `px-6` para respiro; tooltip do donut segue o cursor (default Recharts + `offset={12}`, removido `position={{x:0,y:0}}` que prendia no top-right; prop `tooltipPosition` marcada `@deprecated`); bar chart com Badge SVG (rect transparent + stroke opacity 0.3 + text uppercase opacity 0.6, largura dinâmica) substitui `(OpenAI)` entre parênteses; linha total sutil (`bg-muted/30` + `text-xs uppercase font-semibold` + label "Total no filtro" puro, troca o destaque violet+Sigma+contagem); `<ChevronRight>` opacity 0 → 60 no hover indica clicabilidade nas linhas; tooltip explicativo na cotação USD→BRL (`cursor-help` + `underline decoration-dotted` + `title` citando AwesomeAPI cache 4h + spread cartão).
+
+**B. Bubble do Agente Nex** — drill-down de chamada `whisper-1` cita "(legado)" + redireciona pra `gpt-4o-mini-transcribe` (v0.20+) + aponta runbook `agente-nex-audio-e-kb-url.md`; hint "Enter envia · Shift+Enter quebra linha" usa `invisible` (não `null`) na transição idle ↔ gravando, preservando altura do container e eliminando reflow do componente; AudioPlayer speed button ganha `min-w-[44px]` para acomodar todos os labels (1×, 1.25×, 1.5×, 1.75×, 2×) sem stretch — não vaza mais para fora do balão violet.
 
 ### Release v0.22.0 (2026-05-02) — Dashboard Polish
 

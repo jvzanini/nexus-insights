@@ -1,5 +1,31 @@
 # Changelog
 
+## [v0.24.0] 2026-05-03 — Suite Agente Nex Polish v2
+
+> Polish dirigido por feedback do super_admin (após v0.20.0 LIVE): remove tela de empty state que escondia o dashboard, donut volta espessura original com tooltip near-mouse, bar tag estilo Badge sem cor, linha total mais sutil + setinha hover indica clicabilidade, cotação tooltip explicativo, Whisper nota refinada citando legado, input bar layout estável, AudioPlayer speed button respeita margem. Spec v3 (25 achados pente-fino) + plan v3 (9 tasks TDD) + ui-ux-pro-max em todas tasks UI.
+
+### A. Consumo do Agente Nex
+
+- **EmptyConsumoState removido**: `/agente-nex/consumo` agora SEMPRE renderiza dashboard zerado (KPIs "0", gráficos com `EmptyChartState` existente, tabela com "Nenhuma chamada no período."). Tela "Ir para Configurações" deletada — escondia o dashboard inteiro mesmo quando usuário só queria ver as métricas.
+- **Donut espessura padrão**: `outerRadius` 80 (era 88) + `innerRadius` 60 (era 70) — anel volta à espessura visualmente similar a antes da v0.20. Centro do donut ganha `px-6` para respiro horizontal dos textos.
+- **Donut tooltip near-mouse**: removido `position={{x:0,y:0}}` + `wrapperStyle` fixos. Tooltip agora segue o cursor (default Recharts) com `offset={12}` — não fica mais fixo no canto top-right longe do mouse. `allowEscapeViewBox` mantido para preservar tooltip dentro da tela. Prop `tooltipPosition` marcada `@deprecated` (no-op) para back-compat.
+- **Bar chart Badge SVG**: tag de provider abaixo do nome do modelo agora é Badge estilo (rect transparent + stroke currentColor opacity 0.3 + text uppercase opacity 0.6 fontSize 9 letterSpacing 0.5) — substitui o `(OpenAI)` entre parênteses anterior. Largura calculada dinamicamente (`label.length * 5.5 + 12`).
+- **Linha total sutil**: trocada de `bg-violet-500/15 + border-y-2 violet + bold + Sigma + (N)` para `bg-muted/30 + border-b border-border/40 + text-xs uppercase font-semibold` com label "Total no filtro" puro (sem ícone, sem contagem). Visual integrado com headers secundários da plataforma.
+- **Setinha hover indica clicabilidade**: linhas clicáveis ganham class `group` + `<ChevronRight>` `opacity-0 group-hover:opacity-60 absolute` na first cell — usuário vê visualmente que pode clicar para abrir o drill-down.
+- **Cotação USD→BRL tooltip explicativo**: span com `cursor-help underline-offset-2 underline decoration-dotted` + `title` HTML explicando AwesomeAPI cache 4h + spread cartão aplicado.
+
+### B. Bubble do Agente Nex
+
+- **Whisper nota refinada**: drill-down de chamada `whisper-1` cita "(legado)" + redireciona para `gpt-4o-mini-transcribe` (v0.20+) + aponta runbook `agente-nex-audio-e-kb-url.md`.
+- **Input bar layout estável**: hint "Enter envia · Shift+Enter quebra linha" agora usa `invisible` (não `null`) na transição idle ↔ gravando — preserva altura do container, elimina reflow (componente não treme mais para baixo/cima).
+- **AudioPlayer speed button respeita margem**: `min-w-[44px]` no botão acomoda todos os labels (1×, 1.25×, 1.5×, 1.75×, 2×) sem stretch — não vaza mais pra fora do balão violet.
+
+### Notas técnicas
+- 1311 testes PASS (20 falhas pré-existentes em `integrations-power-bi.test.ts` não relacionadas).
+- typecheck 0 erros.
+- Sem mudança de schema.
+- 6 commits da release (T1+T4 / T2 / T3 / T5 / T6 / T7).
+
 ## [v0.22.0] 2026-05-02 — Dashboard Polish
 
 > Pacote consolidado de polish do `/dashboard` dirigido por feedback visual + bugs reais de dados. Workflow rigoroso (spec v1→v2→v3 com 22 achados em 2 pente-finos + plan v1→v2→v3 com 18 achados + subagent-driven-development com TDD por task + ui-ux-pro-max em todas as tasks UI). 9 commits granulares · 34 testes novos · typecheck verde · suite com 1284 passing (20 falhas pré-existentes em `integrations-power-bi.test.ts` — escopo do agente paralelo).
