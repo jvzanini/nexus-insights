@@ -121,11 +121,11 @@ const STORAGE_PAGE_SIZE_LEGACY = "conversas-table-page-size";
 const COLUMN_WIDTHS: Record<string, string> = {
   expand: "40px",
   display_id: "80px",
-  name: "220px",
+  name: "240px", // v0.29: 220→240
   document: "160px",
-  inbox: "140px",
-  team: "140px",
-  assignee: "140px",
+  inbox: "180px", // v0.29: 140→180 (Estado, sem truncate)
+  team: "160px", // v0.29: 140→160 (Departamento, sem truncate)
+  assignee: "200px", // v0.29: 140→200 (Atendente, sem truncate)
   status: "120px",
   priority: "120px",
   waiting_seconds: "160px",
@@ -273,7 +273,7 @@ const COLUMNS: ColumnDef[] = [
       const name = row.contact.name ?? "—";
       return (
         <span
-          className="block max-w-[220px] truncate text-sm font-medium text-foreground"
+          className="block whitespace-normal break-words text-sm font-medium text-foreground align-top"
           title={name}
         >
           {name}
@@ -314,7 +314,7 @@ const COLUMNS: ColumnDef[] = [
       const name = row.inbox.name ?? "—";
       return (
         <span
-          className="block max-w-[160px] truncate text-xs text-muted-foreground"
+          className="block whitespace-normal break-words text-xs text-muted-foreground align-top"
           title={name}
         >
           {name}
@@ -336,7 +336,7 @@ const COLUMNS: ColumnDef[] = [
       const name = row.team.name ?? "—";
       return (
         <span
-          className="block max-w-[160px] truncate text-xs text-muted-foreground"
+          className="block whitespace-normal break-words text-xs text-muted-foreground align-top"
           title={name}
         >
           {name}
@@ -358,7 +358,7 @@ const COLUMNS: ColumnDef[] = [
       const name = row.assignee.name ?? "—";
       return (
         <span
-          className="block max-w-[160px] truncate text-xs text-muted-foreground"
+          className="block whitespace-normal break-words text-xs text-muted-foreground align-top"
           title={name}
         >
           {name}
@@ -967,9 +967,9 @@ export function ConversasTable({
                       if (col.key === "name") {
                         const name = row.contact.name ?? "—";
                         return (
-                          <TableCell key={col.key}>
+                          <TableCell key={col.key} className="align-top">
                             <span
-                              className="block max-w-[220px] truncate text-sm font-medium text-foreground"
+                              className="block whitespace-normal break-words text-sm font-medium text-foreground align-top"
                               title={name}
                             >
                               <HighlightedText text={name} term={searchTerm} />
@@ -990,9 +990,9 @@ export function ConversasTable({
                       if (col.key === "inbox") {
                         const name = row.inbox.name ?? "—";
                         return (
-                          <TableCell key={col.key}>
+                          <TableCell key={col.key} className="align-top">
                             <span
-                              className="block max-w-[160px] truncate text-xs text-muted-foreground"
+                              className="block whitespace-normal break-words text-xs text-muted-foreground align-top"
                               title={name}
                             >
                               <HighlightedText text={name} term={searchTerm} />
@@ -1003,9 +1003,9 @@ export function ConversasTable({
                       if (col.key === "team") {
                         const name = row.team.name ?? "—";
                         return (
-                          <TableCell key={col.key}>
+                          <TableCell key={col.key} className="align-top">
                             <span
-                              className="block max-w-[160px] truncate text-xs text-muted-foreground"
+                              className="block whitespace-normal break-words text-xs text-muted-foreground align-top"
                               title={name}
                             >
                               <HighlightedText text={name} term={searchTerm} />
@@ -1016,9 +1016,9 @@ export function ConversasTable({
                       if (col.key === "assignee") {
                         const name = row.assignee.name ?? "—";
                         return (
-                          <TableCell key={col.key}>
+                          <TableCell key={col.key} className="align-top">
                             <span
-                              className="block max-w-[160px] truncate text-xs text-muted-foreground"
+                              className="block whitespace-normal break-words text-xs text-muted-foreground align-top"
                               title={name}
                             >
                               <HighlightedText text={name} term={searchTerm} />
@@ -1102,7 +1102,7 @@ export function ConversasTable({
                       searchTerm={searchTerm}
                     />
                   </div>
-                  <h3 className="mt-1 truncate text-sm font-semibold text-foreground">
+                  <h3 className="mt-1 whitespace-normal break-words text-sm font-semibold text-foreground">
                     <HighlightedText text={contactName} term={searchTerm} />
                   </h3>
                 </div>
@@ -1181,7 +1181,7 @@ function Field({ label, value, mono, searchTerm }: FieldProps) {
       </dt>
       <dd
         className={cn(
-          "truncate text-xs text-foreground/90",
+          "whitespace-normal break-words text-xs text-foreground/90",
           mono && "font-mono tabular-nums",
         )}
         title={value}

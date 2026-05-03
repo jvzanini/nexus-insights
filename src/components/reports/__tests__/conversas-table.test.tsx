@@ -306,4 +306,27 @@ describe("ConversasTable v0.25 — pipeline client", () => {
     const marks = container.querySelectorAll("mark");
     expect(marks.length).toBeGreaterThan(0);
   });
+
+  it("colunas Estado/Departamento/Atendente NÃO truncam (v0.29)", () => {
+    const longRow: ConversaRow = {
+      ...baseRow(1, 100),
+      inbox: { id: 1, name: "Distrito Federal Brasília Capital Nacional" },
+      team: { id: 1, name: "Departamento de Atendimento Comercial" },
+      assignee: { id: 1, name: "Maria Eduarda Carvalho Silva Santos" },
+    };
+    const { container } = render(
+      <ConversasTable {...baseProps} initialRows={[longRow]} />,
+    );
+    // Pelo menos um span/dd deve ter whitespace-normal (cells multi-line v0.29).
+    const wraps = container.querySelectorAll(".whitespace-normal");
+    expect(wraps.length).toBeGreaterThan(0);
+    // tbody NÃO deve ter mais .truncate.max-w-[160px] (cells antigas removidas).
+    const tbody = container.querySelector("tbody");
+    if (tbody) {
+      const oldTruncate160 = tbody.querySelectorAll(
+        '.truncate[class*="max-w-[160px]"]',
+      );
+      expect(oldTruncate160.length).toBe(0);
+    }
+  });
 });
