@@ -31,6 +31,8 @@ describe("composeSystemPrompt — accountUrls (v0.26)", () => {
         advancedOverride: null,
         audioInputEnabled: false,
         kbEnabled: false,
+        terminology: {},
+        suggestionsEnabled: false,
       },
       [],
       [{ accountId: 9, publicUrl: "https://chat.example.com", label: "Matrix" }],
@@ -51,6 +53,8 @@ describe("composeSystemPrompt — identityBase override (v0.28)", () => {
         advancedOverride: null,
         audioInputEnabled: false,
         kbEnabled: false,
+        terminology: {},
+        suggestionsEnabled: false,
       },
       [],
       [],
@@ -69,6 +73,8 @@ describe("composeSystemPrompt — identityBase override (v0.28)", () => {
         advancedOverride: null,
         audioInputEnabled: false,
         kbEnabled: false,
+        terminology: {},
+        suggestionsEnabled: false,
       },
       [],
       [],
@@ -86,6 +92,8 @@ describe("composeSystemPrompt — identityBase override (v0.28)", () => {
         advancedOverride: "RAW PROMPT",
         audioInputEnabled: false,
         kbEnabled: false,
+        terminology: {},
+        suggestionsEnabled: false,
       },
       [],
       [],
@@ -93,5 +101,89 @@ describe("composeSystemPrompt — identityBase override (v0.28)", () => {
     expect(out).toBe("RAW PROMPT");
     expect(out).not.toMatch(/custom base/);
     expect(out).not.toMatch(/Você é o Agente Nex —/);
+  });
+});
+
+describe("composeSystemPrompt — terminology (v0.31)", () => {
+  it("injeta seção '## Terminologia' quando cfg.terminology não-vazio", () => {
+    const out = composeSystemPrompt(
+      {
+        identityBase: null,
+        personality: "",
+        tone: "",
+        guardrails: [],
+        advancedOverride: null,
+        audioInputEnabled: false,
+        kbEnabled: false,
+        terminology: { estados: "inboxes", "minha equipe": "agentes" },
+        suggestionsEnabled: false,
+      },
+      [],
+      [],
+    );
+    expect(out).toMatch(/## Terminologia/);
+    expect(out).toMatch(/"estados".*→.*inboxes/);
+    expect(out).toMatch(/"minha equipe".*→.*agentes/);
+  });
+
+  it("NÃO injeta seção quando terminology está vazio", () => {
+    const out = composeSystemPrompt(
+      {
+        identityBase: null,
+        personality: "",
+        tone: "",
+        guardrails: [],
+        advancedOverride: null,
+        audioInputEnabled: false,
+        kbEnabled: false,
+        terminology: {},
+        suggestionsEnabled: false,
+      },
+      [],
+      [],
+    );
+    expect(out).not.toMatch(/## Terminologia/);
+  });
+});
+
+describe("composeSystemPrompt — suggestions_enabled (v0.31)", () => {
+  it("injeta instrução [[suggestions]] quando suggestionsEnabled=true", () => {
+    const out = composeSystemPrompt(
+      {
+        identityBase: null,
+        personality: "",
+        tone: "",
+        guardrails: [],
+        advancedOverride: null,
+        audioInputEnabled: false,
+        kbEnabled: false,
+        terminology: {},
+        suggestionsEnabled: true,
+      },
+      [],
+      [],
+    );
+    expect(out).toMatch(/## Sugestões clicáveis/);
+    expect(out).toMatch(/\[\[suggestions\]\]:/);
+    expect(out).toMatch(/máximo 4 sugestões/i);
+  });
+
+  it("NÃO injeta instrução quando suggestionsEnabled=false", () => {
+    const out = composeSystemPrompt(
+      {
+        identityBase: null,
+        personality: "",
+        tone: "",
+        guardrails: [],
+        advancedOverride: null,
+        audioInputEnabled: false,
+        kbEnabled: false,
+        terminology: {},
+        suggestionsEnabled: false,
+      },
+      [],
+      [],
+    );
+    expect(out).not.toMatch(/## Sugestões clicáveis/);
   });
 });

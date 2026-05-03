@@ -46,6 +46,10 @@ export interface NexPromptConfig {
   advancedOverride: string | null;
   audioInputEnabled: boolean;
   kbEnabled: boolean;
+  /** v0.31.0: mapa termo→significado pra interpretar nomenclaturas custom do tenant. */
+  terminology: Record<string, string>;
+  /** v0.31.0: quando true, agent oferece sugestões em formato `[[suggestions]]:item|item`. */
+  suggestionsEnabled: boolean;
 }
 
 export interface KbDocSnippet {
@@ -145,6 +149,21 @@ export function composeSystemPrompt(
       .join("\n");
     parts.push(
       `\n\n## URLs públicas das contas\nMapeamento das contas Nexus Chat para a interface pública (use para montar deep-links no formato {publicUrl}/app/accounts/{accountId}/conversations/{conversationId}):\n${bullets}`,
+    );
+  }
+  // v0.31.0: Terminologia custom (mapa termo→significado oficial).
+  if (Object.keys(cfg.terminology).length > 0) {
+    const items = Object.entries(cfg.terminology)
+      .map(([term, mean]) => `- "${term}" → ${mean}`)
+      .join("\n");
+    parts.push(
+      `\n\n## Terminologia\nQuando o usuário usar os termos abaixo, interprete-os como o significado oficial:\n${items}`,
+    );
+  }
+  // v0.31.0: Sugestões clicáveis (parser-friendly sufixo em linha própria).
+  if (cfg.suggestionsEnabled) {
+    parts.push(
+      `\n\n## Sugestões clicáveis\nQuando você identificar 2-4 ações de follow-up úteis e o usuário se beneficiaria de continuar a conversa nessas direções, **inclua exatamente uma linha ao FINAL da sua resposta** no formato:\n\`[[suggestions]]:Sugestão 1|Sugestão 2|Sugestão 3\`\nCada sugestão deve ser uma pergunta curta e clicável (≤ 60 chars). Use no máximo 4 sugestões. NÃO use \`|\` dentro do texto da sugestão (caractere reservado para separador). NÃO use esse formato em todas as respostas — apenas quando fizer sentido oferecer continuidade lógica.`,
     );
   }
   return parts.join("");
