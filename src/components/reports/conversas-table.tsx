@@ -56,17 +56,27 @@ import {
   applyConditions,
   type ConditionGroup,
 } from "@/lib/utils/apply-conditions";
+import { matchSearchClient } from "@/lib/reports/match-search-client";
 import type { FetchConversasInput } from "@/lib/actions/reports/conversas";
 import type { ConversaRow } from "@/lib/chatwoot/queries/conversas-list";
 import type { SortRule } from "@/components/reports/sorting-dialog";
 
 interface ConversasTableProps {
   initialRows: ConversaRow[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
-  onPageChange: (page: number) => void;
+  /**
+   * v0.25: paginação é UI client-side. pageClient é a página atual
+   * controlada pelo parent (ConversasPageClient). pageSizeClient é fixo em
+   * 100 nesse parent — props pra permitir override em testes.
+   */
+  pageClient: number;
+  pageSizeClient: number;
+  onPageClientChange: (page: number) => void;
+  /**
+   * Notificado pelo pipeline client-side com o total de rows após
+   * matchSearchClient + conditionGroup. Permite ao parent atualizar o
+   * `<ExportButton>` e qualquer outro consumidor do count "real".
+   */
+  onFilteredCountChange?: (count: number) => void;
   accountId: number;
   filters: FetchConversasInput["filters"];
   /** Stack de critérios de ordenação controlada pelo parent (toolbar). */
@@ -78,11 +88,11 @@ interface ConversasTableProps {
    */
   conditionGroup?: ConditionGroup;
   /**
-   * Termo de busca atual (vindo do filterState.search). Usado para destacar
-   * (highlight em violet) as ocorrências do termo nas colunas pesquisáveis e
-   * no drill-down. Não filtra — filtragem já aconteceu no servidor.
+   * v0.25: termo de busca client-side instantânea. Usado tanto para FILTRAR
+   * (matchSearchClient) quanto para destacar via HighlightedText (alias
+   * interno `searchTerm` preserva consumers já existentes).
    */
-  searchTerm?: string;
+  searchClient: string;
 }
 
 type SortDirection = "asc" | "desc";
@@ -477,17 +487,20 @@ function SortHeaderIcon({ direction, index, total }: SortHeaderIconProps) {
 
 export function ConversasTable({
   initialRows,
-  total,
-  page,
-  pageSize: _pageSize,
-  totalPages,
-  onPageChange,
+  pageClient,
+  pageSizeClient,
+  onPageClientChange,
+  onFilteredCountChange,
   accountId,
   sortStack,
   onSortStackChange,
   conditionGroup,
-  searchTerm,
+  searchClient,
 }: ConversasTableProps) {
+  // Alias interno — preserva todos os consumers já existentes (OpenIdLink,
+  // HighlightedText em colunas, ConversaDrillDown, Field) que recebem
+  // `searchTerm`. Externamente a prop é searchClient (v0.25).
+  const searchTerm = searchClient;
   const [rows, setRows] = useState<ConversaRow[]>(initialRows);
   const [pending] = useTransition();
   const currentSearchParams = useSearchParams();
@@ -580,17 +593,25 @@ export function ConversasTable({
       }
     };
 
-  // ---- Filtragem client-side por conditionGroup (modo Avançado) -----
+  // ---- Pipeline client-side (v0.25) -----
+  // search → conditionGroup → sort → slice por página. Cada estágio é
+  // useMemo com deps específicas pra evitar invalidate cascateado e manter
+  // 60fps em datasets até 50k.
+  const searchedRows = useMemo(
+    () => matchSearchClient(rows, searchClient),
+    [rows, searchClient],
+  );
+
   const filteredRows = useMemo(() => {
     if (
       !conditionGroup ||
       !conditionGroup.conditions ||
       conditionGroup.conditions.length === 0
     ) {
-      return rows;
+      return searchedRows;
     }
-    return applyConditions(rows, conditionGroup);
-  }, [rows, conditionGroup]);
+    return applyConditions(searchedRows, conditionGroup);
+  }, [searchedRows, conditionGroup]);
 
   // ---- Ordenação aplicada no client (estável). -----
   const sortedRows = useMemo(() => {
@@ -609,6 +630,27 @@ export function ConversasTable({
     });
     return decorated.map((d) => d.row);
   }, [filteredRows, sortStack]);
+
+  // ---- Paginação UI sobre dados hidratados (v0.25) -----
+  const totalFiltered = sortedRows.length;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSizeClient));
+  // Clamp [1, totalPages] evita "página fantasma" quando filtragem encolhe
+  // rows abaixo do offset (ex.: estava em página 5, busca reduz a 2 págs).
+  const safePage = Math.min(Math.max(1, pageClient), totalPages);
+  const pagedRows = useMemo(
+    () =>
+      sortedRows.slice(
+        (safePage - 1) * pageSizeClient,
+        safePage * pageSizeClient,
+      ),
+    [sortedRows, safePage, pageSizeClient],
+  );
+
+  // Notifica o parent sobre o total filtrado — permite ao ExportButton
+  // refletir o contador real e qualquer outro consumer.
+  useEffect(() => {
+    onFilteredCountChange?.(totalFiltered);
+  }, [totalFiltered, onFilteredCountChange]);
 
   // ---- Lista de colunas visíveis (em ordem) -----
   const orderedColumns = useMemo(
@@ -640,7 +682,7 @@ export function ConversasTable({
   // o early return de empty-state acontece DEPOIS.
   const parentRef = useRef<HTMLDivElement>(null);
   const rowVirtualizer = useVirtualizer({
-    count: sortedRows.length,
+    count: pagedRows.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 48,
     overscan: 8,
@@ -658,11 +700,12 @@ export function ConversasTable({
 
   // Toolbar -------------------------------------------------------------------
   // v0.23 T7: contador "Mostrando X-Y de Z" + paginação no TOPO + ColumnsToggle.
-  // Removido o chip "Ordenação · N" (AppliedFiltersChips já cobre).
-  // Layout flex-wrap mobile-first: em telas pequenas as 3 zonas empilham.
+  // v0.25: contador reflete totalFiltered (pipeline client) e paginação consome
+  // safePage/totalPages calculados localmente.
+  const total = totalFiltered;
   const showingFrom =
-    total === 0 ? 0 : (page - 1) * (_pageSize ?? 0) + 1;
-  const showingTo = Math.min(page * (_pageSize ?? 0), total);
+    total === 0 ? 0 : (safePage - 1) * pageSizeClient + 1;
+  const showingTo = Math.min(safePage * pageSizeClient, total);
   const toolbar = (
     <div
       data-tour="pagination-top"
@@ -688,9 +731,9 @@ export function ConversasTable({
         )}
       </span>
       <ConversasPagination
-        page={page}
+        page={safePage}
         totalPages={totalPages}
-        onPageChange={onPageChange}
+        onPageChange={onPageClientChange}
         className="border-t-0 bg-transparent p-0"
       />
       <div data-tour="columns">
@@ -704,8 +747,11 @@ export function ConversasTable({
   );
 
   // Empty state -------------------------------------------------------------
-  if (rows.length === 0) {
+  // v0.25: rows pode estar populado mas searchClient + conditionGroup zerar
+  // o pipeline. Empty state cobre AMBOS os casos via totalFiltered === 0.
+  if (totalFiltered === 0) {
     const hasUrlFilters = currentSearchParams.toString().length > 0;
+    const hasActiveSearch = searchClient.trim().length > 0;
     return (
       <div
         id="conversas-table"
@@ -720,7 +766,9 @@ export function ConversasTable({
             Nenhuma conversa encontrada
           </h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            Ajuste os filtros para ver mais resultados.
+            {hasActiveSearch
+              ? "Nenhum resultado para a busca. Ajuste os filtros ou limpe a busca."
+              : "Ajuste os filtros para ver mais resultados."}
           </p>
           {hasUrlFilters ? (
             <a
@@ -821,7 +869,7 @@ export function ConversasTable({
               </tr>
             ) : null}
             {virtualItems.map((virtualRow) => {
-              const row = sortedRows[virtualRow.index];
+              const row = pagedRows[virtualRow.index];
               if (!row) return null;
               const expanded = expandedIds.has(row.id);
               return (
@@ -987,7 +1035,7 @@ export function ConversasTable({
         }}
         aria-busy={pending}
       >
-        {sortedRows.map((row) => {
+        {pagedRows.map((row) => {
           const phone = getPhoneDisplay(row.contact.phone_number);
           const doc = getDocumentDisplay(row.contact);
           const inboxName = row.inbox.name ?? "—";

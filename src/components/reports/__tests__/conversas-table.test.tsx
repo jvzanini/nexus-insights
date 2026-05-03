@@ -43,23 +43,27 @@ const baseRow = (id: number, display: number): ConversaRow => ({
   labels: [],
 });
 
+// v0.25: paginação é UI client-side, baseProps usa os novos props
+// (pageClient, pageSizeClient, onPageClientChange, onFilteredCountChange,
+// searchClient). pageSize default = 100 (o que ConversasPageClient usa).
 const baseProps = {
   initialRows: [baseRow(1, 100)],
-  total: 1,
-  page: 1,
-  pageSize: 1000,
-  totalPages: 1,
-  onPageChange: jest.fn(),
+  pageClient: 1,
+  pageSizeClient: 100,
+  onPageClientChange: jest.fn(),
+  onFilteredCountChange: jest.fn(),
   accountId: 9,
   filters: { period: { start: new Date(), end: new Date() } } as any,
   sortStack: [],
   onSortStackChange: () => {},
+  searchClient: "",
 };
 
 describe("ConversasTable v3 (paginação)", () => {
   beforeEach(() => {
     localStorage.clear();
-    baseProps.onPageChange = jest.fn();
+    baseProps.onPageClientChange = jest.fn();
+    baseProps.onFilteredCountChange = jest.fn();
   });
 
   it("#ID renderiza como link clicável (a target=_blank)", () => {
@@ -110,38 +114,45 @@ describe("ConversasTable v3 (paginação)", () => {
   });
 
   it("renderiza 'Mostrando X-Y de Z' com formato pt-BR", () => {
+    // v0.25: pageSize=1000 + 1100 rows na primeira página → "1-1.000 de 1.100"
+    const rows = Array.from({ length: 1100 }, (_, i) =>
+      baseRow(i + 1, i + 100),
+    );
     render(
       <ConversasTable
         {...baseProps}
-        initialRows={[baseRow(1, 100), baseRow(2, 101)]}
-        total={7183}
-        page={1}
-        pageSize={1000}
-        totalPages={8}
+        initialRows={rows}
+        pageClient={1}
+        pageSizeClient={1000}
       />,
     );
     expect(screen.getByText(/Mostrando/)).toBeInTheDocument();
     expect(screen.getByText("1-1.000")).toBeInTheDocument();
-    expect(screen.getByText(/7\.183/)).toBeInTheDocument();
+    expect(screen.getByText(/1\.100/)).toBeInTheDocument();
   });
 
   it("'Mostrando X-Y de Z' clampa Y no total na última página", () => {
+    // v0.25: pageSize=1000 com 7183 rows na página 8 → "7.001-7.183"
+    const rows = Array.from({ length: 7183 }, (_, i) =>
+      baseRow(i + 1, i + 100),
+    );
     render(
       <ConversasTable
         {...baseProps}
-        initialRows={[baseRow(1, 100)]}
-        total={7183}
-        page={8}
-        pageSize={1000}
-        totalPages={8}
+        initialRows={rows}
+        pageClient={8}
+        pageSizeClient={1000}
       />,
     );
-    // Última página: de 7001 até 7183 (não 8000).
     expect(screen.getByText("7.001-7.183")).toBeInTheDocument();
   });
 
   it("paginação está no topo (data-tour=pagination-top)", () => {
-    render(<ConversasTable {...baseProps} totalPages={3} />);
+    // v0.25: 250 rows com pageSize=100 → 3 páginas
+    const rows = Array.from({ length: 250 }, (_, i) =>
+      baseRow(i + 1, i + 100),
+    );
+    render(<ConversasTable {...baseProps} initialRows={rows} />);
     const navs = screen.getAllByRole("navigation", { name: /paginação/i });
     expect(navs.length).toBe(1);
     const wrapper = navs[0]!.closest('[data-tour="pagination-top"]');
@@ -149,40 +160,49 @@ describe("ConversasTable v3 (paginação)", () => {
   });
 
   it("não tem paginação no rodapé (somente 1 nav role)", () => {
-    render(<ConversasTable {...baseProps} totalPages={3} />);
+    const rows = Array.from({ length: 250 }, (_, i) =>
+      baseRow(i + 1, i + 100),
+    );
+    render(<ConversasTable {...baseProps} initialRows={rows} />);
     expect(
       screen.getAllByRole("navigation", { name: /paginação/i }).length,
     ).toBe(1);
   });
 
   it("não renderiza ConversasPagination quando totalPages <= 1", () => {
-    render(<ConversasTable {...baseProps} totalPages={1} />);
+    // v0.25: 50 rows com pageSize=100 → 1 página → sem nav.
+    render(<ConversasTable {...baseProps} />);
     expect(
       screen.queryByRole("navigation", { name: /paginação/i }),
     ).not.toBeInTheDocument();
   });
 
-  it("click em página chama onPageChange", () => {
+  it("click em página chama onPageClientChange", () => {
     const cb = jest.fn();
-    render(<ConversasTable {...baseProps} totalPages={3} onPageChange={cb} />);
+    const rows = Array.from({ length: 250 }, (_, i) =>
+      baseRow(i + 1, i + 100),
+    );
+    render(
+      <ConversasTable
+        {...baseProps}
+        initialRows={rows}
+        onPageClientChange={cb}
+      />,
+    );
     fireEvent.click(screen.getByRole("button", { name: /ir para página 2/i }));
     expect(cb).toHaveBeenCalledWith(2);
   });
 
   it("total=0 mostra '0 conversas' no toolbar", () => {
-    render(
-      <ConversasTable
-        {...baseProps}
-        initialRows={[]}
-        total={0}
-        totalPages={0}
-      />,
-    );
+    render(<ConversasTable {...baseProps} initialRows={[]} />);
     expect(screen.getByText(/0 conversas/i)).toBeInTheDocument();
   });
 
   it("não renderiza mais o banner amarelo 'Mostrando primeiras 10000'", () => {
-    render(<ConversasTable {...baseProps} totalPages={50} />);
+    const rows = Array.from({ length: 5000 }, (_, i) =>
+      baseRow(i + 1, i + 100),
+    );
+    render(<ConversasTable {...baseProps} initialRows={rows} />);
     expect(screen.queryByText(/refine os filtros/i)).not.toBeInTheDocument();
   });
 
@@ -190,5 +210,87 @@ describe("ConversasTable v3 (paginação)", () => {
     localStorage.setItem("conversas-table-page-size", "100");
     render(<ConversasTable {...baseProps} />);
     expect(localStorage.getItem("conversas-table-page-size")).toBeNull();
+  });
+});
+
+// =====================================================================
+// v0.25: pipeline client-side (search + paginação UI)
+// =====================================================================
+
+describe("ConversasTable v0.25 — pipeline client", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("filtra por searchClient e mostra contador correto", () => {
+    const rows: ConversaRow[] = [
+      { ...baseRow(1, 11), contact: { ...baseRow(1, 11).contact, name: "Ana" } },
+      {
+        ...baseRow(2, 22),
+        contact: { ...baseRow(2, 22).contact, name: "Beto" },
+      },
+      {
+        ...baseRow(3, 33),
+        contact: { ...baseRow(3, 33).contact, name: "Carlos" },
+      },
+    ];
+    render(
+      <ConversasTable
+        {...baseProps}
+        initialRows={rows}
+        searchClient="ana"
+      />,
+    );
+    expect(screen.getByText("1-1")).toBeInTheDocument();
+    // Total filtrado é 1 → "conversa" (singular). Verifica via label do <span>.
+    const counter = screen.getByText(/Mostrando/i).closest("span");
+    expect(counter?.textContent).toMatch(/Mostrando\s*1-1\s*de\s*1\s*conversa$/);
+  });
+
+  it("paginação client: 250 rows com pageSize=100 → atual=2 mostra 101-200", () => {
+    const rows = Array.from({ length: 250 }, (_, i) =>
+      baseRow(i + 1, i + 100),
+    );
+    render(
+      <ConversasTable
+        {...baseProps}
+        initialRows={rows}
+        pageClient={2}
+        pageSizeClient={100}
+      />,
+    );
+    expect(screen.getByText("101-200")).toBeInTheDocument();
+    // Total fica espalhado em <strong> separado — verifica via textContent
+    // do span pai do "Mostrando" pra evitar match ambíguo com "#250" do link.
+    const counter = screen.getByText(/Mostrando/i).closest("span");
+    expect(counter?.textContent).toMatch(/de\s*250/);
+  });
+
+  it("empty state com search ativa sugere limpar busca", () => {
+    render(
+      <ConversasTable
+        {...baseProps}
+        initialRows={[baseRow(1, 100)]}
+        searchClient="zzznaoexiste"
+      />,
+    );
+    expect(screen.getByText(/limpe a busca/i)).toBeInTheDocument();
+  });
+
+  it("highlight roxo aparece em colunas matched", () => {
+    const { container } = render(
+      <ConversasTable
+        {...baseProps}
+        initialRows={[
+          {
+            ...baseRow(1, 100),
+            contact: { ...baseRow(1, 100).contact, name: "João" },
+          },
+        ]}
+        searchClient="João"
+      />,
+    );
+    const marks = container.querySelectorAll("mark");
+    expect(marks.length).toBeGreaterThan(0);
   });
 });
