@@ -84,6 +84,12 @@ describe("buildPageItems v0.27 (com reticências)", () => {
     expect(buildPageItems(8, 8)).toEqual([1, "ellipsis", 8]));
   it("atual=5 com 8: [1, ellipsis, 5, ellipsis, 8]", () =>
     expect(buildPageItems(5, 8)).toEqual([1, "ellipsis", 5, "ellipsis", 8]));
+  // I1 fix v0.27: ranges colapsados retornam [] no rangeToPages.
+  // Cenários onde a ellipsis adjacente à página atual fica vazia:
+  it("atual=2 com 5: [1, ellipsis, 2, ellipsis, 5] — esquerda colapsa em []", () =>
+    expect(buildPageItems(2, 5)).toEqual([1, "ellipsis", 2, "ellipsis", 5]));
+  it("atual=4 com 5: [1, ellipsis, 4, ellipsis, 5] — direita colapsa em []", () =>
+    expect(buildPageItems(4, 5)).toEqual([1, "ellipsis", 4, "ellipsis", 5]));
 });
 
 describe("ConversasPagination v0.27 (render)", () => {

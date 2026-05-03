@@ -42,7 +42,10 @@ export function buildPageItems(page: number, totalPages: number): PageItem[] {
 
 /**
  * Retorna o array de páginas inteiras dado um range [from, to] inclusivo.
- * Filtra valores fora de [1, totalPages] como segurança.
+ * Quando `from > to` (range colapsado, ex.: ellipsis esquerda com page=2 e
+ * totalPages=5 → range [2..1]), retorna `[]` — o EllipsisDropdown então
+ * renderiza null (sem dropdown vazio adjacente a páginas já visíveis).
+ * Clamp final aplica [1, totalPages] como segurança.
  */
 function rangeToPages(
   from: number,
@@ -50,8 +53,8 @@ function rangeToPages(
   totalPages: number,
 ): number[] {
   const pages: number[] = [];
-  const lo = Math.max(1, Math.min(from, to));
-  const hi = Math.min(totalPages, Math.max(from, to));
+  const lo = Math.max(1, from);
+  const hi = Math.min(totalPages, to);
   for (let p = lo; p <= hi; p++) pages.push(p);
   return pages;
 }
