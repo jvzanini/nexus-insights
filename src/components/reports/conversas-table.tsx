@@ -641,8 +641,8 @@ export function ConversasTable({
   const filteredRows = useMemo(() => {
     if (
       !conditionGroup ||
-      !conditionGroup.conditions ||
-      conditionGroup.conditions.length === 0
+      !conditionGroup.items ||
+      conditionGroup.items.length === 0
     ) {
       return searchedRows;
     }

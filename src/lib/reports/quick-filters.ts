@@ -3,7 +3,11 @@
 // que se traduz em um ConditionGroup AND combinado com os filtros do modo
 // Avançado. Não persistido — é estado transiente da sessão.
 
-import type { Condition, ConditionGroup } from "@/lib/utils/apply-conditions";
+import type {
+  Condition,
+  ConditionGroup,
+  ConditionGroupItem,
+} from "@/lib/utils/apply-conditions";
 
 export type QuickFilterKey = "no_response" | "unassigned" | "mine";
 
@@ -65,7 +69,12 @@ export function quickFiltersToConditionGroup(
   }
 
   if (conditions.length === 0) return null;
-  return { combinator: "AND", conditions };
+  // Schema v2 (v0.32+): items com connector AND per-par. Item 0 sem connector.
+  const items: ConditionGroupItem[] = conditions.map((c, idx) => ({
+    connector: idx === 0 ? undefined : "AND",
+    node: c,
+  }));
+  return { items };
 }
 
 /**
@@ -74,18 +83,21 @@ export function quickFiltersToConditionGroup(
  *
  * - Argumentos `null`/`undefined` ou vazios são descartados.
  * - 1 grupo válido → retornado como está.
- * - 2+ grupos → embrulhados em `{ AND: [g1, g2, ...] }`.
+ * - 2+ grupos → embrulhados em `{ items: [{node:g1}, {connector:'AND',node:g2}, ...] }`.
+ *
+ * Schema v2 (v0.32+).
  */
 export function mergeConditionGroups(
   ...groups: (ConditionGroup | null | undefined)[]
 ): ConditionGroup | null {
   const valid = groups.filter(
-    (g): g is ConditionGroup => !!g && g.conditions.length > 0,
+    (g): g is ConditionGroup => !!g && (g.items?.length ?? 0) > 0,
   );
   if (valid.length === 0) return null;
   if (valid.length === 1) return valid[0]!;
-  return {
-    combinator: "AND",
-    conditions: valid,
-  };
+  const items: ConditionGroupItem[] = valid.map((g, idx) => ({
+    connector: idx === 0 ? undefined : "AND",
+    node: g,
+  }));
+  return { items };
 }

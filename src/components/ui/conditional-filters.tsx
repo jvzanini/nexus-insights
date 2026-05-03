@@ -14,12 +14,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MultiSelectCheckbox } from "@/components/ui/multi-select-checkbox";
 import {
+  isGroup as isConditionGroup,
   type Condition,
   type ConditionGroup,
+  type ConditionGroupItem,
   type ConditionOperator,
 } from "@/lib/utils/apply-conditions";
 
-export type { Condition, ConditionGroup, ConditionOperator };
+export type { Condition, ConditionGroup, ConditionGroupItem, ConditionOperator };
 
 export interface ConditionFieldDef {
   key: string;
@@ -34,6 +36,15 @@ export interface ConditionalFiltersProps {
   onChange?: (group: ConditionGroup) => void;
   onApply?: (group: ConditionGroup) => void;
   className?: string;
+  /**
+   * v0.32: oculta o rodapé interno com Aplicar/Limpar.
+   *
+   * Use quando o caller controla o ciclo apply/cancel externamente
+   * (ex.: FiltersDialog tem um único botão "Aplicar" no footer global —
+   * dois "Aplicar" empilhados confundem). O caller passa
+   * `onChange` pra refletir mudanças no draft externo.
+   */
+  hideActions?: boolean;
 }
 
 interface OperatorOption {
@@ -77,16 +88,38 @@ const OPERATORS_BY_TYPE: Record<ConditionFieldDef["type"], OperatorOption[]> = {
 };
 
 function emptyGroup(): ConditionGroup {
-  return { combinator: "AND", conditions: [] };
+  return { items: [] };
 }
 
-function isGroup(node: Condition | ConditionGroup): node is ConditionGroup {
-  return (
-    typeof node === "object" &&
-    node !== null &&
-    "combinator" in node &&
-    Array.isArray((node as ConditionGroup).conditions)
-  );
+// Re-export do helper canônico de apply-conditions para evitar drift entre
+// definições do schema v2 (combinator agora é per-par no item, não no grupo).
+const isGroup = isConditionGroup;
+
+/** Connector "default" pra cabeçalho do grupo (UI placeholder Batch C-ready):
+ *  reflete o connector do PRIMEIRO item com connector definido (item 1+).
+ *  Se grupo só tem 1 item (sem connectors), retorna "AND".
+ */
+function deriveGroupCombinator(g: ConditionGroup): "AND" | "OR" {
+  for (let i = 1; i < g.items.length; i++) {
+    const c = g.items[i].connector;
+    if (c) return c;
+  }
+  return "AND";
+}
+
+/** Aplica o mesmo connector a todos os items 1+ do grupo (UI placeholder
+ *  Batch C-ready: visualmente um único toggle AND/OR, internamente aplicado
+ *  uniforme em todos os pares). Item 0 sempre fica sem connector.
+ */
+function setGroupCombinator(
+  g: ConditionGroup,
+  connector: "AND" | "OR",
+): ConditionGroup {
+  return {
+    items: g.items.map((it, idx) =>
+      idx === 0 ? { ...it, connector: undefined } : { ...it, connector },
+    ),
+  };
 }
 
 /**
@@ -104,6 +137,7 @@ export function ConditionalFilters({
   onChange,
   onApply,
   className,
+  hideActions = false,
 }: ConditionalFiltersProps) {
   const initialGroup = useMemo<ConditionGroup>(
     () => initial ?? emptyGroup(),
@@ -128,23 +162,21 @@ export function ConditionalFilters({
       )}
     >
       <GroupEditor group={group} onChange={update} fields={fields} depth={0} />
-      <div className="mt-4 flex items-center justify-end gap-2 border-t border-border/40 pt-3">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => update(emptyGroup())}
-        >
-          Limpar
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => onApply?.(group)}
-        >
-          Aplicar
-        </Button>
-      </div>
+      {hideActions ? null : (
+        <div className="mt-4 flex items-center justify-end gap-2 border-t border-border/40 pt-3">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => update(emptyGroup())}
+          >
+            Limpar
+          </Button>
+          <Button type="button" size="sm" onClick={() => onApply?.(group)}>
+            Aplicar
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -164,6 +196,22 @@ function GroupEditor({
   depth,
   onRemove,
 }: GroupEditorProps) {
+  // Schema v2 (v0.32+): items[] com connector per-par. Esta UI ainda é o
+  // placeholder visual "single combinator no topo" do v0.31 — Batch C
+  // redesenha pra inline-per-pair. Internamente, addCondition/addGroup
+  // mantém o connector ATUAL do grupo (deriveGroupCombinator) ao adicionar
+  // o próximo item. Item 0 sempre tem connector=undefined.
+  const currentCombinator = deriveGroupCombinator(group);
+
+  const addItem = (node: Condition | ConditionGroup) => {
+    const isFirst = group.items.length === 0;
+    const newItem: ConditionGroupItem = {
+      connector: isFirst ? undefined : currentCombinator,
+      node,
+    };
+    onChange({ ...group, items: [...group.items, newItem] });
+  };
+
   const addCondition = () => {
     const first = fields[0];
     if (!first) return;
@@ -173,29 +221,27 @@ function GroupEditor({
       operator: ops[0].value,
       value: defaultValueFor(first),
     };
-    onChange({
-      ...group,
-      conditions: [...group.conditions, newCond],
-    });
+    addItem(newCond);
   };
 
   const addGroup = () => {
-    onChange({
-      ...group,
-      conditions: [...group.conditions, emptyGroup()],
-    });
+    addItem(emptyGroup());
   };
 
-  const updateAt = (idx: number, next: Condition | ConditionGroup) => {
-    const arr = group.conditions.slice();
-    arr[idx] = next;
-    onChange({ ...group, conditions: arr });
+  const updateNodeAt = (idx: number, nextNode: Condition | ConditionGroup) => {
+    const arr = group.items.slice();
+    arr[idx] = { ...arr[idx], node: nextNode };
+    onChange({ ...group, items: arr });
   };
 
   const removeAt = (idx: number) => {
-    const arr = group.conditions.slice();
+    const arr = group.items.slice();
     arr.splice(idx, 1);
-    onChange({ ...group, conditions: arr });
+    // Item 0 nunca tem connector — corrige caso o item removido fosse o primeiro.
+    if (arr.length > 0) {
+      arr[0] = { ...arr[0], connector: undefined };
+    }
+    onChange({ items: arr });
   };
 
   return (
@@ -208,8 +254,8 @@ function GroupEditor({
     >
       <div className="flex items-center justify-between gap-2">
         <CombinatorToggle
-          value={group.combinator}
-          onChange={(v) => onChange({ ...group, combinator: v })}
+          value={currentCombinator}
+          onChange={(v) => onChange(setGroupCombinator(group, v))}
         />
         {onRemove ? (
           <Button
@@ -226,17 +272,17 @@ function GroupEditor({
       </div>
 
       <div className="flex flex-col gap-2">
-        {group.conditions.length === 0 ? (
+        {group.items.length === 0 ? (
           <p className="text-xs text-muted-foreground">
             Nenhuma condição. Adicione uma condição ou um grupo.
           </p>
         ) : (
-          group.conditions.map((node, idx) =>
-            isGroup(node) ? (
+          group.items.map((item, idx) =>
+            isGroup(item.node) ? (
               <GroupEditor
                 key={idx}
-                group={node}
-                onChange={(next) => updateAt(idx, next)}
+                group={item.node}
+                onChange={(next) => updateNodeAt(idx, next)}
                 fields={fields}
                 depth={depth + 1}
                 onRemove={() => removeAt(idx)}
@@ -244,9 +290,9 @@ function GroupEditor({
             ) : (
               <ConditionRow
                 key={idx}
-                condition={node}
+                condition={item.node}
                 fields={fields}
-                onChange={(next) => updateAt(idx, next)}
+                onChange={(next) => updateNodeAt(idx, next)}
                 onRemove={() => removeAt(idx)}
               />
             ),

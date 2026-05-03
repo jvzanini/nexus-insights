@@ -556,6 +556,7 @@ export function FiltersDialog({
                 fields={buildFields({ inboxes, teams, assignees, labels })}
                 initial={draft.conditionGroup}
                 onChange={(g) => update("conditionGroup", g)}
+                hideActions
               />
             </TabsContent>
           </Tabs>
