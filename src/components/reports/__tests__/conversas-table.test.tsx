@@ -68,8 +68,9 @@ describe("ConversasTable v3 (paginação)", () => {
 
   it("#ID renderiza como link clicável (a target=_blank)", () => {
     render(<ConversasTable {...baseProps} />);
+    // v0.27 (T8b): rebrand UI Chatwoot → Nexus Chat no aria-label/title.
     const link = screen.getByRole("link", {
-      name: /abrir conversa #100 no chatwoot/i,
+      name: /abrir conversa #100 no nexus chat/i,
     });
     expect(link).toBeInTheDocument();
     expect(link).toHaveAttribute("target", "_blank");

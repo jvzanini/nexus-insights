@@ -204,8 +204,8 @@ function OpenIdLink({ accountId, displayId, searchTerm }: OpenIdLinkProps) {
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") e.stopPropagation();
       }}
-      title={`Abrir conversa #${displayId} no Chatwoot`}
-      aria-label={`Abrir conversa #${displayId} no Chatwoot`}
+      title={`Abrir conversa #${displayId} no Nexus Chat`}
+      aria-label={`Abrir conversa #${displayId} no Nexus Chat`}
       className={cn(
         "inline-flex items-center rounded-md border border-border/50 px-2 py-0.5 font-mono text-[13px] tabular-nums text-muted-foreground transition-colors",
         "hover:border-violet-500/60 hover:bg-violet-500/5 hover:text-violet-500",
