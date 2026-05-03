@@ -66,9 +66,15 @@ describe("ExportButton", () => {
       }),
     );
     await waitFor(() => expect(mockAction).toHaveBeenCalledTimes(1));
+    // v0.32 — signature ganhou args opcionais (searchClient/conditionGroup/
+    // documentTypes/sortStack); ausentes ficam undefined.
     expect(mockAction).toHaveBeenCalledWith({
       filters: baseProps.filters,
       accountId: 9,
+      searchClient: undefined,
+      conditionGroup: undefined,
+      documentTypes: undefined,
+      sortStack: undefined,
     });
     await waitFor(() => expect(toastMock.success).toHaveBeenCalled());
   });

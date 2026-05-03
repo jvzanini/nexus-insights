@@ -7,18 +7,40 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { exportConversasAction } from "@/lib/actions/reports/conversas-export";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
+import type { ConditionGroup } from "@/lib/utils/apply-conditions";
+import type { DocumentTypeFilter } from "@/lib/reports/match-document-types";
+import type { SortRule } from "@/components/reports/sorting-dialog";
 
 interface ExportButtonProps {
   filters: ReportFilters;
   accountId: number;
   rowCount: number;
   /**
-   * v0.25: indica se a busca client-side instantânea está ativa. Quando
-   * true, o botão exibe um title HTML explicando que a exportação é
-   * server-side e ignora a busca instantânea (apenas filtros aplicados
-   * entram no XLSX). Não desabilita o botão — só esclarece o escopo.
+   * v0.32: indica se a busca client-side está ativa (apenas para o tooltip).
+   * O comportamento mudou — desde v0.32 o export REPLICA a busca server-side
+   * via `searchClient` prop, então o XLSX inclui a busca aplicada.
    */
   searchClientActive?: boolean;
+  /**
+   * v0.32 — busca client-side propagada pra action. Quando não-vazia, server
+   * aplica `matchSearchClient` no resultado antes do XLSX.
+   */
+  searchClient?: string;
+  /**
+   * v0.32 — where-clause do filtro Avançado. Quando definido, server replica
+   * `applyConditions` no resultado.
+   */
+  conditionGroup?: ConditionGroup;
+  /**
+   * v0.32 — filtro Documento (multi-select cpf/cnpj/none). Server aplica
+   * `matchDocumentTypes` quando array não-vazio.
+   */
+  documentTypes?: DocumentTypeFilter[];
+  /**
+   * v0.32 — stack de ordenação client-side. Server replica via
+   * `sortConversasByStack` antes de gerar o XLSX (DRY com a tabela).
+   */
+  sortStack?: SortRule[];
 }
 
 /**
@@ -54,6 +76,10 @@ export function ExportButton({
   accountId,
   rowCount,
   searchClientActive,
+  searchClient,
+  conditionGroup,
+  documentTypes,
+  sortStack,
 }: ExportButtonProps) {
   const [pending, startTransition] = useTransition();
   const [internalLoading, setInternalLoading] = useState(false);
@@ -65,7 +91,14 @@ export function ExportButton({
     setInternalLoading(true);
     startTransition(async () => {
       try {
-        const result = await exportConversasAction({ filters, accountId });
+        const result = await exportConversasAction({
+          filters,
+          accountId,
+          searchClient: searchClient && searchClient.trim() ? searchClient : undefined,
+          conditionGroup,
+          documentTypes,
+          sortStack,
+        });
         if (result.error) {
           toast.error(result.error);
           return;
@@ -101,7 +134,7 @@ export function ExportButton({
       aria-busy={loading}
       title={
         searchClientActive
-          ? "A exportação inclui os filtros aplicados, não a busca atual."
+          ? "A exportação inclui a busca aplicada e os filtros."
           : undefined
       }
       className="relative h-10 cursor-pointer px-4 disabled:cursor-not-allowed"

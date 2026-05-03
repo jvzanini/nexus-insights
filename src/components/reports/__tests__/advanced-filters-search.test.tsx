@@ -115,7 +115,7 @@ describe("AdvancedFilters search v0.25", () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
-  it("ExportButton tem title quando searchClient ativa", () => {
+  it("ExportButton tem title quando searchClient ativa (v0.32 — inclui busca)", () => {
     render(
       <AdvancedFilters
         {...baseProps}
@@ -126,7 +126,8 @@ describe("AdvancedFilters search v0.25", () => {
     const exportBtn = screen.getByRole("button", { name: /Exportar/i });
     const title = exportBtn.getAttribute("title");
     expect(title).not.toBeNull();
-    expect(title!).toMatch(/inclui os filtros aplicados, não a busca/i);
+    // v0.32 F9: export agora INCLUI a busca aplicada (server replica pipeline).
+    expect(title!).toMatch(/inclui a busca aplicada/i);
   });
 
   it("ExportButton continua habilitado quando search zera mas há rows no período", () => {
