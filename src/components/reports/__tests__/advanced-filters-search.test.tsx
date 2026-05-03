@@ -144,4 +144,65 @@ describe("AdvancedFilters search v0.25", () => {
     const exportBtn = screen.getByRole("button", { name: /Exportar/i });
     expect(exportBtn).not.toBeDisabled();
   });
+
+  // v0.27 — T3: input search refator (lupa roxa + X canto direito + sem tag "Filtrando").
+  it("ícone lupa fica violet quando searchClient ativo", () => {
+    const { container } = render(
+      <AdvancedFilters
+        {...baseProps}
+        searchClient="abc"
+        onSearchClientChange={() => {}}
+      />,
+    );
+    const icon = container.querySelector(".lucide-search");
+    expect(icon?.getAttribute("class")).toMatch(/text-violet-500/);
+  });
+
+  it("ícone lupa fica muted quando searchClient vazio", () => {
+    const { container } = render(
+      <AdvancedFilters
+        {...baseProps}
+        searchClient=""
+        onSearchClientChange={() => {}}
+      />,
+    );
+    const icon = container.querySelector(".lucide-search");
+    expect(icon?.getAttribute("class")).toMatch(/text-muted-foreground/);
+  });
+
+  it("X de limpar busca aparece e clica limpa", () => {
+    const onSearchClientChange = jest.fn();
+    render(
+      <AdvancedFilters
+        {...baseProps}
+        searchClient="abc"
+        onSearchClientChange={onSearchClientChange}
+      />,
+    );
+    const x = screen.getByRole("button", { name: /Limpar busca/i });
+    fireEvent.click(x);
+    expect(onSearchClientChange).toHaveBeenCalledWith("");
+  });
+
+  it("não renderiza tag 'Filtrando' (removida v0.27)", () => {
+    render(
+      <AdvancedFilters
+        {...baseProps}
+        searchClient="abc"
+        onSearchClientChange={() => {}}
+      />,
+    );
+    expect(screen.queryByText(/Filtrando/i)).toBeNull();
+  });
+
+  it("X NÃO aparece quando search vazio", () => {
+    render(
+      <AdvancedFilters
+        {...baseProps}
+        searchClient=""
+        onSearchClientChange={() => {}}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /Limpar busca/i })).toBeNull();
+  });
 });

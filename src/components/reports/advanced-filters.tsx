@@ -391,7 +391,10 @@ export function AdvancedFilters({
       <div className="flex flex-wrap items-center gap-2">
         <div data-tour="search" className="relative w-full max-w-[320px] min-w-[200px] sm:flex-none">
           <Search
-            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+            className={cn(
+              "pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 transition-colors",
+              searchClient.trim() !== "" ? "text-violet-500" : "text-muted-foreground",
+            )}
             aria-hidden="true"
           />
           <Input
@@ -411,13 +414,19 @@ export function AdvancedFilters({
             aria-label="Buscar conversas"
             className={cn(
               "h-10 cursor-text pl-9",
-              searchClient.trim() !== "" ? "pr-[88px]" : "pr-3",
+              searchClient.trim() !== "" ? "pr-9" : "pr-3",
             )}
           />
           {searchClient.trim() !== "" ? (
-            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 rounded-md border border-violet-500/30 bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-medium text-violet-500">
-              Filtrando
-            </span>
+            <button
+              type="button"
+              onClick={() => onSearchClientChange("")}
+              aria-label="Limpar busca"
+              title="Limpar busca"
+              className="absolute right-2 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40"
+            >
+              <X className="h-3 w-3" aria-hidden="true" />
+            </button>
           ) : null}
         </div>
 
