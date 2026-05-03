@@ -159,7 +159,7 @@ export function KbUploadDialog({
     >
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Adicionar documento</DialogTitle>
+          <DialogTitle>Adicionar conhecimento</DialogTitle>
           <DialogDescription>
             Envie um arquivo PDF/TXT (≤ 5 MB) ou cole uma URL pública. O texto
             extraído será injetado no prompt do Agente Nex.

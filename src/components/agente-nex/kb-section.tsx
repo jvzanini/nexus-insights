@@ -13,7 +13,7 @@
  *   ação Excluir (com `<AlertDialog>` do design system; substitui o
  *   `window.confirm` nativo a partir de v0.16.0).
  * - Empty state amigável.
- * - Botão "Adicionar documento" → abre `<KbUploadDialog>` (suporta abas File e
+ * - Botão "Adicionar conhecimento" → abre `<KbUploadDialog>` (suporta abas File e
  *   URL — usuário adiciona URL manualmente pela aba URL do dialog).
  * - Para docs com `kind === "URL"`: ícone Link, URL clicável (target=_blank,
  *   `rel="noopener noreferrer"`), e ação extra "Atualizar conteúdo" que
@@ -323,7 +323,7 @@ export function KbSection({ initial }: KbSectionProps) {
         </ul>
       )}
 
-      {/* Adicionar documento */}
+      {/* Adicionar conhecimento */}
       <div className="flex justify-end">
         <Button
           type="button"
@@ -332,7 +332,7 @@ export function KbSection({ initial }: KbSectionProps) {
           className="border-border"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
-          Adicionar documento
+          Adicionar conhecimento
         </Button>
       </div>
 

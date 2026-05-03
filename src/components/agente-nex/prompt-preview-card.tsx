@@ -114,12 +114,11 @@ export function PromptPreviewCard({
         </CardHeader>
 
         <CardContent className="space-y-3">
-          <p className="text-xs italic text-muted-foreground">
-            Preview somente leitura.{" "}
-            {isSuperAdmin
-              ? "Use Editar para alterar o prompt do agente. Personalidade, Tom e Guardrails ficam na seção Comportamento abaixo."
-              : "Apenas super_admins podem editar."}
-          </p>
+          {!isSuperAdmin ? (
+            <p className="text-xs italic text-muted-foreground">
+              Apenas super_admins podem editar.
+            </p>
+          ) : null}
 
           <ScrollArea className="max-h-[400px] w-full overflow-x-hidden rounded-lg border border-border bg-muted/40">
             <pre

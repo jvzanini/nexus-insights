@@ -103,7 +103,7 @@ describe("KbSection", () => {
       screen.getByText(/Nenhum documento adicionado ainda/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /^Adicionar documento$/i }),
+      screen.getByRole("button", { name: /^Adicionar conhecimento$/i }),
     ).toBeInTheDocument();
   });
 
@@ -279,15 +279,15 @@ describe("KbSection", () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
-  it("clicar em 'Adicionar documento' abre o dialog de upload", async () => {
+  it("clicar em 'Adicionar conhecimento' abre o dialog de upload", async () => {
     render(<KbSection initial={[]} />);
-    const addBtn = screen.getByRole("button", { name: /^Adicionar documento$/i });
+    const addBtn = screen.getByRole("button", { name: /^Adicionar conhecimento$/i });
     await act(async () => {
       fireEvent.click(addBtn);
     });
 
     await waitFor(() => {
-      const headings = screen.getAllByText(/Adicionar documento/i);
+      const headings = screen.getAllByText(/Adicionar conhecimento/i);
       expect(headings.length).toBeGreaterThanOrEqual(2);
     });
     expect(uploadKbDocumentAction).not.toHaveBeenCalled();
