@@ -67,6 +67,7 @@ export default async function ConversasPage({ searchParams }: PageProps) {
       ? filterState.priorities
       : undefined,
     labelIds: filterState.labelIds.length ? filterState.labelIds : undefined,
+    search: filterState.search,
     excludeMatrixIA,
   };
 
