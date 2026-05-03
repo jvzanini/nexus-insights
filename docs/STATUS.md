@@ -8,6 +8,10 @@
 
 ## Em produção (v0.24.0)
 
+### Release v0.23.0 (2026-05-03) — Conversas Polish (busca funciona, single-day fix, paginação no topo, badge Enter, X adesivo, sorting anti-dup, highlight)
+
+19 ajustes em `/relatorios/conversas` incluindo 3 bugs críticos: busca não filtrava (`page.tsx` descartava `search`), single-day filter retornava 0 (TZ em datetime-core), sorting permitia duplicar coluna em múltiplos critérios. Polish: badge ↵ Enter inline (estilo Command+K, layout não quebra mais), highlight em violet das matches da busca em todas colunas + drill-down, paginação no TOPO da tabela com formato "Mostrando X-Y de Z conversas", ConversasPagination simplificado (1/1-2/1-2-3/1-2-3-4/1...N/1...mid...N) com Popover dropdown nas reticências e Popover no atual no meio, FiltersDialog (sections fechadas + "Limpar todos" só zera filtros + header dinâmico simples/avançado), X "adesivo" na quina dos chips Filtros/Ordenação (remove lixeirinhas separadas), calendar padrão da plataforma (`defaultMonth=today` + text-xs/h-7 — afeta 8+ telas), tour `conversas-v4` ganha step "Total + paginação". Spec v3 com 25+33 achados de pente-fino · plan v3 com 20+18 achados · ui-ux-pro-max em todas tasks UI.
+
 ### Release v0.24.0 (2026-05-03) — Suite Agente Nex Polish v2
 
 Polish dirigido por feedback do super_admin (após v0.20.0 LIVE) na Suite Agente Nex. Workflow rigoroso (spec v3 com 25 achados em pente-fino + plan v3 com 9 tasks TDD + ui-ux-pro-max em todas as tasks UI). 6 commits granulares · 1311 testes PASS · typecheck 0 erros · sem schema change.
