@@ -44,6 +44,10 @@ function sanitize(raw: string): string {
 /**
  * Constrói a cláusula de busca textual.
  *
+ * @deprecated v0.25.0 — busca migrou para client-side em
+ * `src/lib/reports/match-search-client.ts`. Helper preservado para
+ * compatibilidade dos tests existentes; não usar em novo código.
+ *
  * @param search texto digitado pelo usuário (cap 256, sanitize aplicado).
  * @param paramOffset índice do último param já registrado pelo caller
  *                    (ex.: 5 → o próximo placeholder será $6).

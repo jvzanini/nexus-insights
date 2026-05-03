@@ -83,7 +83,7 @@ describe("conversasList — offset/cursor modes", () => {
     expect(r.data.page).toBe(1);
   });
 
-  it("pageSize > 5000 clamp pra 5000", async () => {
+  it("pageSize > MAX_LIMIT clamp pra MAX_LIMIT (50_000)", async () => {
     pool.query.mockResolvedValueOnce({ rows: [] });
     pool.query.mockResolvedValueOnce({ rows: [{ total: "0" }] });
     const r = await conversasList({
@@ -92,7 +92,7 @@ describe("conversasList — offset/cursor modes", () => {
       page: 1,
       pageSize: 99999,
     });
-    expect(r.data.pageSize).toBe(5000);
+    expect(r.data.pageSize).toBe(50_000);
   });
 
   it("pageSize < 10 clamp pra 10", async () => {

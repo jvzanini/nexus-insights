@@ -19,7 +19,6 @@ import { withChatwootResilience } from "../resilience";
 import { withCache } from "@/lib/cache/pull-through";
 import { cacheKey, hashFilters } from "@/lib/cache/keys";
 import { buildBaseFilter, type ReportFilters } from "../filters";
-import { buildConversasSearchClause } from "../conversas-search";
 
 export interface ConversaLabel {
   name: string;
@@ -190,17 +189,7 @@ export async function conversasList(args: {
           const params: unknown[] = [...base.params];
           let p = params.length;
 
-          // Integra cláusula de busca textual (busca em contact, inbox, team, assignee, status, etc.)
-          const searchClause = buildConversasSearchClause(
-            args.filters.search,
-            p,
-          );
-          if (searchClause.sql) {
-            p += searchClause.params.length;
-            params.push(...searchClause.params);
-          }
-
-          // Snapshot dos params base+search (antes de cursor/offset/limit) — usado pra count.
+          // Snapshot dos params base (antes de cursor/offset/limit) — usado pra count.
           const baseAndSearchParams: unknown[] = [...params];
 
           let cursorClause = "";
@@ -331,7 +320,7 @@ export async function conversasList(args: {
             LEFT JOIN inboxes ix ON ix.id = c.inbox_id
             LEFT JOIN teams tm ON tm.id = c.team_id
             LEFT JOIN users u ON u.id = c.assignee_id
-            WHERE ${base.whereSql}${searchClause.sql ? ` AND ${searchClause.sql}` : ""}${cursorClause}
+            WHERE ${base.whereSql}${cursorClause}
             ORDER BY c.last_activity_at DESC NULLS LAST, c.id DESC
             ${offsetClause}
             LIMIT $${limitParamIdx}
@@ -345,7 +334,7 @@ export async function conversasList(args: {
             LEFT JOIN inboxes ix ON ix.id = c.inbox_id
             LEFT JOIN teams tm ON tm.id = c.team_id
             LEFT JOIN users u ON u.id = c.assignee_id
-            WHERE ${base.whereSql}${searchClause.sql ? ` AND ${searchClause.sql}` : ""}
+            WHERE ${base.whereSql}
           `
             : null;
 
