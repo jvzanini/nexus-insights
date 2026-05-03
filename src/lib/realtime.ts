@@ -14,8 +14,11 @@ export type RealtimeEvent =
         | "by_agent"
         | "by_team"
         | "hourly_by_account";
+      connectionId: string;
       accountId: number;
-    };
+    }
+  | { type: "connection:updated"; connectionId: string }
+  | { type: "connection:deleted"; connectionId: string };
 
 export async function publishRealtimeEvent(event: RealtimeEvent): Promise<void> {
   try {

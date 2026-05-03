@@ -159,8 +159,17 @@ export async function withMetaUpdate<T>(
   );
 
   // Pub/Sub: notifica clientes SSE (best-effort — falha não rola back).
+  // TODO Lote 6: receber connectionId via withMetaUpdate(dim, connId, accId, fn).
+  // Por enquanto envia placeholder que useFactsRealtime ignora (filtra por
+  // connectionId real). Sem regressão em produção pq hook só está montado em
+  // Visão Geral e o connectionId real chega a partir da Fase 1 deployada.
   try {
-    await publishRealtimeEvent({ type: "facts:refreshed", dimension, accountId });
+    await publishRealtimeEvent({
+      type: "facts:refreshed",
+      dimension,
+      connectionId: "",
+      accountId,
+    });
   } catch (pubErr) {
     console.warn(
       "[withMetaUpdate] Falha ao publicar facts:refreshed (ignorado):",
