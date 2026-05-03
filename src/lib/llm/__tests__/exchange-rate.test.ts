@@ -103,44 +103,14 @@ describe("getUsdBrlRate", () => {
     expect(r.rate).toBeCloseTo(FALLBACK_COMMERCIAL_RATE * 1.1, 4);
   });
 
-  it("spread positivo fora do range antigo é aceito sem clamp", async () => {
+  it("spread sempre 1.10 (hardcoded v0.31), ignorando qualquer valor DB", async () => {
     mockSettings({ cache: null, spread: 1.5 });
     (global.fetch as jest.Mock).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ USDBRL: { bid: "5.00" } }),
     });
     const r = await getUsdBrlRate();
-    expect(r.rate).toBeCloseTo(5.0 * 1.5, 4);
-  });
-
-  it("spread alto (2.50) é aceito sem clamp", async () => {
-    mockSettings({ cache: null, spread: 2.5 });
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ USDBRL: { bid: "5.00" } }),
-    });
-    const r = await getUsdBrlRate();
-    expect(r.rate).toBeCloseTo(5.0 * 2.5, 4);
-  });
-
-  it("spread inválido (≤ 0) cai pro default 1.10", async () => {
-    mockSettings({ cache: null, spread: 0 });
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ USDBRL: { bid: "5.00" } }),
-    });
-    const r = await getUsdBrlRate();
-    expect(r.rate).toBeCloseTo(5.0 * DEFAULT_CARD_SPREAD, 4);
-  });
-
-  it("default spread 1.10 quando setting ausente", async () => {
-    mockSettings({ cache: null, spread: null });
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ USDBRL: { bid: "5.00" } }),
-    });
-    const r = await getUsdBrlRate();
-    expect(DEFAULT_CARD_SPREAD).toBe(1.1);
+    expect(r.spread).toBe(1.1);
     expect(r.rate).toBeCloseTo(5.0 * 1.1, 4);
   });
 
@@ -154,5 +124,33 @@ describe("getUsdBrlRate", () => {
     const b = await getUsdBrlRate();
     expect((global.fetch as jest.Mock).mock.calls.length).toBe(1);
     expect(b.rate).toBe(a.rate);
+  });
+
+  describe("getUsdBrlRate — spread fixo (v0.31)", () => {
+    it("usa spread=1.10 hardcoded ignorando SPREAD_KEY do DB (cenário do bug user)", async () => {
+      __resetUsdBrlCache();
+      // Mock DB com spread setado pra 1.40 (cenário do bug onde cost_brl ficou >R$6/USD)
+      mockSettings({
+        cache: { commercial: 5.0, fetchedAt: new Date().toISOString() },
+        spread: 1.4, // User setou em 1.40+ no v0.20+ → bug reportado
+      });
+      const result = await getUsdBrlRate();
+      expect(result.spread).toBe(1.1); // Hardcoded, não 1.4
+      expect(result.rate).toBeCloseTo(5.5); // 5.0 × 1.10 — NÃO 5.0 × 1.40
+    });
+  });
+});
+
+describe("setCardSpread — no-op (v0.31)", () => {
+  it("vira no-op + console.warn; NÃO persiste no DB", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation();
+    q.mockClear();
+    const { setCardSpread } = await import("../exchange-rate");
+    await setCardSpread(1.5);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/setCardSpread.*no-op/i),
+    );
+    expect(q).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 });

@@ -8,6 +8,13 @@ const TTL_MS = 4 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 5_000;
 const AWESOMEAPI_URL = "https://economia.awesomeapi.com.br/last/USD-BRL";
 
+/**
+ * v0.31.0: spread fixo (≈ IOF 3.5% + 6.5% spread real do cartão).
+ * User removeu controle UI; antes era configurável e estava setado em 1.40+
+ * causando cost_brl >R$6/USD. Hardcode garante consistência.
+ */
+const FIXED_SPREAD = 1.1;
+
 export const DEFAULT_CARD_SPREAD = 1.1;
 export const FALLBACK_COMMERCIAL_RATE = 5.5;
 
@@ -110,8 +117,8 @@ export async function getUsdBrlRate(): Promise<UsdBrlRate> {
     };
   }
 
-  const spreadRaw = await readSetting<number>(SPREAD_KEY);
-  const spread = clampSpread(spreadRaw ?? DEFAULT_CARD_SPREAD);
+  // v0.31.0: hardcode — ignora SPREAD_KEY do DB.
+  const spread = FIXED_SPREAD;
   const cache = await readSetting<CacheEntry>(CACHE_KEY);
   const cacheAgeMs =
     cache?.fetchedAt != null
@@ -172,14 +179,8 @@ export async function getUsdBrlRate(): Promise<UsdBrlRate> {
   }
 }
 
-export async function setCardSpread(spread: number): Promise<void> {
-  const clamped = clampSpread(spread);
-  await pgPool.query(
-    `INSERT INTO app_settings (key, value, category, updated_at)
-       VALUES ($1, $2::jsonb, 'platform', NOW())
-       ON CONFLICT (key) DO UPDATE
-         SET value = $2::jsonb, updated_at = NOW()`,
-    [SPREAD_KEY, JSON.stringify(clamped)],
+export async function setCardSpread(_spread: number): Promise<void> {
+  console.warn(
+    "[exchange-rate] setCardSpread é no-op desde v0.31 — spread hardcoded em 1.10. UI removida em T-B2.",
   );
-  memo = null; // força próxima chamada recalcular
 }
