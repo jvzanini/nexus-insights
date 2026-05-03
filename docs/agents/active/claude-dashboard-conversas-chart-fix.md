@@ -1,9 +1,25 @@
 ---
 agent: claude-dashboard-conversas-chart-fix
 started_at: 2026-05-03T20:35-03:00
-target_version: v0.34.0
+target_version: v0.36.0
 status: in_progress
+last_update: 2026-05-04T00:10-03:00 — bump pra 0.36 (v0.35 ocupada paralelo)
 ---
+
+## Coordenação multi-agente (snapshot 2026-05-04 ~00:10)
+- HEAD package.json: 0.34.0 (commit 2326c14, deploy v0.34 EM CURSO no CI)
+- 3 commits locais ahead (não pushados):
+  - 6754528 fix(conversas): T2 v0.35 — filtro Documento (claude-conversas-bugfix-v035)
+  - 061fbd4 fix(conversas): T1 v0.35 — XLSX export (claude-conversas-bugfix-v035)
+  - 8aaf3d6 feat(reports): T7.1 v0.35 — useFactsRealtime (claude-l7-use-facts-realtime)
+- Active files paralelos:
+  - claude-conversas-bugfix-v035 (target v0.35) — escopo `src/lib/reports/conversas-xlsx.ts`, `src/components/reports/conversas-{table,page-client}.tsx` — disjunto
+  - claude-l7-use-facts-realtime (target v0.35) — escopo `src/components/reports/use-facts-realtime.ts`, `facts-freshness.tsx`, `src/app/relatorios/*` — disjunto
+  - claude-fase2-spec (target v0.36/0.37, spec only) — disjunto
+  - claude-fase3-spec (target v0.38, spec only) — disjunto
+  - claude-multitenant-realtime-fase1 (v0.33 LIVE parcial)
+- Working tree dirty: 7 arquivos modified do claude-l7-use-facts-realtime — NÃO STAGEAR.
+- Meu bump: 0.34 → **0.36** (skip 0.35 ocupada).
 
 ## Tópico
 Dashboard — fix do gráfico "Conversas por hora/dia" (3 períodos): (1) componente do PeriodNavigator que mostra a data ("03/05") está com retângulo gigantesco, precisa ajustar ao conteúdo; (2) dados inconsistentes entre períodos diário/semanal/mensal — daily mostra 1 conversa aberta em 03/05 mas semanal/mensal mostram 0 no mesmo dia. Fonte de verdade: banco de dados.
