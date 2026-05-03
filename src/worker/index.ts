@@ -1,4 +1,5 @@
 import { Worker, type Job } from "bullmq";
+import IORedis from "ioredis";
 import { redis } from "../lib/redis";
 import {
   auditWriteQueue,
@@ -19,9 +20,65 @@ import { processRefreshByTeam } from "./jobs/pre-agregacao/refresh-by-team";
 import { processHousekeeping } from "./jobs/pre-agregacao/housekeeping";
 import { processRefreshDimSnapshots } from "./jobs/integrations/refresh-dim-snapshots";
 import { processReconcileIntegrations } from "./jobs/integrations/reconcile-integrations";
+import { runConnectionsSeedIfNeeded } from "../lib/nexus-chat/seed";
+import { invalidateNexusChatPool } from "../lib/nexus-chat/pool";
+import { CHANNEL as REALTIME_CHANNEL } from "../lib/realtime";
 
 console.log("[worker] Starting Nexus Insights worker…");
 console.log(`[worker] Node.js ${process.version}, PID: ${process.pid}`);
+
+// ─── Multi-tenant: seed inicial + listener Pub/Sub ────────────────────────
+
+runConnectionsSeedIfNeeded()
+  .then((result) => {
+    if (result.seeded) {
+      console.log(
+        `[worker.seed] connection ${result.connectionId} criada com ${result.bindingsCreated} bindings`,
+      );
+    } else {
+      console.log("[worker.seed] já rodou ou outro processo segura o lock");
+    }
+  })
+  .catch((err) => {
+    console.error("[worker.seed] falhou:", err);
+  });
+
+// Listener Pub/Sub para invalidar pool dinâmico ao receber connection:updated
+// ou connection:deleted (publicado pelas Server Actions de edit/delete).
+if (process.env.REDIS_URL) {
+  const subscriber = new IORedis(process.env.REDIS_URL, {
+    maxRetriesPerRequest: null,
+  });
+  subscriber
+    .subscribe(REALTIME_CHANNEL)
+    .then(() => {
+      subscriber.on("message", (_channel, message) => {
+        try {
+          const ev = JSON.parse(message) as { type?: string; connectionId?: string };
+          if (
+            (ev.type === "connection:updated" ||
+              ev.type === "connection:deleted") &&
+            ev.connectionId
+          ) {
+            invalidateNexusChatPool(ev.connectionId).catch((err) =>
+              console.warn(
+                "[worker.pubsub] invalidateNexusChatPool falhou (ignorado):",
+                err.message,
+              ),
+            );
+          }
+        } catch {
+          // payload malformado — ignorar silenciosamente.
+        }
+      });
+      console.log(
+        `[worker.pubsub] inscrito em ${REALTIME_CHANNEL} para invalidação de pools`,
+      );
+    })
+    .catch((err) => {
+      console.error("[worker.pubsub] subscribe falhou:", err);
+    });
+}
 
 // ─── Workers ──────────────────────────────────────────────────────────────
 
