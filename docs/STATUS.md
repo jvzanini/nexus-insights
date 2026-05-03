@@ -1,12 +1,20 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-05-03
-**Versão atual em produção:** v0.27.0
+**Versão atual em produção:** v0.28.0
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.27.0)
+## Em produção (v0.28.0)
+
+### Release v0.28.0 (2026-05-03) — Suite Agente Nex Polish v4 (correções v0.26)
+
+6 fixes críticos da v0.26 reportados pelo super_admin: (1) Editar do Prompt agora abre `IdentityBaseEditor` (Textarea grande pra editar IDENTITY_BASE direto) — não mais o `PromptConfigForm` que duplicava o que está em Comportamento; (2) `<pre>` do prompt completo SEMPRE visível (collapse removido); (3) PlaygroundSheet input bar = bubble exata (`<footer>` HTML normal + Mic/Send alinhados igual ao nex-chat-panel) + placeholder "Pergunte ao agente Nex"; (4) Playground usa `sendNexMessage` com histórico (qualidade idêntica à bubble — antes usava `testNexPromptAction` sem contexto entre turnos); (5) AudioPlayer speed tag compacta (h-5 min-w-[34px] text-[9px]) cabe no balão sem vazar nas velocidades 1.25x/1.75x; (6) Dialog "Ver prompt usado" aparece corretamente via pattern Sheet suppress + z-[70] + toast.error explícito.
+
+**Schema additive:** column `nex_settings.identity_base TEXT NULL` (NULL = usa IDENTITY_BASE hardcoded default, valor setado = override). Server Actions `saveIdentityBaseAction` e `resetIdentityBaseAction` super_admin-gated.
+
+**Workflow rigoroso:** plan v1→v2→v3 com 2 pentes-finos REAIS · subagent-driven-development com TDD em cada task · ui-ux-pro-max em todas as tasks UI · 9 commits granulares (E1a/E1b/E1c/E2/E3+E4/E5/E6) · typecheck 0 erros.
 
 ### Release v0.27.0 (2026-05-03) — Conversas Fixes (regressões v0.25 + bug match digits-only)
 

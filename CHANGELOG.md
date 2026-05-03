@@ -1,5 +1,30 @@
 # Changelog
 
+## [v0.28.0] 2026-05-03 — Suite Agente Nex Polish v4 (correções v0.26)
+
+> Correções de UX/funcionalidade da v0.26 reportadas pelo super_admin (6 fixes críticos). Workflow rigoroso (plan v1→v2→v3 com 14+5 achados em 2 pentes-finos REAIS · subagent-driven-development com TDD em cada task · ui-ux-pro-max em todas as tasks UI). 9 commits granulares (E1a/E1b/E1c/E2/E3+E4/E5/E6) · todos tests verde · typecheck 0 erros · 1 schema additive (column `identity_base`).
+
+### Prompt
+- **IDENTITY_BASE editável (super_admin):** column nova `identity_base TEXT NULL` em `nex_settings`. NULL = usa default hardcoded; valor setado = override. Server Actions `saveIdentityBaseAction(text)` e `resetIdentityBaseAction()` (super_admin-gated). composeSystemPrompt: `cfg.identityBase ?? IDENTITY_BASE` (advancedOverride continua precedendo TUDO — modo manual).
+- **PromptPreviewCard sem collapse:** `<pre>` do prompt SEMPRE visível (era oculto-por-default em v0.26 — feedback rejeitou). Removido botão Maximizar; só Copiar + Editar (super_admin) no header.
+- **Editar abre IdentityBaseEditor (não PromptConfigForm):** super_admin clica Editar → Dialog max-edit (max-w-900) com Textarea grande (rows 18, max-h-60vh, font-mono) + counter X/5000 + botão "Restaurar padrão" (só se isCustom) + botão "Salvar" disabled quando !dirty || overLimit. Personalidade/Tom/Guardrails seguem na seção Comportamento abaixo (não duplica edição).
+- **`PromptConfigForm` aceita `onSaved?: () => void`** — não usado pelo Dialog do PromptPreviewCard em v0.28 (Dialog usa IdentityBaseEditor agora), mas mantido pra outros consumers.
+
+### Playground
+- **Input bar = bubble exata:** `<footer>` HTML normal (não `<SheetFooter>` sticky) — Mic externo + inner area unificada (rounded-xl border bg-background) + Send violet gradient. Layout idêntico ao `nex-chat-panel` linhas 631-742.
+- **Placeholder "Pergunte ao agente Nex"** (era "Pergunte algo ao Nex").
+- **`sendNexMessage` em vez de `testNexPromptAction`:** Playground passa a usar mesmo path da bubble com histórico completo entre turnos. **Qualidade idêntica** (era "uma porcaria" segundo feedback). Trade-off documentado: playground deixa de testar "prompt em edição" (não usa mais cfg do form); usa o prompt do DB direto.
+- **Fix Dialog "Ver prompt usado":** pattern Sheet suppress + Dialog z-[70]. Quando user clica "Ver prompt usado", Sheet desaparece (Sheet open && !sheetSuppressed), Dialog abre com z-[70] (content + overlay). Ao fechar Dialog, Sheet reaparece. Toast.error explícito quando action falha (era silencioso em v0.26).
+
+### Bubble
+- **AudioPlayer speed tag compacta:** `h-5 min-w-[34px] px-1 text-[9px]` (era h-6 min-w-[44px] px-1.5 text-[11px]). Tag "1.75×" não vaza mais do balão violet. Trade-off: h-5 < 44pt touch target Apple HIG, mas é botão cíclico não-crítico (next-speed) com aria-label dinâmico cobrindo a11y.
+
+### Schema
+- **`nex_settings.identity_base TEXT NULL`** — ALTER TABLE ADD COLUMN IF NOT EXISTS (idempotente). NULL preserva back-compat 100%.
+
+### Workflow
+- Plan v1 → v2 → v3 com 2 pentes-finos REAIS · subagent-driven-development com TDD em cada task · ui-ux-pro-max em todas as tasks UI.
+
 ## [v0.27.0] 2026-05-03 — Conversas Fixes (regressões v0.25 + bug match digits-only)
 
 > 9 fixes em `/relatorios/conversas` reportados pelo João via screenshots após v0.25.0/v0.26.0 LIVE. Workflow rigoroso (plan v1→v2→v3 com 48 achados em 2 pentes-finos REAIS · subagent-driven-development com TDD em 4 batches · ui-ux-pro-max em toda task UI · code review final APPROVED_WITH_CONCERNS com 1 issue fixada). 11 commits granulares · 311/311 tests verde nas áreas tocadas · typecheck 0 erros.
