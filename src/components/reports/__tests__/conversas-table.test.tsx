@@ -91,31 +91,68 @@ describe("ConversasTable v3 (paginação)", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("toolbar mostra 'Total: X conversas · página N de M'", () => {
+  it("não renderiza chip 'Ordenação · N' duplicado no toolbar", () => {
+    render(
+      <ConversasTable
+        {...baseProps}
+        sortStack={[
+          { key: "name", direction: "asc" },
+          { key: "status", direction: "desc" },
+          { key: "priority", direction: "asc" },
+        ]}
+      />,
+    );
+    // O chip antigo era um <button aria-label="Limpar ordenação"> que continha
+    // a palavra "Ordenação". AppliedFiltersChips passou a cobrir esse caso.
+    expect(
+      screen.queryByRole("button", { name: /limpar ordenação/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renderiza 'Mostrando X-Y de Z' com formato pt-BR", () => {
     render(
       <ConversasTable
         {...baseProps}
         initialRows={[baseRow(1, 100), baseRow(2, 101)]}
-        total={1234}
-        page={2}
-        totalPages={3}
+        total={7183}
+        page={1}
+        pageSize={1000}
+        totalPages={8}
       />,
     );
-    expect(screen.getByText(/Total/)).toBeInTheDocument();
-    expect(screen.getByText(/1\.234/)).toBeInTheDocument();
-    expect(screen.getByText(/página 2 de 3/i)).toBeInTheDocument();
+    expect(screen.getByText(/Mostrando/)).toBeInTheDocument();
+    expect(screen.getByText("1-1.000")).toBeInTheDocument();
+    expect(screen.getByText(/7\.183/)).toBeInTheDocument();
   });
 
-  it("não renderiza mais o banner amarelo 'Mostrando primeiras 10000'", () => {
-    render(<ConversasTable {...baseProps} totalPages={50} />);
-    expect(screen.queryByText(/refine os filtros/i)).not.toBeInTheDocument();
+  it("'Mostrando X-Y de Z' clampa Y no total na última página", () => {
+    render(
+      <ConversasTable
+        {...baseProps}
+        initialRows={[baseRow(1, 100)]}
+        total={7183}
+        page={8}
+        pageSize={1000}
+        totalPages={8}
+      />,
+    );
+    // Última página: de 7001 até 7183 (não 8000).
+    expect(screen.getByText("7.001-7.183")).toBeInTheDocument();
   });
 
-  it("renderiza ConversasPagination quando totalPages > 1", () => {
+  it("paginação está no topo (data-tour=pagination-top)", () => {
+    render(<ConversasTable {...baseProps} totalPages={3} />);
+    const navs = screen.getAllByRole("navigation", { name: /paginação/i });
+    expect(navs.length).toBe(1);
+    const wrapper = navs[0]!.closest('[data-tour="pagination-top"]');
+    expect(wrapper).toBeTruthy();
+  });
+
+  it("não tem paginação no rodapé (somente 1 nav role)", () => {
     render(<ConversasTable {...baseProps} totalPages={3} />);
     expect(
-      screen.getByRole("navigation", { name: /paginação/i }),
-    ).toBeInTheDocument();
+      screen.getAllByRole("navigation", { name: /paginação/i }).length,
+    ).toBe(1);
   });
 
   it("não renderiza ConversasPagination quando totalPages <= 1", () => {
@@ -130,6 +167,23 @@ describe("ConversasTable v3 (paginação)", () => {
     render(<ConversasTable {...baseProps} totalPages={3} onPageChange={cb} />);
     fireEvent.click(screen.getByRole("button", { name: /ir para página 2/i }));
     expect(cb).toHaveBeenCalledWith(2);
+  });
+
+  it("total=0 mostra '0 conversas' no toolbar", () => {
+    render(
+      <ConversasTable
+        {...baseProps}
+        initialRows={[]}
+        total={0}
+        totalPages={0}
+      />,
+    );
+    expect(screen.getByText(/0 conversas/i)).toBeInTheDocument();
+  });
+
+  it("não renderiza mais o banner amarelo 'Mostrando primeiras 10000'", () => {
+    render(<ConversasTable {...baseProps} totalPages={50} />);
+    expect(screen.queryByText(/refine os filtros/i)).not.toBeInTheDocument();
   });
 
   it("limpa localStorage 'conversas-table-page-size' no mount", () => {

@@ -32,7 +32,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
 import {
   ColumnsToggle,
   type ColumnsToggleColumn,
@@ -611,8 +610,6 @@ export function ConversasTable({
     return decorated.map((d) => d.row);
   }, [filteredRows, sortStack]);
 
-  const clearSort = () => onSortStackChange([]);
-
   // ---- Lista de colunas visíveis (em ordem) -----
   const orderedColumns = useMemo(
     () =>
@@ -660,46 +657,48 @@ export function ConversasTable({
       : 0;
 
   // Toolbar -------------------------------------------------------------------
+  // v0.23 T7: contador "Mostrando X-Y de Z" + paginação no TOPO + ColumnsToggle.
+  // Removido o chip "Ordenação · N" (AppliedFiltersChips já cobre).
+  // Layout flex-wrap mobile-first: em telas pequenas as 3 zonas empilham.
+  const showingFrom =
+    total === 0 ? 0 : (page - 1) * (_pageSize ?? 0) + 1;
+  const showingTo = Math.min(page * (_pageSize ?? 0), total);
   const toolbar = (
-    <div className="flex flex-col gap-3 border-b border-border bg-muted/10 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <span className="text-xs text-muted-foreground tabular-nums">
-          Total:{" "}
-          <strong className="text-foreground">
-            {total.toLocaleString("pt-BR")}
-          </strong>{" "}
-          conversa{total === 1 ? "" : "s"}
-          {totalPages > 1 ? (
-            <span className="text-muted-foreground/70">
-              {" · "}página {page} de {totalPages}
-            </span>
-          ) : null}
-        </span>
-        {sortStack.length > 0 ? (
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={clearSort}
-            className="h-7 gap-1 text-[11px]"
-            aria-label="Limpar ordenação"
-            title="Click no cabeçalho ordena · Shift+click adiciona critério"
-          >
-            <X className="h-3 w-3" />
-            Ordenação
-            <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-bold text-primary tabular-nums">
-              {sortStack.length}
-            </span>
-          </Button>
-        ) : null}
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <div data-tour="columns">
-          <ColumnsToggle
-            columns={toggleColumns}
-            visible={visibleCols}
-            onChange={setVisibleCols}
-          />
-        </div>
+    <div
+      data-tour="pagination-top"
+      className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/10 px-3 py-2.5"
+    >
+      <span className="text-xs text-muted-foreground tabular-nums">
+        {total === 0 ? (
+          <>0 conversas</>
+        ) : (
+          <>
+            Mostrando{" "}
+            <strong className="text-foreground">
+              {showingFrom.toLocaleString("pt-BR")}
+              {"-"}
+              {showingTo.toLocaleString("pt-BR")}
+            </strong>{" "}
+            de{" "}
+            <strong className="text-foreground">
+              {total.toLocaleString("pt-BR")}
+            </strong>{" "}
+            conversa{total === 1 ? "" : "s"}
+          </>
+        )}
+      </span>
+      <ConversasPagination
+        page={page}
+        totalPages={totalPages}
+        onPageChange={onPageChange}
+        className="border-t-0 bg-transparent p-0"
+      />
+      <div data-tour="columns">
+        <ColumnsToggle
+          columns={toggleColumns}
+          visible={visibleCols}
+          onChange={setVisibleCols}
+        />
       </div>
     </div>
   );
@@ -1070,12 +1069,6 @@ export function ConversasTable({
           );
         })}
       </ul>
-
-      <ConversasPagination
-        page={page}
-        totalPages={totalPages}
-        onPageChange={onPageChange}
-      />
     </div>
   );
 }
