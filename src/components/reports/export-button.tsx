@@ -91,7 +91,7 @@ export function ExportButton({
       disabled={disabled}
       aria-label="Exportar conversas para planilha XLSX"
       aria-busy={loading}
-      className="relative h-10 px-4"
+      className="relative h-10 cursor-pointer px-4 disabled:cursor-not-allowed"
     >
       {loading ? (
         <>

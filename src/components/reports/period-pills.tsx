@@ -214,7 +214,12 @@ function PickerPanel({
         <p className="px-1 text-xs text-muted-foreground">{helperText}</p>
       )}
       <div className="flex items-center justify-end gap-2">
-        <Button variant="ghost" size="sm" onClick={onCancel}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onCancel}
+          className="cursor-pointer"
+        >
           Cancelar
         </Button>
         <Button
@@ -222,6 +227,7 @@ function PickerPanel({
           size="sm"
           onClick={handleApply}
           disabled={!canApply}
+          className="cursor-pointer disabled:cursor-not-allowed"
         >
           Aplicar
         </Button>
@@ -321,7 +327,7 @@ export function PeriodPills({
         );
 
         const pillClasses = cn(
-          "inline-flex shrink-0 snap-start items-center rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors",
+          "inline-flex shrink-0 cursor-pointer snap-start items-center rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors",
           "border border-transparent",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40",
           active

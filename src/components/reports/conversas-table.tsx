@@ -791,7 +791,7 @@ export function ConversasTable({
                         onClick={onHeaderClick(col.key, col.sortable)}
                         onKeyDown={onHeaderKey(col.key, col.sortable)}
                         className={cn(
-                          "group/sort inline-flex w-full items-center gap-1.5 rounded-md px-1 -mx-1 py-1 text-[13px] font-semibold uppercase tracking-wide transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50 hover:text-primary",
+                          "group/sort inline-flex w-full cursor-pointer items-center gap-1.5 rounded-md px-1 -mx-1 py-1 text-[13px] font-semibold uppercase tracking-wide transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50 hover:text-primary",
                           col.align === "right" && "justify-end text-right",
                           col.align === "center" && "justify-center",
                         )}

@@ -143,6 +143,7 @@ export function SortingDialog({
                     aria-label={`Direção ${
                       rule.direction === "asc" ? "ascendente" : "descendente"
                     }`}
+                    className="cursor-pointer"
                   >
                     {rule.direction === "asc" ? (
                       <ArrowUp aria-hidden />
@@ -156,7 +157,7 @@ export function SortingDialog({
                       onClick={() => move(idx, -1)}
                       disabled={idx === 0}
                       aria-label="Mover para cima"
-                      className="rounded-md px-1 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                      className="cursor-pointer rounded-md px-1 text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
                     >
                       ↑
                     </button>
@@ -165,7 +166,7 @@ export function SortingDialog({
                       onClick={() => move(idx, 1)}
                       disabled={idx === draft.length - 1}
                       aria-label="Mover para baixo"
-                      className="rounded-md px-1 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                      className="cursor-pointer rounded-md px-1 text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
                     >
                       ↓
                     </button>
@@ -176,6 +177,7 @@ export function SortingDialog({
                     size="sm"
                     onClick={() => removeRule(idx)}
                     aria-label="Remover critério"
+                    className="cursor-pointer"
                   >
                     <Trash2 aria-hidden />
                   </Button>
@@ -190,6 +192,7 @@ export function SortingDialog({
             size="sm"
             onClick={addRule}
             disabled={available.length === 0}
+            className="cursor-pointer disabled:cursor-not-allowed"
           >
             <Plus aria-hidden />
             Adicionar critério
@@ -206,6 +209,7 @@ export function SortingDialog({
               onOpenChange(false);
             }}
             disabled={applied.length === 0 && draft.length === 0}
+            className="cursor-pointer disabled:cursor-not-allowed"
           >
             Limpar
           </Button>
@@ -215,6 +219,7 @@ export function SortingDialog({
               variant="ghost"
               size="sm"
               onClick={() => onOpenChange(false)}
+              className="cursor-pointer"
             >
               Cancelar
             </Button>
@@ -226,6 +231,7 @@ export function SortingDialog({
                 onOpenChange(false);
               }}
               disabled={!isDirty || hasInvalidRule}
+              className="cursor-pointer disabled:cursor-not-allowed"
             >
               <ArrowUpDown aria-hidden />
               Aplicar

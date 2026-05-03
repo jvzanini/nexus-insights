@@ -77,7 +77,7 @@ export function ColumnsToggle({
           <Button
             variant="outline"
             size="sm"
-            className={cn("h-9 gap-1.5", className)}
+            className={cn("h-9 cursor-pointer gap-1.5", className)}
             aria-label={`${label} visíveis: ${visibleCount} de ${total}`}
           >
             <Columns3 className="h-3.5 w-3.5" />
@@ -138,14 +138,14 @@ export function ColumnsToggle({
           <button
             type="button"
             onClick={selectAll}
-            className="font-medium text-primary outline-none transition-colors hover:underline focus-visible:underline focus-visible:ring-2 focus-visible:ring-ring/50 rounded"
+            className="cursor-pointer font-medium text-primary outline-none transition-colors hover:underline focus-visible:underline focus-visible:ring-2 focus-visible:ring-ring/50 rounded"
           >
             Selecionar todas
           </button>
           <button
             type="button"
             onClick={deselectAll}
-            className="font-medium text-muted-foreground outline-none transition-colors hover:text-foreground hover:underline focus-visible:underline focus-visible:ring-2 focus-visible:ring-ring/50 rounded"
+            className="cursor-pointer font-medium text-muted-foreground outline-none transition-colors hover:text-foreground hover:underline focus-visible:underline focus-visible:ring-2 focus-visible:ring-ring/50 rounded"
           >
             Desmarcar todas
           </button>

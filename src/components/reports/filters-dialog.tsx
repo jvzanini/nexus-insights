@@ -410,6 +410,7 @@ export function FiltersDialog({
             onClick={handleClearOnlyFilters}
             disabled={!hasAnyFilter}
             aria-label="Limpar todos os filtros"
+            className="cursor-pointer disabled:cursor-not-allowed"
           >
             <RotateCcw aria-hidden="true" />
             Limpar todos
@@ -420,6 +421,7 @@ export function FiltersDialog({
               variant="ghost"
               size="sm"
               onClick={() => onOpenChange(false)}
+              className="cursor-pointer"
             >
               Cancelar
             </Button>
@@ -432,6 +434,7 @@ export function FiltersDialog({
               }}
               disabled={!isDirty}
               aria-label="Aplicar filtros"
+              className="cursor-pointer disabled:cursor-not-allowed"
             >
               <Filter aria-hidden="true" />
               Aplicar{pending > 0 ? ` (${pending})` : ""}

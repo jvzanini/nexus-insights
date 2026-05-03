@@ -52,7 +52,7 @@ export function QuickFiltersPopover({
             }`}
             data-tour="quick-filters"
             className={cn(
-              "relative h-10 px-4",
+              "relative h-10 cursor-pointer px-4",
               count > 0 && "border-violet-500/40 text-foreground",
             )}
           >

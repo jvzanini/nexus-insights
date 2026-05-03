@@ -79,7 +79,7 @@ export function PresetsPopover({
               presets.length > 0 ? ` (${presets.length})` : ""
             }`}
             data-tour="presets"
-            className={cn("relative h-10 px-4")}
+            className={cn("relative h-10 cursor-pointer px-4")}
           >
             <Star aria-hidden="true" />
             Presets
@@ -114,7 +114,7 @@ export function PresetsPopover({
                     onApply(p);
                     setOpen(false);
                   }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-accent"
+                  className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-accent"
                 >
                   <Star
                     className="h-3.5 w-3.5 shrink-0 text-amber-400"
@@ -156,7 +156,7 @@ export function PresetsPopover({
                   type="button"
                   size="sm"
                   onClick={handleCreate}
-                  className="h-7 text-xs"
+                  className="h-7 cursor-pointer text-xs"
                 >
                   Salvar
                 </Button>
@@ -165,7 +165,7 @@ export function PresetsPopover({
                   variant="ghost"
                   size="sm"
                   onClick={reset}
-                  className="h-7 text-xs"
+                  className="h-7 cursor-pointer text-xs"
                 >
                   Cancelar
                 </Button>
@@ -178,7 +178,7 @@ export function PresetsPopover({
               size="sm"
               disabled={isAtCap}
               onClick={() => setCreating(true)}
-              className="h-8 w-full justify-start gap-2 text-xs"
+              className="h-8 w-full cursor-pointer justify-start gap-2 text-xs disabled:cursor-not-allowed"
               title={isAtCap ? "Limite de 50 presets atingido" : undefined}
             >
               <Plus className="h-3.5 w-3.5" aria-hidden="true" />
@@ -194,7 +194,7 @@ export function PresetsPopover({
               onOpenManager();
               setOpen(false);
             }}
-            className="h-8 w-full justify-start gap-2 text-xs"
+            className="h-8 w-full cursor-pointer justify-start gap-2 text-xs disabled:cursor-not-allowed"
           >
             <Settings className="h-3.5 w-3.5" aria-hidden="true" />
             Gerenciar
