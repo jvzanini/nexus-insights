@@ -575,9 +575,7 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
                 data={providerPieData}
                 centerLabel="Custo total"
                 centerValue={totalCostBrlFormatted}
-                height={300}
                 formatValue={formatBrl4}
-                tooltipPosition="top-right"
                 ariaLabel="Custo agrupado por provider em BRL"
                 emptyMessage="Sem dados de provider"
               />
@@ -668,7 +666,7 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
               <TableBody>
                 {/* Linha de TOTAL no topo — sutil (label uppercase, sem ícone) */}
                 {detailsTotals && detailsTotals.count > 0 ? (
-                  <TableRow className="sticky top-0 z-[1] bg-muted/30 border-b border-border/40 text-foreground font-semibold text-xs uppercase tracking-wide">
+                  <TableRow className="sticky top-0 z-[1] bg-violet-500/5 dark:bg-violet-500/10 border-b border-border/60 text-foreground font-bold text-sm">
                     <TableCell colSpan={3} className="whitespace-nowrap">
                       <span>Total no filtro</span>
                     </TableCell>
