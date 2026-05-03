@@ -1,12 +1,28 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-05-03
-**Versão atual em produção:** v0.32.0
+**Versão atual em produção:** v0.34.0
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.32.0)
+## Em produção (v0.34.0)
+
+### Release v0.34.0 (2026-05-03) — Suite Agente Nex Polish v5
+
+Feature grande + 6 polish cirúrgicos + bug fix cotação inflada (>R$6/USD). Workflow rigoroso (plan v1→v2→v3 com 50 achados em 2 pentes-finos REAIS · subagent-driven-development com TDD · ui-ux-pro-max em toda task UI · two-stage review automático). 17 commits granulares + release commit. Bump 0.32→0.34 (pula 0.33 — agente paralelo Multi-tenant Realtime Fase 1 já commitou T0.X com prefix v0.33).
+
+**Schema:** 4 columns aditivas em `nex_settings` (terminology JSONB + suggestions_enabled BOOLEAN + seeded_v3_at TIMESTAMPTZ + pre-seed Matrix idempotente — 8 termos: estados→inboxes, equipe→agentes, departamento→teams) + 1 column em `llm_usage` (is_playground BOOLEAN).
+
+**Configuração:** Hardcode spread=1.10 (fix cotação inflada) · remove Spread/UsdRateTicker UI · remove botão "Criar API key" inline · toggle Nex ativo redesign (linha única).
+
+**Prompt:** Section "Nomenclaturas e termos" entre Tom e Guardrails (cap 50 termos) · toggle "Sugestões em botões" · composeSystemPrompt injeta seções condicionais · remove frase "Preview somente leitura" · KB "Adicionar documento" → "Adicionar conhecimento".
+
+**Bubble:** SuggestionsBar componente compartilhado · runNex extractSuggestions parser ancorado em início-de-linha · RunNexResult.suggestions não-opcional · logUsage SEMPRE chamado com is_playground flag · sendNexMessage propaga options.isPlayground · render botões clicáveis na última assistant message (Bubble + Playground).
+
+**Consumo:** DonutWithCenter espessura mais fina (innerR 75 outerR 110) + tooltip fixo top-right (não follow-mouse) · Período "Hoje" vira hourly (24 buckets) · coluna "Origem" badge Bubble/Playground · filtro "Ambiente" CustomSelect.
+
+### Em produção (v0.32.0)
 
 ### Release v0.32.0 (2026-05-03) — Conversas Filtros Polish v5 (Documento + redesign Avançado + Export pipeline)
 

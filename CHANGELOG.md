@@ -1,5 +1,51 @@
 # Changelog
 
+## [v0.34.0] 2026-05-03 — Suite Agente Nex Polish v5 (nomenclaturas + sugestões em botões + 6 polish + bug cotação)
+
+> Feature grande + 6 polish cirúrgicos + bug fix da cotação USD/BRL inflada (>R$6/USD por bug de spread setado pra 1.40+). Workflow rigoroso (plan v1→v2→v3 com 50 achados em 2 pentes-finos REAIS · subagent-driven-development com TDD em cada task · ui-ux-pro-max em todas as tasks UI · two-stage review automático). 17 commits granulares (A1+A2+B1+B2+C1+C2+C3+C4+D1+D2+D3+D4+D5+D6+E1+E2+E3) + commit do release. Bump 0.32→0.34 (pula 0.33 — outro agente ativo no Multi-tenant Realtime Fase 1 já marcou commits T0.X com prefix v0.33).
+
+### Schema additive (5 columns)
+- `nex_settings.terminology JSONB DEFAULT '{}'` — mapa termo→significado pra interpretar nomenclaturas customizadas.
+- `nex_settings.suggestions_enabled BOOLEAN DEFAULT false` — toggle "Sugestões em botões".
+- `nex_settings.seeded_v3_at TIMESTAMPTZ NULL` — flag de pre-seed idempotente (evita re-aplicação ao limpar terminology).
+- Pre-seed terminology Matrix (idempotente via `seeded_v3_at IS NULL`): 8 termos (estados→inboxes, colaboradores/funcionários/minha equipe/meu time→agentes, departamento/setor/time→teams).
+- `llm_usage.is_playground BOOLEAN DEFAULT false` — distingue Bubble vs Playground. Trade-off: rows pre-v0.34 todas false default (sem migration retroativa).
+
+### Configuração (/agente-nex/configuracao)
+- `exchange-rate` hardcode spread=1.10 — fix bug cotação inflada (commercial × 1.40 estava dando >R$6/USD; agora 1.10 ≈ IOF 3.5% + 6.5% spread real ≈ R$5.45). `setCardSpread()` virou no-op + `console.warn` (back-compat).
+- Remove Spread cartão UI + UsdRateTicker UI — cotação agora 100% nos bastidores.
+- Remove botão "Criar API key" inline — mantém só "Adicionar crédito" via `topUpUrl`.
+- Toggle "Agente Nex ativo" redesign — linha única (sem `role="group"` aninhado), `id="nex-bubble-toggle"`.
+
+### Prompt (/agente-nex/prompt)
+- Section "Nomenclaturas e termos" entre Tom e Guardrails (cap 50 termos × 100 chars). Server Action `saveTerminologyAction` super_admin-gated.
+- Toggle "Sugestões em botões" entre Nomenclaturas e Guardrails. Server Action `setSuggestionsEnabledAction` super_admin-gated.
+- `composeSystemPrompt` injeta seções condicionais "## Terminologia" e "## Sugestões clicáveis" no system prompt.
+- Remove frase "Preview somente leitura..." do PromptPreviewCard quando super_admin (mantém pra outros perfis).
+- KB rename: "Adicionar documento" → "Adicionar conhecimento" (3 lugares: kb-section.tsx + kb-upload-dialog.tsx + tests).
+
+### Bubble (Sugestões em botões + isPlayground propagação)
+- `SuggestionsBar` componente compartilhado novo (chips violet outline + onPick callback). Usado em nex-chat-panel + playground-sheet.
+- `runNex extractSuggestions` parser com regex ancorada em início-de-linha. Extrai sufixo `[[suggestions]]:item|item` da resposta do LLM. Cap 4 sugestões × 80 chars.
+- `RunNexResult.suggestions: string[]` não-opcional (sempre array, default `[]`).
+- `logUsage` SEMPRE chamado (remove skip de v0.16 quando `isPlayground=true`). Agora sempre loga com flag `is_playground`.
+- `sendNexMessage(messages, options?: { isPlayground?: boolean })` retorna `{ ok, message, suggestions }`. PlaygroundSheet passa `isPlayground=true` → log marcado.
+- Render `<SuggestionsBar>` na última assistant message (Bubble + Playground). Click consume + envia sugestão como nova msg.
+
+### Consumo (/agente-nex/consumo)
+- DonutWithCenter espessura mais fina (innerR 80→75, outerR 120→110, ratio 0.68 — 35px espessura, era 40px). Tooltip volta pra fixo `top-right` (não follow-mouse — undeprecate `tooltipPosition` prop).
+- Período "Hoje" vira gráfico hourly (byHour 24 buckets fixos 00:00..23:00 quando range ≤24h). Buckets vazios mostram zero (não pula horas). Card title dinâmico: "Custo por hora" quando isHourly, "Custo por dia" senão.
+- Coluna "Origem" entre Data/hora e Provider — badge pill violet (Agente Nex) / amber (Playground) baseado em `row.isPlayground`.
+- Filtro "Ambiente" ao lado do Provider global — `<CustomSelect>` com 3 opções (Todos / Agente Nex / Playground). State `ambiente` sincronizado com URL `?env=...`.
+- `getUsageDetails` aceita `isPlayground?: boolean | null` filter — propagado via `fetchUsageDetails` (action) → consumo-content.
+- colSpan da linha "Total no filtro" = 4 (era 3 — agora há Data + Origem + Provider + Modelo antes dos numbers).
+
+### Workflow rigoroso
+- Plan v1 → v2 → v3 com 2 pentes-finos REAIS (28 achados v1→v2 + 22 v2→v3 = 50 total).
+- subagent-driven-development com TDD em cada task.
+- ui-ux-pro-max em todas as tasks UI.
+- Two-stage review (spec compliance + code quality) após cada task.
+
 ## [v0.32.0] 2026-05-03 — Conversas Filtros Polish v5 (Documento + redesign Avançado + Export pipeline)
 
 > 9 fixes/features no menu de filtros de `/relatorios/conversas` após feedback do João sobre v0.30. Workflow rigoroso (plan v1→v2→v3 com 28 achados em 2 pentes-finos REAIS · subagent-driven-development com TDD em 4 batches sequenciais · ui-ux-pro-max em todas tasks UI · code review final via tests inline). 14 commits granulares + release · 100+ tests novos verde · typecheck 0 erros (no escopo Conversas) · sem schema DB change (apenas codec migration v1→v2 transparente).
