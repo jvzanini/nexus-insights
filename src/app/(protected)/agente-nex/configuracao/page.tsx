@@ -33,7 +33,7 @@ export default async function Page() {
       <PageHeader
         icon={Sparkles}
         title="Configuração do Agente Nex"
-        subtitle="Provedor, modelo, chave em uso e spread cartão."
+        subtitle="Provedor, modelo, chave em uso, cotação USD/BRL e spread cartão."
       />
       <Card className="rounded-2xl border border-border bg-muted/30 p-2">
         <CardContent>
@@ -42,6 +42,11 @@ export default async function Page() {
             initialNexEnabled={nexBubbleEnabled}
             initialCredentials={initialCredentials}
             initialSpread={initialSpread}
+            initialCommercialRate={currentRate?.commercial ?? null}
+            initialRateSource={currentRate?.source ?? null}
+            initialFetchedAt={
+              currentRate?.fetchedAt ? currentRate.fetchedAt.toISOString() : null
+            }
           />
         </CardContent>
       </Card>

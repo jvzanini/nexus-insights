@@ -34,6 +34,12 @@ jest.mock("@/lib/actions/exchange-rate", () => ({
   setCardSpreadAction: jest.fn(async () => ({ ok: true })),
 }));
 
+// Mock UsdRateTicker pra cortar cadeia next-auth (importa exchange-rate-refresh
+// que importa @/lib/auth → next-auth ESM).
+jest.mock("@/components/agente-nex/usd-rate-ticker", () => ({
+  UsdRateTicker: () => null,
+}));
+
 const toastMock = {
   success: jest.fn(),
   error: jest.fn(),
@@ -64,6 +70,9 @@ function renderForm(overrides?: Partial<Parameters<typeof LlmConfigForm>[0]>) {
       initialNexEnabled={false}
       initialCredentials={baseCreds}
       initialSpread={1.1}
+      initialCommercialRate={null}
+      initialRateSource={null}
+      initialFetchedAt={null}
       {...overrides}
     />,
   );

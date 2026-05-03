@@ -43,6 +43,8 @@ import {
 import { setCardSpreadAction } from "@/lib/actions/exchange-rate";
 import type { CredentialSummary } from "@/lib/llm/credentials";
 import type { PublicLlmConfig } from "@/lib/llm/get-active-config";
+import type { UsdBrlRate } from "@/lib/llm/exchange-rate";
+import { UsdRateTicker } from "@/components/agente-nex/usd-rate-ticker";
 import { cn } from "@/lib/utils";
 
 interface LlmConfigFormProps {
@@ -50,6 +52,9 @@ interface LlmConfigFormProps {
   initialNexEnabled: boolean;
   initialCredentials: CredentialSummary[];
   initialSpread: number;
+  initialCommercialRate: number | null;
+  initialRateSource: UsdBrlRate["source"] | null;
+  initialFetchedAt: string | null;
 }
 
 const CUSTOM_MODEL_VALUE = "__custom__";
@@ -105,6 +110,9 @@ export function LlmConfigForm({
   initialNexEnabled,
   initialCredentials,
   initialSpread,
+  initialCommercialRate,
+  initialRateSource,
+  initialFetchedAt,
 }: LlmConfigFormProps) {
   const router = useRouter();
   const [provider, setProvider] = useState<LlmProvider>(
@@ -166,6 +174,11 @@ export function LlmConfigForm({
   const [isSavingSpread, setIsSavingSpread] = useState<boolean>(false);
   const lastSavedSpreadRef = useRef<number>(initialSpread);
   const spreadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // `currentSpreadValue` é STATE (não useRef) porque o UsdRateTicker precisa
+  // re-renderizar quando o spread muda — useRef.current não dispara React update.
+  const [currentSpreadValue, setCurrentSpreadValue] =
+    useState<number>(initialSpread);
 
   const catalog = PROVIDER_CATALOG[provider];
 
@@ -417,6 +430,7 @@ export function LlmConfigForm({
           return;
         }
         lastSavedSpreadRef.current = parsed;
+        setCurrentSpreadValue(parsed);
         setSpreadInput(parsed.toFixed(2));
         toast.success("Spread atualizado");
         router.refresh();
@@ -694,43 +708,7 @@ export function LlmConfigForm({
         </div>
       )}
 
-      </div>
-
-      {/* Section: Spread cartão + ações. */}
-      <div className="space-y-6 border-t border-border/50 pt-6">
-      {/* Spread cartão. */}
-      <div className="space-y-1.5">
-        <Label htmlFor="llm-card-spread" className="gap-2">
-          <Coins className="h-3.5 w-3.5 text-muted-foreground" />
-          Spread cartão
-        </Label>
-        <div className="flex items-center gap-2">
-          <Input
-            id="llm-card-spread"
-            type="number"
-            step="0.01"
-            value={spreadInput}
-            onChange={handleSpreadChange}
-            onBlur={handleSpreadBlur}
-            disabled={isSavingSpread}
-            className="min-h-[44px] w-32"
-            aria-describedby="llm-card-spread-help"
-            aria-label="Spread cartão (multiplicador USD/BRL)"
-          />
-          {isSavingSpread ? (
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-          ) : null}
-        </div>
-        <p
-          id="llm-card-spread-help"
-          className="text-xs text-muted-foreground"
-        >
-          Multiplicador aplicado sobre a cotação comercial USD/BRL (default
-          1.10 ≈ IOF + spread Visa/Master). Sem limite superior — escolha o
-          valor real do seu cartão.
-        </p>
-      </div>
-
+      {/* Ações da LLM section — inline (saíram do final da página). */}
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
         <Button
           type="button"
@@ -761,6 +739,63 @@ export function LlmConfigForm({
         </Button>
       </div>
 
+      </div>
+
+      {/* Section 3: USD Ticker — só renderiza quando há cotação carregada. */}
+      {initialCommercialRate !== null &&
+      initialRateSource !== null &&
+      initialFetchedAt !== null ? (
+        <div className="border-t border-border/50 pt-6">
+          <UsdRateTicker
+            commercialRate={initialCommercialRate}
+            spread={currentSpreadValue}
+            source={initialRateSource}
+            fetchedAt={initialFetchedAt}
+          />
+        </div>
+      ) : null}
+
+      {/* Section 4: Spread cartão — Card violet com helper expandido. */}
+      <div className="space-y-3 rounded-2xl border border-violet-500/20 bg-violet-500/5 p-4 dark:bg-violet-500/10">
+        <div className="flex items-center gap-2">
+          <Coins className="h-4 w-4 text-violet-500" />
+          <Label
+            htmlFor="llm-card-spread"
+            className="text-sm font-semibold text-foreground"
+          >
+            Spread cartão
+          </Label>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Multiplicador aplicado sobre a cotação comercial USD/BRL pra refletir
+          IOF + spread Visa/Master. Default 1,10 ≈ 10% acima da comercial.
+          Ajuste pra refletir seu cartão real (sem limite superior).
+        </p>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground" aria-hidden>
+            ×
+          </span>
+          <Input
+            id="llm-card-spread"
+            type="number"
+            step="0.01"
+            value={spreadInput}
+            onChange={handleSpreadChange}
+            onBlur={handleSpreadBlur}
+            disabled={isSavingSpread}
+            className="min-h-[44px] w-32"
+            aria-describedby="llm-card-spread-help"
+            aria-label="Spread cartão (multiplicador USD/BRL)"
+          />
+          {isSavingSpread ? (
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          ) : null}
+        </div>
+        <p id="llm-card-spread-help" className="sr-only">
+          Multiplicador positivo, sem limite superior. Default 1.10.
+        </p>
+      </div>
+
       {/* Hint para o leitor de tela / debug visual quando sem credenciais. */}
       {hasNoCredentials ? (
         <p
@@ -774,7 +809,6 @@ export function LlmConfigForm({
           Chave selecionada: {selectedCredential.label}
         </p>
       ) : null}
-      </div>
     </div>
   );
 }
