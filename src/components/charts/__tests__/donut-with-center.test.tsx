@@ -276,3 +276,21 @@ describe("DonutTooltipStacked", () => {
     expect(screen.getByText("1.234")).toBeInTheDocument();
   });
 });
+
+describe("DonutWithCenter — defaults v0.26", () => {
+  it("usa height=360 por default (era 320 em v0.24)", () => {
+    const { container } = render(
+      <DonutWithCenter
+        data={[
+          { name: "A", value: 50 },
+          { name: "B", value: 30 },
+        ]}
+        centerLabel="Total"
+        centerValue="80"
+      />,
+    );
+    const wrapper = container.querySelector("[role='img']") as HTMLElement;
+    expect(wrapper).not.toBeNull();
+    expect(wrapper.style.height).toBe("360px");
+  });
+});
