@@ -283,7 +283,7 @@ describe("InteractiveBarChart — providersByModel custom XAxis tick", () => {
     expect(x.height).toBe(50);
   });
 
-  it("custom tick renderiza nome do modelo + (Provider) com label do PROVIDER_LABELS", () => {
+  it("custom tick renderiza nome do modelo + Badge SVG com provider em uppercase (sem parênteses)", () => {
     const providersByModel = { "gpt-5.4-nano": "openai" };
     render(
       <InteractiveBarChart
@@ -299,11 +299,16 @@ describe("InteractiveBarChart — providersByModel custom XAxis tick", () => {
       payload: { value: string };
     }) => React.ReactElement;
     const node = TickFn({ x: 10, y: 20, payload: { value: "gpt-5.4-nano" } });
-    // Renderiza node em string serializada via JSON-like check no children
     const { container } = render(<svg>{node}</svg>);
     const html = container.innerHTML;
     expect(html).toContain("gpt-5.4-nano");
-    expect(html).toContain("(OpenAI)");
+    // Badge: provider em uppercase, sem parênteses
+    expect(html).toContain("OPENAI");
+    expect(html).not.toContain("(OpenAI)");
+    expect(html).not.toContain("(openai)");
+    // Badge container <rect> sem fill (transparent) + stroke currentColor
+    expect(html).toMatch(/<rect[^>]*fill="transparent"/);
+    expect(html).toMatch(/<rect[^>]*stroke="currentColor"/);
   });
 
   it("custom tick trunca nome de modelo > 24 chars com ellipsis", () => {
@@ -330,7 +335,7 @@ describe("InteractiveBarChart — providersByModel custom XAxis tick", () => {
     expect(html).not.toContain(longName); // nome completo NÃO está renderizado
   });
 
-  it("custom tick: modelo sem provider mapeado NÃO renderiza linha de provider", () => {
+  it("custom tick: modelo sem provider mapeado NÃO renderiza Badge", () => {
     const providersByModel = { "outro-modelo": "openai" };
     render(
       <InteractiveBarChart
@@ -349,7 +354,10 @@ describe("InteractiveBarChart — providersByModel custom XAxis tick", () => {
     const { container } = render(<svg>{node}</svg>);
     const html = container.innerHTML;
     expect(html).toContain("gpt-5.4-nano");
+    expect(html).not.toContain("OPENAI");
     expect(html).not.toContain("(OpenAI)");
     expect(html).not.toContain("(openai)");
+    // Sem Badge: nenhum <rect> renderizado
+    expect(html).not.toMatch(/<rect[^>]*stroke="currentColor"/);
   });
 });

@@ -113,7 +113,9 @@ function makeYAxisFormatter(
 /**
  * Cria um custom tick para o XAxis categórico que renderiza:
  * 1) nome do modelo (truncado em 24 chars com ellipsis se necessário);
- * 2) "(Provider)" em fonte menor com opacity 0.6 (apenas se mapeado).
+ * 2) Badge SVG inline (rect border + text uppercase opacity 0.6, sem fill)
+ *    com o nome do provider — apenas quando mapeado em providersByModel.
+ *    Largura calculada dinamicamente (badgeText.length * 5.5 + 12).
  */
 function makeCustomBarTick(providersByModel?: Record<string, string>) {
   return function CustomBarTick(tickProps: {
@@ -128,8 +130,11 @@ function makeCustomBarTick(providersByModel?: Record<string, string>) {
     const truncated = value.length > 24 ? `${value.slice(0, 21)}…` : value;
     const provider = providersByModel?.[value];
     const providerLabel = provider
-      ? `(${PROVIDER_LABELS[provider as keyof typeof PROVIDER_LABELS] ?? provider})`
+      ? (PROVIDER_LABELS[provider as keyof typeof PROVIDER_LABELS] ?? provider)
       : "";
+    const badgeText = providerLabel.toUpperCase();
+    // Heurística: cada char ≈ 5.5px em uppercase + 12px padding total.
+    const badgeWidth = badgeText.length * 5.5 + 12;
     return (
       <g transform={`translate(${numX},${numY})`}>
         <text
@@ -142,18 +147,31 @@ function makeCustomBarTick(providersByModel?: Record<string, string>) {
         >
           {truncated}
         </text>
-        {providerLabel ? (
-          <text
-            x={0}
-            y={0}
-            dy={32}
-            textAnchor="middle"
-            fontSize={10}
-            fill="currentColor"
-            opacity={0.6}
-          >
-            {providerLabel}
-          </text>
+        {badgeText ? (
+          <g transform="translate(0, 26)">
+            <rect
+              x={-badgeWidth / 2}
+              y={0}
+              width={badgeWidth}
+              height={14}
+              rx={3}
+              fill="transparent"
+              stroke="currentColor"
+              strokeOpacity={0.3}
+              strokeWidth={1}
+            />
+            <text
+              x={0}
+              y={10}
+              textAnchor="middle"
+              fontSize={9}
+              fill="currentColor"
+              opacity={0.6}
+              letterSpacing={0.5}
+            >
+              {badgeText}
+            </text>
+          </g>
         ) : null}
       </g>
     );
