@@ -42,145 +42,202 @@ const ROWS: Row[] = [
   },
 ];
 
-describe("applyConditions", () => {
+describe("applyConditions v2 (operador per-par, left-associative)", () => {
   it("grupo vazio retorna data inalterada (mesma referência)", () => {
-    const empty: ConditionGroup = { combinator: "AND", conditions: [] };
+    const empty: ConditionGroup = { items: [] };
     const out = applyConditions(ROWS, empty);
     expect(out).toBe(ROWS);
   });
 
-  it("AND com múltiplas condições", () => {
-    const group: ConditionGroup = {
-      combinator: "AND",
-      conditions: [
-        { field: "role", operator: "eq", value: "viewer" },
-        { field: "age", operator: "gt", value: 30 },
-      ],
+  it("1 item sem connector — só avalia o nó", () => {
+    const cg: ConditionGroup = {
+      items: [{ node: { field: "role", operator: "eq", value: "viewer" } }],
     };
-    const out = applyConditions(ROWS, group);
-    expect(out.map((r) => r.id)).toEqual([2]);
+    expect(applyConditions(ROWS, cg).map((r) => r.id).sort()).toEqual([2, 4]);
   });
 
-  it("OR com múltiplas condições", () => {
-    const group: ConditionGroup = {
-      combinator: "OR",
-      conditions: [
-        { field: "role", operator: "eq", value: "admin" },
-        { field: "age", operator: "lt", value: 25 },
+  it("2 items com AND default (role=viewer AND age>30)", () => {
+    const cg: ConditionGroup = {
+      items: [
+        { node: { field: "role", operator: "eq", value: "viewer" } },
+        { connector: "AND", node: { field: "age", operator: "gt", value: 30 } },
       ],
     };
-    const out = applyConditions(ROWS, group);
-    expect(out.map((r) => r.id).sort()).toEqual([1, 4]);
+    expect(applyConditions(ROWS, cg).map((r) => r.id)).toEqual([2]);
   });
 
-  it("grupos aninhados (AND de OR)", () => {
-    const group: ConditionGroup = {
-      combinator: "AND",
-      conditions: [
-        { field: "age", operator: "gte", value: 25 },
+  it("2 items com OR (role=admin OR age<25)", () => {
+    const cg: ConditionGroup = {
+      items: [
+        { node: { field: "role", operator: "eq", value: "admin" } },
+        { connector: "OR", node: { field: "age", operator: "lt", value: 25 } },
+      ],
+    };
+    expect(applyConditions(ROWS, cg).map((r) => r.id).sort()).toEqual([1, 4]);
+  });
+
+  it("3 items left-associative: A AND B OR C → (A AND B) OR C", () => {
+    // (role=admin AND age=28) OR (role=manager) → row1 + row3
+    const cg: ConditionGroup = {
+      items: [
+        { node: { field: "role", operator: "eq", value: "admin" } },
+        { connector: "AND", node: { field: "age", operator: "eq", value: 28 } },
+        { connector: "OR", node: { field: "role", operator: "eq", value: "manager" } },
+      ],
+    };
+    expect(applyConditions(ROWS, cg).map((r) => r.id).sort()).toEqual([1, 3]);
+  });
+
+  it("3 items: A OR B AND C → (A OR B) AND C — left-associative", () => {
+    // (role=admin OR role=viewer) AND age>=30 → só row 2 (Bruno viewer 35)
+    const cg: ConditionGroup = {
+      items: [
+        { node: { field: "role", operator: "eq", value: "admin" } },
+        { connector: "OR", node: { field: "role", operator: "eq", value: "viewer" } },
+        { connector: "AND", node: { field: "age", operator: "gte", value: 30 } },
+      ],
+    };
+    expect(applyConditions(ROWS, cg).map((r) => r.id)).toEqual([2]);
+  });
+
+  it("sub-grupo aninhado: age>=25 AND (role=admin OR role=manager)", () => {
+    const cg: ConditionGroup = {
+      items: [
+        { node: { field: "age", operator: "gte", value: 25 } },
         {
-          combinator: "OR",
-          conditions: [
-            { field: "role", operator: "eq", value: "admin" },
-            { field: "role", operator: "eq", value: "manager" },
-          ],
+          connector: "AND",
+          node: {
+            items: [
+              { node: { field: "role", operator: "eq", value: "admin" } },
+              { connector: "OR", node: { field: "role", operator: "eq", value: "manager" } },
+            ],
+          },
         },
       ],
     };
-    const out = applyConditions(ROWS, group);
-    expect(out.map((r) => r.id).sort()).toEqual([1, 3]);
+    expect(applyConditions(ROWS, cg).map((r) => r.id).sort()).toEqual([1, 3]);
+  });
+
+  it("grupo aninhado vazio é considerado true (passa — no-op)", () => {
+    const cg: ConditionGroup = {
+      items: [
+        { node: { field: "age", operator: "gte", value: 30 } },
+        { connector: "AND", node: { items: [] } },
+      ],
+    };
+    expect(applyConditions(ROWS, cg).map((r) => r.id).sort()).toEqual([2, 3]);
+  });
+});
+
+describe("evaluateCondition operadores (via 1-item groups)", () => {
+  const wrap = (cond: {
+    field: string;
+    operator:
+      | "eq"
+      | "neq"
+      | "gt"
+      | "gte"
+      | "lt"
+      | "lte"
+      | "contains"
+      | "starts_with"
+      | "in"
+      | "not_in"
+      | "contains_all";
+    value: unknown;
+  }): ConditionGroup => ({
+    items: [{ node: cond }],
   });
 
   it("operador eq", () => {
-    const group: ConditionGroup = {
-      combinator: "AND",
-      conditions: [{ field: "name", operator: "eq", value: "Ana Silva" }],
-    };
-    expect(applyConditions(ROWS, group).map((r) => r.id)).toEqual([1]);
+    expect(
+      applyConditions(ROWS, wrap({ field: "name", operator: "eq", value: "Ana Silva" })).map(
+        (r) => r.id,
+      ),
+    ).toEqual([1]);
   });
 
   it("operador neq", () => {
-    const group: ConditionGroup = {
-      combinator: "AND",
-      conditions: [{ field: "role", operator: "neq", value: "viewer" }],
-    };
-    expect(applyConditions(ROWS, group).map((r) => r.id).sort()).toEqual([1, 3]);
+    expect(
+      applyConditions(ROWS, wrap({ field: "role", operator: "neq", value: "viewer" }))
+        .map((r) => r.id)
+        .sort(),
+    ).toEqual([1, 3]);
   });
 
   it("operador gt e lt em number", () => {
-    const gt: ConditionGroup = {
-      combinator: "AND",
-      conditions: [{ field: "age", operator: "gt", value: 30 }],
-    };
-    expect(applyConditions(ROWS, gt).map((r) => r.id).sort()).toEqual([2, 3]);
+    expect(
+      applyConditions(ROWS, wrap({ field: "age", operator: "gt", value: 30 }))
+        .map((r) => r.id)
+        .sort(),
+    ).toEqual([2, 3]);
 
-    const lt: ConditionGroup = {
-      combinator: "AND",
-      conditions: [{ field: "age", operator: "lt", value: 30 }],
-    };
-    expect(applyConditions(ROWS, lt).map((r) => r.id).sort()).toEqual([1, 4]);
+    expect(
+      applyConditions(ROWS, wrap({ field: "age", operator: "lt", value: 30 }))
+        .map((r) => r.id)
+        .sort(),
+    ).toEqual([1, 4]);
   });
 
   it("operador gte e lte em date", () => {
-    const gte: ConditionGroup = {
-      combinator: "AND",
-      conditions: [
-        { field: "createdAt", operator: "gte", value: new Date("2026-03-01") },
-      ],
-    };
-    expect(applyConditions(ROWS, gte).map((r) => r.id).sort()).toEqual([3, 4]);
+    expect(
+      applyConditions(
+        ROWS,
+        wrap({ field: "createdAt", operator: "gte", value: new Date("2026-03-01") }),
+      )
+        .map((r) => r.id)
+        .sort(),
+    ).toEqual([3, 4]);
 
-    const lte: ConditionGroup = {
-      combinator: "AND",
-      conditions: [
-        { field: "createdAt", operator: "lte", value: new Date("2026-02-15") },
-      ],
-    };
-    expect(applyConditions(ROWS, lte).map((r) => r.id).sort()).toEqual([1, 2]);
+    expect(
+      applyConditions(
+        ROWS,
+        wrap({ field: "createdAt", operator: "lte", value: new Date("2026-02-15") }),
+      )
+        .map((r) => r.id)
+        .sort(),
+    ).toEqual([1, 2]);
   });
 
   it("operador contains (case-insensitive) em string", () => {
-    const group: ConditionGroup = {
-      combinator: "AND",
-      conditions: [{ field: "name", operator: "contains", value: "silva" }],
-    };
-    expect(applyConditions(ROWS, group).map((r) => r.id)).toEqual([1]);
+    expect(
+      applyConditions(ROWS, wrap({ field: "name", operator: "contains", value: "silva" })).map(
+        (r) => r.id,
+      ),
+    ).toEqual([1]);
   });
 
   it("operador starts_with", () => {
-    const group: ConditionGroup = {
-      combinator: "AND",
-      conditions: [{ field: "name", operator: "starts_with", value: "Ca" }],
-    };
-    expect(applyConditions(ROWS, group).map((r) => r.id)).toEqual([3]);
+    expect(
+      applyConditions(ROWS, wrap({ field: "name", operator: "starts_with", value: "Ca" })).map(
+        (r) => r.id,
+      ),
+    ).toEqual([3]);
   });
 
   it("operador in com array de valores", () => {
-    const group: ConditionGroup = {
-      combinator: "AND",
-      conditions: [
-        { field: "role", operator: "in", value: ["admin", "manager"] },
-      ],
-    };
-    expect(applyConditions(ROWS, group).map((r) => r.id).sort()).toEqual([1, 3]);
+    expect(
+      applyConditions(
+        ROWS,
+        wrap({ field: "role", operator: "in", value: ["admin", "manager"] }),
+      )
+        .map((r) => r.id)
+        .sort(),
+    ).toEqual([1, 3]);
   });
 
   it("operador not_in com array de valores", () => {
-    const group: ConditionGroup = {
-      combinator: "AND",
-      conditions: [
-        { field: "role", operator: "not_in", value: ["viewer"] },
-      ],
-    };
-    expect(applyConditions(ROWS, group).map((r) => r.id).sort()).toEqual([1, 3]);
+    expect(
+      applyConditions(ROWS, wrap({ field: "role", operator: "not_in", value: ["viewer"] }))
+        .map((r) => r.id)
+        .sort(),
+    ).toEqual([1, 3]);
   });
 
   it("operador in com value não-array retorna false", () => {
-    const group: ConditionGroup = {
-      combinator: "AND",
-      conditions: [{ field: "role", operator: "in", value: "admin" }],
-    };
-    expect(applyConditions(ROWS, group)).toEqual([]);
+    expect(applyConditions(ROWS, wrap({ field: "role", operator: "in", value: "admin" }))).toEqual(
+      [],
+    );
   });
 
   it("operador in com fieldValue array de objetos (labels) matcha por id", () => {
@@ -188,14 +245,12 @@ describe("applyConditions", () => {
       id: number;
       labels: { id: number; name: string; color?: string }[];
     }
-    const rows: RowWithLabels[] = [
-      { id: 1, labels: [{ id: 5, name: "VIP", color: "" }] },
-    ];
-    const group: ConditionGroup = {
-      combinator: "AND",
-      conditions: [{ field: "labels", operator: "in", value: [5] }],
-    };
-    expect(applyConditions(rows, group).map((r) => r.id)).toEqual([1]);
+    const rows: RowWithLabels[] = [{ id: 1, labels: [{ id: 5, name: "VIP", color: "" }] }];
+    expect(
+      applyConditions(rows, wrap({ field: "labels", operator: "in", value: [5] })).map(
+        (r) => r.id,
+      ),
+    ).toEqual([1]);
   });
 
   it("operador in com fieldValue array de objetos (labels) não matcha id ausente", () => {
@@ -203,14 +258,10 @@ describe("applyConditions", () => {
       id: number;
       labels: { id: number; name: string }[];
     }
-    const rows: RowWithLabels[] = [
-      { id: 1, labels: [{ id: 99, name: "X" }] },
-    ];
-    const group: ConditionGroup = {
-      combinator: "AND",
-      conditions: [{ field: "labels", operator: "in", value: [5] }],
-    };
-    expect(applyConditions(rows, group)).toEqual([]);
+    const rows: RowWithLabels[] = [{ id: 1, labels: [{ id: 99, name: "X" }] }];
+    expect(applyConditions(rows, wrap({ field: "labels", operator: "in", value: [5] }))).toEqual(
+      [],
+    );
   });
 
   it("operador not_in com fieldValue array de objetos (labels) exclui quando match", () => {
@@ -218,14 +269,10 @@ describe("applyConditions", () => {
       id: number;
       labels: { id: number; name: string }[];
     }
-    const rows: RowWithLabels[] = [
-      { id: 1, labels: [{ id: 5, name: "VIP" }] },
-    ];
-    const group: ConditionGroup = {
-      combinator: "AND",
-      conditions: [{ field: "labels", operator: "not_in", value: [5] }],
-    };
-    expect(applyConditions(rows, group)).toEqual([]);
+    const rows: RowWithLabels[] = [{ id: 1, labels: [{ id: 5, name: "VIP" }] }];
+    expect(
+      applyConditions(rows, wrap({ field: "labels", operator: "not_in", value: [5] })),
+    ).toEqual([]);
   });
 
   it("operador contains_all com array de objetos no fieldValue", () => {
@@ -238,23 +285,11 @@ describe("applyConditions", () => {
       { id: 2, labels: [{ id: 5, name: "VIP" }] },
       { id: 3, labels: [] },
     ];
-    const group: ConditionGroup = {
-      combinator: "AND",
-      conditions: [
-        { field: "labels", operator: "contains_all", value: [5, 7] },
-      ],
-    };
-    expect(applyConditions(rows, group).map((r) => r.id)).toEqual([1]);
-  });
-
-  it("grupo aninhado vazio é considerado true (passa)", () => {
-    const group: ConditionGroup = {
-      combinator: "AND",
-      conditions: [
-        { field: "age", operator: "gte", value: 30 },
-        { combinator: "OR", conditions: [] },
-      ],
-    };
-    expect(applyConditions(ROWS, group).map((r) => r.id).sort()).toEqual([2, 3]);
+    expect(
+      applyConditions(
+        rows,
+        wrap({ field: "labels", operator: "contains_all", value: [5, 7] }),
+      ).map((r) => r.id),
+    ).toEqual([1]);
   });
 });

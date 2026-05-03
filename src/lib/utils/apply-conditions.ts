@@ -1,12 +1,15 @@
 /**
  * Aplicação de condições do "Where Clause Builder" sobre uma coleção.
  *
- * Um {@link ConditionGroup} é avaliado recursivamente:
- *   - `combinator: "AND"` → todas as conditions/sub-grupos devem ser true.
- *   - `combinator: "OR"`  → ao menos uma condition/sub-grupo deve ser true.
+ * Schema v2 (v0.32+) — operador AND/OR é POR PAR de items irmãos, não global
+ * do grupo. Avaliação left-associative: ((A op1 B) op2 C) op3 D.
+ *
+ * Cada {@link ConditionGroupItem} carrega o `connector` que se aplica entre
+ * ele e o item ANTERIOR. O primeiro item de qualquer grupo tem `connector`
+ * undefined (não há item anterior).
  *
  * Operadores suportados em string/number/date:
- *   eq, neq, gt, gte, lt, lte, contains, starts_with, in, not_in
+ *   eq, neq, gt, gte, lt, lte, contains, starts_with, in, not_in, contains_all
  */
 
 export type ConditionOperator =
@@ -28,17 +31,22 @@ export interface Condition {
   value: unknown;
 }
 
-export interface ConditionGroup {
-  combinator: "AND" | "OR";
-  conditions: (Condition | ConditionGroup)[];
+export interface ConditionGroupItem {
+  /** Operador relativo ao item ANTERIOR. undefined no primeiro item. */
+  connector?: "AND" | "OR";
+  node: Condition | ConditionGroup;
 }
 
-function isGroup(node: Condition | ConditionGroup): node is ConditionGroup {
+export interface ConditionGroup {
+  items: ConditionGroupItem[];
+}
+
+export function isGroup(node: Condition | ConditionGroup): node is ConditionGroup {
   return (
     typeof node === "object" &&
     node !== null &&
-    "combinator" in node &&
-    Array.isArray((node as ConditionGroup).conditions)
+    "items" in node &&
+    Array.isArray((node as ConditionGroup).items)
   );
 }
 
@@ -180,18 +188,23 @@ function evaluateCondition<T>(row: T, cond: Condition): boolean {
 }
 
 function evaluateGroup<T>(row: T, group: ConditionGroup): boolean {
-  // Empty group → trata como "passa".
-  if (!group.conditions || group.conditions.length === 0) return true;
+  // Empty group → trata como "passa" (no-op).
+  if (!group.items || group.items.length === 0) return true;
 
-  if (group.combinator === "AND") {
-    return group.conditions.every((node) =>
-      isGroup(node) ? evaluateGroup(row, node) : evaluateCondition(row, node),
-    );
+  const evalNode = (node: Condition | ConditionGroup): boolean =>
+    isGroup(node) ? evaluateGroup(row, node) : evaluateCondition(row, node);
+
+  // Avaliação left-associative:
+  //   items[0] (sem connector — só avalia)
+  //   ((items[0] op1 items[1]) op2 items[2]) op3 items[3] ...
+  let result = evalNode(group.items[0].node);
+  for (let i = 1; i < group.items.length; i++) {
+    const item = group.items[i];
+    const value = evalNode(item.node);
+    // connector default = AND (defensivo: undefined/inválido no meio cai em AND)
+    result = item.connector === "OR" ? result || value : result && value;
   }
-  // OR
-  return group.conditions.some((node) =>
-    isGroup(node) ? evaluateGroup(row, node) : evaluateCondition(row, node),
-  );
+  return result;
 }
 
 /**
@@ -200,7 +213,7 @@ function evaluateGroup<T>(row: T, group: ConditionGroup): boolean {
  * filtram nada (retorna a coleção original sem cópia).
  */
 export function applyConditions<T>(rows: T[], group: ConditionGroup): T[] {
-  if (!group || !group.conditions || group.conditions.length === 0) {
+  if (!group || !group.items || group.items.length === 0) {
     return rows;
   }
   return rows.filter((row) => evaluateGroup(row, group));
