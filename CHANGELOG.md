@@ -1,5 +1,32 @@
 # Changelog
 
+## [v0.27.0] 2026-05-03 — Conversas Fixes (regressões v0.25 + bug match digits-only)
+
+> 9 fixes em `/relatorios/conversas` reportados pelo João via screenshots após v0.25.0/v0.26.0 LIVE. Workflow rigoroso (plan v1→v2→v3 com 48 achados em 2 pentes-finos REAIS · subagent-driven-development com TDD em 4 batches · ui-ux-pro-max em toda task UI · code review final APPROVED_WITH_CONCERNS com 1 issue fixada). 11 commits granulares · 311/311 tests verde nas áreas tocadas · typecheck 0 erros.
+
+### Fixes
+
+- **F1 — Paginação volta a 1000:** `PAGE_SIZE_CLIENT` 100 → 1000 em `conversas-page-client.tsx`. Era 1000 antes da v0.25; reduzi sem pedido — regressão.
+- **F2 — Reticências volta na paginação (algoritmo v0.23):** `buildPageItems` retorna `Array<number | "ellipsis">`. Bordas (atual=1 ou N): `[1, ellipsis, N]`. Meio: `[1, ellipsis, page, ellipsis, N]`. Restaurado `<EllipsisDropdown>` que abre Popover com range de páginas. Casos `page=2/4` com `totalPages=5` colapsam a ellipsis adjacente em `[]` (dropdown retorna null — sem duplicação visual com vizinho).
+- **F3 — Input busca refator:** removida tag "Filtrando" violet flutuante. Ícone lupa muda cor (`text-muted-foreground` → `text-violet-500` com `transition-colors`) sinaliza filtering state. Botão X (`h-5` + `<X h-3>`) no canto direito do input limpa busca via mouse (Esc preserva). `pr-9` quando ativo, `pr-3` idle.
+- **F4 — Match respeita ordem dos caracteres (BUG FIX):** `matchSearchClient` removeu heurística `isPhoneOrDocLike` introduzida na v0.25. Bug reportado: busca "3380" retornava rows com display_id 3803 (mesmos dígitos, ordem diferente) — heurística ativava match digits-only que ignorava ordem. Agora é `haystack.includes(needle)` puro: substring contígua estrita. Trade-off: máscaras divergentes do haystack (ex: `"11 98765-4321"` vs `"+55 (11) 98765-4321"`) deixam de bater. Telefones/documentos cobertos via `phoneVariants`/`documentVariants` (raw + formatPhone + digits) no haystack.
+- **F5 — X chips Filtros/Ordenação volta ao estilo fosco (v0.23):** trocou `bg-destructive` sólido + `text-white` + `ring-2` + `scale-110` (overstated da v0.25) por `bg-destructive/15` + `text-destructive` + `border-destructive/40` (vermelho fosco em volta + X vermelho mais vivo). Hover sobe pra `bg-destructive/25` + `border-destructive/60` mantendo `text-destructive`. Tamanho mantém `h-5 w-5` + `<X h-3>`.
+- **F6 — Calendar DayButton cursor-pointer:** `<Button>` interno do `CalendarDayButton` ganha `cursor-pointer disabled:cursor-not-allowed aria-disabled:cursor-not-allowed`. Afeta TODOS os calendários da plataforma (period-pills, dashboards, etc.).
+- **F7 — Tabela com larguras fixas (BUG FIX):** bug reportado: ao rolar a tabela, colunas mexiam (a partir de Estado/Departamento, todas ficavam um pouco mais à esquerda). Causa: virtualizer monta/desmonta rows; com `table-layout: auto` + `min-w` nas cells, browser recalculava larguras conforme conteúdo das rows visíveis. Fix: `<Table style={{ tableLayout: "fixed", minWidth: "max-content" }}>` + `<colgroup>` com `<col width=Xpx>` por coluna (constante `COLUMN_WIDTHS`). Cells perdem `min-w` (substituído por col); `truncate` + `title` HTML continuam para overflow.
+- **F8 — Tour reordena steps + bump conversas-v5:** ordem alvo: period → search → filters-chip → sorting-chip → atalhos → **presets → export** (era export → presets) → columns → pagination-top → table → drill-down → open-action → refresh. Bump `id: "conversas-v5"` força re-show pra usuários que viram v4.
+- **F9 — "Chatwoot" → "Nexus Chat" em UI user-facing (escopo limitado):** 3 arquivos do escopo `/relatorios/conversas`:
+  - `conversas-table.tsx` OpenIdLink: `title` + `aria-label` agora "Abrir conversa #N no Nexus Chat".
+  - `conversas-tour.ts` step `open-action`: title "Abrir conversa no Nexus Chat" + description atualizada.
+  - `open-in-chatwoot.tsx`: `aria-label` ajustado.
+  - Outros locais (`chatwoot-urls-card`, `audits-table`, `user-form-dialog`, `login-branding`, `stale-banner`) ficam pra release dedicada de rebranding.
+
+### Trade-offs
+
+- **Match v0.27 deixa de bater máscaras divergentes do haystack.** Usuários que digitavam fragmentos com pontuação arbitrária precisam adaptar (digitar substring contígua de algum dos formatos no haystack). Comportamento documentado em JSDoc no `match-search-client.ts`.
+- **Tour bump v4→v5** força re-show pra usuários que viram v4 (padrão do projeto).
+
+---
+
 ## [v0.26.0] 2026-05-03 — Suite Agente Nex Polish v3
 
 > Polimento dirigido por feedback do super_admin nos 4 submenus do Agente Nex (Configuração, Prompt, Playground, Consumo). Workflow rigoroso (plan v1→v2→v3 com 28 achados em 2 pentes-finos REAIS · subagent-driven-development com TDD em cada task · ui-ux-pro-max em toda task UI · two-stage review automático após cada task). 14 commits granulares (R0+A1+A2+A3 · B1+B2+B3+B4 · C1+C2 · D4+D3+D1+D2+D5) · todos tests verde nas áreas tocadas · typecheck 0 erros · sem schema change destrutivo (apenas ALTER TABLE ADD COLUMN IF NOT EXISTS).

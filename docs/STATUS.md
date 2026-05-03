@@ -1,12 +1,22 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-05-03
-**Versão atual em produção:** v0.26.0
+**Versão atual em produção:** v0.27.0
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.26.0)
+## Em produção (v0.27.0)
+
+### Release v0.27.0 (2026-05-03) — Conversas Fixes (regressões v0.25 + bug match digits-only)
+
+9 fixes em `/relatorios/conversas` reportados pelo João via screenshots. Workflow rigoroso (plan v1→v2→v3 com 48 achados em 2 pentes-finos · subagent-driven-development com TDD em 4 batches · ui-ux-pro-max em todas as tasks UI · code review final aprovado com 1 issue fixada). 11 commits granulares · 311/311 tests verde · typecheck 0 erros.
+
+**Destaque (BUG FIX) — match respeita ordem dos caracteres:** removida heurística `isPhoneOrDocLike` da v0.25. Busca "3380" retornava rows com display_id 3803 (mesmos dígitos, ordem diferente) — heurística ativava match digits-only que ignorava ordem. Agora é `haystack.includes(needle)` puro: substring contígua estrita. Trade-off documentado: máscaras divergentes do haystack deixam de bater (telefones/documentos cobertos via formatos múltiplos no haystack).
+
+**Destaque (BUG FIX) — tabela com larguras fixas:** ao rolar a tabela com virtualizer, colunas mexiam (Estado/Departamento desalinhavam). Causa: `table-layout: auto` + `min-w` nas cells. Fix: `tableLayout: fixed` + `<colgroup>` com `<col width=Xpx>` por coluna.
+
+**Polish:** paginação volta a 1000 (era regredida pra 100); reticências volta no algoritmo (`[1, ..., page, ..., N]`); input busca lupa roxa quando ativa + X canto direito (remove tag "Filtrando" overstated); X chips Filtros/Ordenação volta ao estilo fosco (`bg-destructive/15`); Calendar DayButton ganha cursor-pointer (afeta todos os calendários); tour reordena (presets antes de export) + bump v5; "Chatwoot" → "Nexus Chat" em 3 arquivos UI user-facing do escopo.
 
 ### Release v0.26.0 (2026-05-03) — Suite Agente Nex Polish v3
 
