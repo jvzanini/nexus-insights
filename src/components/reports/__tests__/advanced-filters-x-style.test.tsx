@@ -88,7 +88,7 @@ beforeAll(() => {
     };
 });
 
-it("X dos chips Filtros e Ordenação: idle discreto + hover destrutivo + h-4 (v0.29)", () => {
+it("X dos chips Filtros e Ordenação: pouco maior (h-5) + adesivo (-right-2 -top-2) v0.30", () => {
   render(<AdvancedFilters {...baseProps} />);
   const xFilters = screen.getByRole("button", {
     name: /Limpar todos os filtros/i,
@@ -96,18 +96,17 @@ it("X dos chips Filtros e Ordenação: idle discreto + hover destrutivo + h-4 (v
   const xSort = screen.getByRole("button", { name: /Limpar ordenação/i });
   for (const el of [xFilters, xSort]) {
     const cls = el.getAttribute("class") ?? "";
-    // Tamanho menor (h-4 vs h-5 da v0.27)
-    expect(cls).toMatch(/h-4 w-4/);
-    expect(cls).not.toMatch(/h-5 w-5/);
+    // Tamanho pouco maior (h-5 vs h-4 da v0.29)
+    expect(cls).toMatch(/h-5 w-5/);
+    expect(cls).not.toMatch(/h-4 w-4/);
+    // Offset mais "fora" (adesivo na quina)
+    expect(cls).toMatch(/-right-2/);
+    expect(cls).toMatch(/-top-2/);
     // Idle discreto: text-muted-foreground, sem bg-destructive/border idle
     expect(cls).toMatch(/text-muted-foreground/);
     expect(cls).not.toMatch(/border-destructive/);
     // Hover destrutivo: bg-destructive/15 + text-destructive
     expect(cls).toMatch(/hover:bg-destructive\/15/);
     expect(cls).toMatch(/hover:text-destructive/);
-    // Sem ring/scale exagerados da v0.25
-    expect(cls).not.toMatch(/hover:ring-2/);
-    expect(cls).not.toMatch(/hover:scale-110/);
-    expect(cls).not.toMatch(/hover:text-white/);
   }
 });
