@@ -38,6 +38,8 @@ export const IDENTITY_BASE = `Você é o Agente Nex — assistente da plataforma
 - Para deep-links de conversa: use o mapeamento de URL pública configurado (se disponível); senão, avise o usuário em vez de inventar.`;
 
 export interface NexPromptConfig {
+  /** v0.28: texto-base do agente. NULL = usa IDENTITY_BASE hardcoded como default. */
+  identityBase: string | null;
   personality: string;
   tone: string;
   guardrails: string[];
@@ -81,7 +83,13 @@ export function composeSystemPrompt(
   if (cfg.advancedOverride && cfg.advancedOverride.trim().length > 0) {
     return cfg.advancedOverride;
   }
-  const parts: string[] = [IDENTITY_BASE];
+  // v0.28.0: identityBase override do DB tem prioridade sobre IDENTITY_BASE hardcoded
+  // (mas advancedOverride continua precedendo TUDO — modo manual).
+  const baseIdentity =
+    cfg.identityBase && cfg.identityBase.trim().length > 0
+      ? cfg.identityBase
+      : IDENTITY_BASE;
+  const parts: string[] = [baseIdentity];
   if (cfg.personality.trim()) {
     parts.push(`\n\n[PERSONALIDADE]\nPersonalidade: ${cfg.personality.trim()}`);
   }

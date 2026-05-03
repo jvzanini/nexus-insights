@@ -24,6 +24,7 @@ describe("composeSystemPrompt — accountUrls (v0.26)", () => {
   it("seção de accountUrls usa 'Nexus Chat' (não 'Chatwoot')", () => {
     const out = composeSystemPrompt(
       {
+        identityBase: null,
         personality: "",
         tone: "",
         guardrails: [],
@@ -36,5 +37,61 @@ describe("composeSystemPrompt — accountUrls (v0.26)", () => {
     );
     expect(out).toMatch(/Mapeamento das contas Nexus Chat/);
     expect(out).not.toMatch(/Mapeamento das contas Chatwoot/);
+  });
+});
+
+describe("composeSystemPrompt — identityBase override (v0.28)", () => {
+  it("usa cfg.identityBase quando setado (não hardcoded)", () => {
+    const out = composeSystemPrompt(
+      {
+        identityBase: "Você é um agente custom.",
+        personality: "",
+        tone: "",
+        guardrails: [],
+        advancedOverride: null,
+        audioInputEnabled: false,
+        kbEnabled: false,
+      },
+      [],
+      [],
+    );
+    expect(out).toMatch(/Você é um agente custom\./);
+    expect(out).not.toMatch(/Você é o Agente Nex —/);
+  });
+
+  it("usa IDENTITY_BASE default quando identityBase é null", () => {
+    const out = composeSystemPrompt(
+      {
+        identityBase: null,
+        personality: "",
+        tone: "",
+        guardrails: [],
+        advancedOverride: null,
+        audioInputEnabled: false,
+        kbEnabled: false,
+      },
+      [],
+      [],
+    );
+    expect(out).toMatch(/Você é o Agente Nex —/);
+  });
+
+  it("advancedOverride precede identityBase (modo manual)", () => {
+    const out = composeSystemPrompt(
+      {
+        identityBase: "custom base",
+        personality: "p",
+        tone: "t",
+        guardrails: ["g"],
+        advancedOverride: "RAW PROMPT",
+        audioInputEnabled: false,
+        kbEnabled: false,
+      },
+      [],
+      [],
+    );
+    expect(out).toBe("RAW PROMPT");
+    expect(out).not.toMatch(/custom base/);
+    expect(out).not.toMatch(/Você é o Agente Nex —/);
   });
 });
