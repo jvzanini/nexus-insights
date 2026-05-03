@@ -123,7 +123,13 @@ export function ConversasPageClient({
   // O <ExportButton> recebe initialRows.length (count "natural" do período
   // aplicado, sem busca/conditions) — export é server-side e ignora
   // searchClient/conditionGroup.
-  const [searchClient, setSearchClient] = useState<string>("");
+  //
+  // T13.2: hidrata searchClient inicial de filterState.search (?q= no URL) —
+  // preserva URLs antigas/favoritas. Após a montagem, searchClient vira state
+  // local efêmero (mudanças não voltam pra URL, conforme spec v0.25).
+  const [searchClient, setSearchClient] = useState<string>(
+    filterState.search ?? "",
+  );
   const [pageClient, setPageClient] = useState<number>(1);
 
   // Reset de página quando search/filters/sort/quickFilters mudam — UX padrão:
