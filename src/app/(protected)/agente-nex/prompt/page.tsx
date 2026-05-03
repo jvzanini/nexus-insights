@@ -65,6 +65,7 @@ export default async function Page() {
         actions={
           <PlaygroundLauncher
             currentConfig={cfg}
+            providerKey={providerAtual}
             providerLabel={providerLabel}
             modelLabel={modelLabel}
           />
