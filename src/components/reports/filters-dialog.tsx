@@ -38,7 +38,6 @@ import {
   type ConditionFieldDef,
 } from "@/components/ui/conditional-filters";
 import {
-  EMPTY_FILTER_STATE,
   diffFilterStates,
   isFilterStateEqual,
   type FilterState,
@@ -157,7 +156,13 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   applied: FilterState;
   onApply: (next: FilterState) => void;
-  onClear: () => void;
+  /**
+   * Mantido por compatibilidade com callers existentes (handleReset externo
+   * que reseta período + ordenação). v0.23: o botão "Limpar todos" do dialog
+   * NÃO chama mais `onClear` — zera apenas os filtros do draft localmente,
+   * preservando período/mode e mantendo o modal aberto.
+   */
+  onClear?: () => void;
   inboxes: MetaItem[];
   teams: MetaItem[];
   assignees: MetaItem[];
@@ -169,7 +174,6 @@ export function FiltersDialog({
   onOpenChange,
   applied,
   onApply,
-  onClear,
   inboxes,
   teams,
   assignees,
@@ -177,38 +181,21 @@ export function FiltersDialog({
 }: Props) {
   const [draft, setDraft] = useState<FilterState>(applied);
   // Accordion mutex: apenas uma seção do Modo Simples aberta por vez.
-  // Default: a primeira seção que já tem seleção; se nenhuma, abre Caixa.
+  // v0.23 — começam todas FECHADAS por padrão (progressive disclosure).
+  // Usuário escolhe explicitamente o que abrir; reduz overwhelm visual.
   const [openSection, setOpenSection] = useState<SimpleSectionKey | null>(
     null,
   );
 
   // Reset do draft sempre que o modal abrir, capturando o estado aplicado vigente.
+  // Sections permanecem fechadas — usuário decide o que expandir.
   useEffect(() => {
     if (!open) return;
     setDraft(applied);
-    // Pré-abrir a primeira seção que já tem seleção (mais útil pro usuário).
-    const order: SimpleSectionKey[] = [
-      "inboxIds",
-      "teamIds",
-      "assigneeIds",
-      "statuses",
-      "priorities",
-      "labelIds",
-    ];
-    const map: Record<SimpleSectionKey, number> = {
-      inboxIds: applied.inboxIds.length,
-      teamIds: applied.teamIds.length,
-      assigneeIds: applied.assigneeIds.length,
-      statuses: applied.statuses.length,
-      priorities: applied.priorities.length,
-      labelIds: applied.labelIds.length,
-    };
-    const firstWithSelection = order.find((k) => map[k] > 0);
-    setOpenSection(firstWithSelection ?? "inboxIds");
+    setOpenSection(null);
   }, [open, applied]);
 
   const isDirty = !isFilterStateEqual(draft, applied);
-  const isEmpty = isFilterStateEqual(draft, EMPTY_FILTER_STATE);
   const pending = diffFilterStates(draft, applied);
 
   function update<K extends keyof FilterState>(k: K, v: FilterState[K]) {
@@ -222,12 +209,41 @@ export function FiltersDialog({
     };
   }
 
+  // v0.23 — "Limpar todos" zera apenas os filtros do dialog (inboxIds, teamIds,
+  // assigneeIds, statuses, priorities, labelIds). NÃO toca período, customRange,
+  // mode, conditionGroup, search ou page; também NÃO fecha o modal nem chama
+  // onClear (que reseta período fora do dialog). O usuário decide quando aplicar.
+  function handleClearOnlyFilters() {
+    setDraft((prev) => ({
+      ...prev,
+      inboxIds: [],
+      teamIds: [],
+      assigneeIds: [],
+      statuses: [],
+      priorities: [],
+      labelIds: [],
+    }));
+  }
+
+  // Botão "Limpar todos" só faz sentido quando há ao menos um filtro selecionado
+  // entre os 6 arrays do dialog (independe de período/mode).
+  const hasAnyFilter =
+    draft.inboxIds.length > 0 ||
+    draft.teamIds.length > 0 ||
+    draft.assigneeIds.length > 0 ||
+    draft.statuses.length > 0 ||
+    draft.priorities.length > 0 ||
+    draft.labelIds.length > 0;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[85vh] w-[min(96vw,1100px)] max-w-[96vw] flex-col gap-0 p-0 sm:max-w-[1100px]">
-        {/* Header — fixo */}
+        {/* Header — fixo. Título reflete o draft.mode atual (simples vs avançado),
+            atualizando ao trocar de tab antes mesmo de aplicar. */}
         <div className="border-b border-border px-6 py-4">
-          <DialogTitle>Filtros avançados</DialogTitle>
+          <DialogTitle>
+            Filtros {draft.mode === "advanced" ? "avançados" : "simples"}
+          </DialogTitle>
           <DialogDescription className="sr-only">
             Refine a lista de conversas combinando filtros nativos no modo
             Simples ou condições E/OU em grupos no modo Avançado.
@@ -391,11 +407,8 @@ export function FiltersDialog({
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() => {
-              onClear();
-              onOpenChange(false);
-            }}
-            disabled={isEmpty}
+            onClick={handleClearOnlyFilters}
+            disabled={!hasAnyFilter}
             aria-label="Limpar todos os filtros"
           >
             <RotateCcw aria-hidden="true" />
