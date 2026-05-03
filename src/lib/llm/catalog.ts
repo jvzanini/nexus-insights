@@ -110,7 +110,7 @@ export const PROVIDER_CATALOG: Record<LlmProvider, ProviderCatalog> = {
   },
   gemini: {
     provider: "gemini",
-    label: "Google Gemini",
+    label: "Gemini",
     apiKeyUrl: "https://aistudio.google.com/app/apikey",
     topUpUrl: "https://console.cloud.google.com/billing",
     allowCustomModel: true,

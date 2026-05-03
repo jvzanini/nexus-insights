@@ -214,6 +214,6 @@ export const PROVIDER_MODELS: Record<LlmProvider, string[]> = {
 export const PROVIDER_LABELS: Record<LlmProvider, string> = {
   openai: "OpenAI",
   anthropic: "Anthropic",
-  gemini: "Google Gemini",
+  gemini: "Gemini",
   openrouter: "OpenRouter",
 };
