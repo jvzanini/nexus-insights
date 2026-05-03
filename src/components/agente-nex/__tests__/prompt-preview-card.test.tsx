@@ -2,30 +2,23 @@
  * @jest-environment jsdom
  */
 import "@testing-library/jest-dom";
-
-import { fireEvent, render, screen } from "@testing-library/react";
-
-import type { NexPromptConfig } from "@/lib/nex/prompt-compose";
-
-const toastMock = {
-  success: jest.fn(),
-  error: jest.fn(),
-  warning: jest.fn(),
-  info: jest.fn(),
-};
-jest.mock("sonner", () => ({
-  toast: toastMock,
-}));
-
-// Mock do PromptConfigForm — evita carregar Server Actions / next/navigation
-// no jsdom; o teste de Editar só precisa garantir que o Dialog abre.
-jest.mock("@/components/agente-nex/prompt-config-form", () => ({
-  PromptConfigForm: () => <div data-testid="mocked-prompt-config-form" />,
-}));
-
+import { render, screen, fireEvent } from "@testing-library/react";
 import { PromptPreviewCard } from "../prompt-preview-card";
 
-const baseConfig: NexPromptConfig = {
+jest.mock("../identity-base-editor", () => ({
+  IdentityBaseEditor: ({ current, isCustom }: { current: string; isCustom: boolean }) => (
+    <div data-testid="identity-editor">
+      Editor mock - {isCustom ? "custom" : "default"} - len={current.length}
+    </div>
+  ),
+}));
+
+const mockClipboard = jest.fn();
+Object.assign(navigator, {
+  clipboard: { writeText: (t: string) => mockClipboard(t) },
+});
+
+const baseConfig = {
   identityBase: null,
   personality: "",
   tone: "",
@@ -35,94 +28,50 @@ const baseConfig: NexPromptConfig = {
   kbEnabled: false,
 };
 
-describe("PromptPreviewCard — v0.26", () => {
-  beforeEach(() => {
-    toastMock.success.mockReset();
-    toastMock.error.mockReset();
-  });
-
-  it("oculta o prompt por default; revela ao clicar no collapse", () => {
+describe("PromptPreviewCard — v0.28", () => {
+  it("prompt SEMPRE visível (sem collapse)", () => {
     render(
       <PromptPreviewCard
         config={baseConfig}
         kbDocs={[]}
         accountUrls={[]}
         isSuperAdmin
+        currentIdentityBase="Você é o Agente Nex —"
+        isIdentityBaseCustom={false}
       />,
-    );
-    expect(screen.queryByTestId("prompt-preview")).not.toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", { name: /ver prompt completo/i }),
     );
     expect(screen.getByTestId("prompt-preview")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /ver prompt completo/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /maximizar/i })).not.toBeInTheDocument();
   });
 
-  it("super_admin vê Editar (e NÃO vê Maximizar)", () => {
+  it("Editar (super_admin) abre IdentityBaseEditor (não PromptConfigForm)", () => {
     render(
       <PromptPreviewCard
         config={baseConfig}
         kbDocs={[]}
         accountUrls={[]}
         isSuperAdmin
+        currentIdentityBase="texto"
+        isIdentityBaseCustom={false}
       />,
     );
-    expect(
-      screen.getByRole("button", { name: /editar/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /maximizar/i }),
-    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /editar/i }));
+    expect(screen.getByTestId("identity-editor")).toBeInTheDocument();
   });
 
-  it("não super_admin: NÃO vê Editar, mostra microcopy explicativo", () => {
+  it("não-superadmin: Editar oculto + microcopy explicativo", () => {
     render(
       <PromptPreviewCard
         config={baseConfig}
         kbDocs={[]}
         accountUrls={[]}
         isSuperAdmin={false}
+        currentIdentityBase="texto"
+        isIdentityBaseCustom={false}
       />,
     );
-    expect(
-      screen.getByRole("button", { name: /copiar/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /editar/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByText(/Apenas super_admins podem editar/i),
-    ).toBeInTheDocument();
-  });
-
-  it("clicar Editar (super_admin) abre Dialog max-edit", () => {
-    render(
-      <PromptPreviewCard
-        config={baseConfig}
-        kbDocs={[]}
-        accountUrls={[]}
-        isSuperAdmin
-      />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: /editar/i }));
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(
-      screen.getByText(/Editar prompt do Agente Nex/i),
-    ).toBeInTheDocument();
-  });
-
-  it("pre do prompt-preview NÃO usa aria-readonly (atributo inválido em HTML)", () => {
-    render(
-      <PromptPreviewCard
-        config={baseConfig}
-        kbDocs={[]}
-        accountUrls={[]}
-        isSuperAdmin
-      />,
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: /ver prompt completo/i }),
-    );
-    const pre = screen.getByTestId("prompt-preview");
-    expect(pre.getAttribute("aria-readonly")).toBeNull();
+    expect(screen.queryByRole("button", { name: /editar/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/Apenas super_admins podem editar/i)).toBeInTheDocument();
   });
 });

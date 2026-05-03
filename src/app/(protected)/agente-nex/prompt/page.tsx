@@ -16,6 +16,7 @@ import { KbSection } from "@/components/agente-nex/kb-section";
 import { PlaygroundLauncher } from "@/components/agente-nex/playground-launcher";
 import { getCurrentUser } from "@/lib/auth";
 import { getNexPromptConfig } from "@/lib/nex/prompt";
+import { IDENTITY_BASE } from "@/lib/nex/prompt-compose";
 import { getKbDocsForPrompt, listKbDocuments } from "@/lib/nex/kb";
 import { getActiveLlmConfig } from "@/lib/llm/get-active-config";
 import { isNexBubbleEnabled } from "@/lib/llm/get-nex-bubble-enabled";
@@ -47,6 +48,12 @@ export default async function Page() {
   const providerLabel = providerAtual ? PROVIDER_LABELS[providerAtual] : undefined;
   const modelLabel = llmActive?.model ?? undefined;
   const isSuperAdmin = user.platformRole === "super_admin";
+  const currentIdentityBase =
+    cfg.identityBase && cfg.identityBase.trim().length > 0
+      ? cfg.identityBase
+      : IDENTITY_BASE;
+  const isIdentityBaseCustom =
+    cfg.identityBase !== null && cfg.identityBase.trim().length > 0;
   const accountUrls =
     accountUrlsResult.ok && accountUrlsResult.data
       ? accountUrlsResult.data.map((row) => ({
@@ -78,6 +85,8 @@ export default async function Page() {
           kbDocs={kbForPrompt}
           accountUrls={accountUrls}
           isSuperAdmin={isSuperAdmin}
+          currentIdentityBase={currentIdentityBase}
+          isIdentityBaseCustom={isIdentityBaseCustom}
         />
 
         <div id="prompt-edit-form" className="scroll-mt-4">
