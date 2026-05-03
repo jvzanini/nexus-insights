@@ -1,12 +1,24 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-05-03
-**Versão atual em produção:** v0.24.0
+**Versão atual em produção:** v0.25.0
 **URL:** https://insights.nexusai360.com
 
 ---
 
-## Em produção (v0.24.0)
+## Em produção (v0.25.0)
+
+### Release v0.25.0 (2026-05-03) — Conversas Polish + busca client-side global
+
+7 ajustes em `/relatorios/conversas` (6 polish + busca client-side global) + 1 bug fix (HighlightedText sem normalize de acentos). Workflow rigoroso (plan v1→v2→v3 com 28 achados em 2 pentes-finos · subagent-driven-development com TDD em todas as tasks · ui-ux-pro-max em toda task UI · code review final aprovado com 2 issues fixadas antes do push). 16 commits granulares · 298/298 tests verde nas áreas tocadas · typecheck 0 erros · sem schema change.
+
+**Destaque arquitetural — busca client-side global:** `search` saiu dos `reportFilters` que iam pra SQL (eliminando quebra quando o Chatwoot estava stale e a invalidação de cache a cada keystroke). Virou state local em `ConversasPageClient` que filtra rows hidratadas via `matchSearchClient` — algoritmo OR sobre 11 campos (display_id ±#, name, phone com/sem máscara, identifier CPF/CNPJ com/sem máscara, inbox/team/assignee, status pt-BR, prioridade pt-BR, labels[], custom_attributes ignorando `_*`). Normaliza acentos via NFD + remove combining marks. Esc limpa busca. Cap defensivo de 50.000 conversas por período (banner amarelo informativo quando ultrapassa). pageSize SQL bumpado de 1k → 50k; MAX_LIMIT em conversas-list.ts de 10k → 50k; clamp interno paralelo bumpado de 5k → MAX_LIMIT. Cache key Redis estável durante busca. URL `?q=` é hidratada na montagem (compat com URLs antigas) mas não volta pra URL (efêmera).
+
+**Polish:** SORT_OPTIONS ganha "Documento" (chip não mostra mais label em inglês); Etiquetas no chip sem `(N)` padroniza summarize; sort dialog "Adicionar critério" sem coluna pré-selecionada (placeholder "Selecione uma coluna" + Aplicar disabled se algum critério tem key vazio + React key fix); X destrutivo nos chips Filtros/Ordenação (h-5 + bg-destructive ring no hover); cursor-pointer global em 13 arquivos da seção Conversas; paginação simplificada `[1, page, N]` sem reticências (atual no meio continua dropdown).
+
+**Bug fix:** `<HighlightedText>` agora normaliza NFD — busca "joao" destaca "João" (antes encontrava match mas não pintava). `buildIndexMap` walk char-a-char preserva acentos no render.
+
+### Release v0.24.0 (2026-05-03) — Suite Agente Nex Polish v2 (anterior)
 
 ### Release v0.23.0 (2026-05-03) — Conversas Polish (busca funciona, single-day fix, paginação no topo, badge Enter, X adesivo, sorting anti-dup, highlight)
 

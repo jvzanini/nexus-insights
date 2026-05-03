@@ -1,5 +1,37 @@
 # Changelog
 
+## [v0.25.0] 2026-05-03 — Conversas Polish + busca client-side global
+
+> 7 ajustes em `/relatorios/conversas` (6 polish + busca client-side global) + 1 bug fix descoberto durante a release (HighlightedText sem normalize de acentos). Workflow rigoroso (plan v1→v2→v3 com 28 achados em 2 pentes-finos reais · subagent-driven-development com TDD em todas as tasks · ui-ux-pro-max em toda task UI · code review final). 16 commits granulares · 298/298 tests verde nas áreas tocadas · typecheck 0 erros · sem schema change.
+
+### Mudanças (Conversas)
+
+- **Busca client-side global (opção B alinhada com João):** `search` saiu dos `reportFilters` que iam pra SQL (causava quebra quando o Chatwoot estava stale e cada keystroke revalidava cache). Agora é state local em `ConversasPageClient` que filtra rows hidratadas via `matchSearchClient` — algoritmo OR sobre 11 campos (`display_id` ±#, `contact.name`, telefone com/sem máscara, identifier CPF/CNPJ com/sem máscara, inbox/team/assignee, status pt-BR, prioridade pt-BR, `labels[].name`, `custom_attributes` ignorando keys com `_`). Normaliza acentos via NFD + remove combining marks (`\p{Mn}/gu`). Esc limpa busca (preventDefault contra Safari nativo). URL `?q=` é hidratada na montagem (preserva URLs antigas) mas não volta pra URL após mudanças (efêmera). Performance medida: 50k rows < 2s no jest paralelo. Cap defensivo de 50.000 conversas por período — banner amarelo informativo quando ultrapassa (não bloqueia). `pageSize` da query SQL bumpado de 1.000 → 50.000; `MAX_LIMIT` em `conversas-list.ts` de 10k → 50k; clamp interno paralelo bumpado de 5k → MAX_LIMIT (era cap silencioso). Cache key Redis ficou estável durante busca.
+- **HighlightedText normaliza NFD (bug fix):** busca "joao" agora destaca "João" (antes encontrava match mas não pintava porque `lowercase` só não cobre acentos). Implementação via `buildIndexMap` walk char-a-char construindo map (normalizedIdx → originalIdx) — preserva acentos no render. Known limitation: surrogate pairs (emoji) podem não destacar 100% (raro em dados pt-BR).
+- **SORT_OPTIONS exporta + adiciona Documento:** ordenar via header da coluna "Documento" mostrava chip com label `document` (em inglês) porque `sortOptions` do `AppliedFiltersChips` não encontrava entry e usava `rule.key` como fallback. Fix: `{ key: "document", label: "Documento" }` em SORT_OPTIONS posição 2 (após Nome).
+- **Etiquetas no chip sem `(N)`:** "Etiquetas (4): hg +3" → "Etiquetas: hg +3" usando `summarize()` — segue padrão Caixa de entrada / Departamento / Atendente / Status / Prioridade.
+- **Sort dialog "Adicionar critério" sem coluna pré-selecionada:** `addRule()` agora cria `{ key: "", direction: "asc" }` (era `available[0]!.key`). `<CustomSelect>` mostra placeholder "Selecione uma coluna". Botão Aplicar desabilitado se algum critério tem `key === ""`. Anti-dup ignora `""` explicitamente. React `key` do `<li>` inclui `idx` para evitar colisão quando múltiplos rules vazios coexistem.
+- **X destrutivo nos chips Filtros/Ordenação:** `h-5 w-5` (era 4×4) + ícone `h-3 w-3` (era 2.5); idle igual; hover ganha `bg-destructive`, `text-white`, `ring-2 ring-destructive/30`, `ring-offset-1 ring-offset-card`, `scale-110`. Visual sólido conforme imagem 3 do feedback.
+- **Cursor pointer global na seção Conversas:** `cursor-pointer` em todos os buttons clicáveis de `period-pills`, `Calendar` (day + button_previous/next), `conversas-pagination`, `sorting-dialog`, `applied-filters-chips`, `filters-dialog`, `filter-chip-list-popover`, `quick-filters-popover`, `presets-popover`, `conversas-table` headers, `conversa-drill-down`, `columns-toggle`, `export-button`. `disabled:cursor-not-allowed` nos disabled. Padroniza affordance visual.
+- **Paginação simplificada:** `[1, "...", page, "...", N]` → `[1, page, N]` direto (sem reticências quando atual no meio). Atual no meio continua sendo Popover dropdown que abre lista 1..N. Bordas (`atual=1` ou `N`): `[1, N]`. `<EllipsisDropdown>` + `rangeToPages` deletados (mortos). Tipo do retorno: `number[]`.
+
+### Internal
+
+- `src/lib/reports/match-search-client.ts` (novo): `normalize`, `buildHaystack`, `matchSearchClient` exports + 16 sanity tests TDD (incluindo perf 50k rows). Heurística `isPhoneOrDocLike` ativa match digits-only quando needle parece telefone/doc (resolve `"11 98765-4321"` que o algoritmo do plan literal não cobriria).
+- `src/lib/chatwoot/conversas-search.ts` marcado `@deprecated` (preserva tests existentes; helper não é mais chamado).
+- `ConversasPageClient` props simplificadas: removidas `total/page/pageSize/totalPages` (paginação agora é UI client). State local `searchClient` (string) + `pageClient` (number) com reset `pageClient=1` quando search/filters/sort/quickFilters mudam.
+- `ConversasTable` ganha pipeline derivado: `match (searchClient) → conditionGroup → sort → slice por página`. Counter "Mostrando X-Y de Z" reflete `totalFiltered`. `safePage` clamp `[1, totalPages]` evita página fantasma. Empty state adaptativo com "limpe a busca" quando search ativa.
+- `<AdvancedFilters>` input `value/onChange` ligados a prop `searchClient/onSearchClientChange`. Esc limpa via `preventDefault`. Badge "↵ Enter" trocado por indicador "Filtrando" violet condicional (busca virou instantânea — Enter não faz mais sentido).
+- `<ExportButton>` ganha prop `searchClientActive?: boolean` + `title` HTML "A exportação inclui os filtros aplicados, não a busca atual" quando ativa. `rowCount` recebe `initialRows.length` (count do período) — não desabilita falsamente quando search zera filtro client.
+
+### Trade-offs
+
+- TTFB primeira carga em "Todos" populado pode subir de ~500ms (1k rows) para 5-10s (50k rows + JOINs). Cache Redis 30s amortiza.
+- URL `?q=` é hidratada na montagem (compatibilidade com URLs antigas) mas não volta pra URL após mudanças. Search é efêmera/local.
+- Export ignora a busca client-side (mantém comportamento server-side com filtros aplicados). Tooltip clarifica.
+
+---
+
 ## [v0.24.0] 2026-05-03 — Suite Agente Nex Polish v2
 
 > Polish dirigido por feedback do super_admin (após v0.20.0 LIVE): remove tela de empty state que escondia o dashboard, donut volta espessura original com tooltip near-mouse, bar tag estilo Badge sem cor, linha total mais sutil + setinha hover indica clicabilidade, cotação tooltip explicativo, Whisper nota refinada citando legado, input bar layout estável, AudioPlayer speed button respeita margem. Spec v3 (25 achados pente-fino) + plan v3 (9 tasks TDD) + ui-ux-pro-max em todas tasks UI.
