@@ -186,6 +186,7 @@ export function ConversasPageClient({
             onSortStackChange={setSortStack}
             conditionGroup={composedConditionGroup}
             searchClient={searchClient}
+            documentTypes={filterState.documentTypes}
           />
         </div>
       </ContentLoadingWrapper>

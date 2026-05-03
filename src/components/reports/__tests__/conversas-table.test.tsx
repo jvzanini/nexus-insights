@@ -307,6 +307,76 @@ describe("ConversasTable v0.25 — pipeline client", () => {
     expect(marks.length).toBeGreaterThan(0);
   });
 
+  it("v0.35: documentTypes=['cpf'] filtra rows com CPF apenas", () => {
+    const cpfRow = {
+      ...baseRow(1, 1),
+      contact: { ...baseRow(1, 1).contact, identifier: "07041511111" },
+    };
+    const cnpjRow = {
+      ...baseRow(2, 2),
+      contact: { ...baseRow(2, 2).contact, identifier: "12345678000195" },
+    };
+    const noneRow = {
+      ...baseRow(3, 3),
+      contact: { ...baseRow(3, 3).contact, identifier: null },
+    };
+    render(
+      <ConversasTable
+        {...baseProps}
+        initialRows={[cpfRow, cnpjRow, noneRow]}
+        documentTypes={["cpf"]}
+      />,
+    );
+    const counter = screen.getByText(/Mostrando/i).closest("span");
+    expect(counter?.textContent).toMatch(/Mostrando\s*1-1\s*de\s*1\s*conversa$/);
+  });
+
+  it("v0.35: documentTypes=undefined não filtra (passa todas)", () => {
+    const rows: ConversaRow[] = [
+      {
+        ...baseRow(1, 1),
+        contact: { ...baseRow(1, 1).contact, identifier: "07041511111" },
+      },
+      {
+        ...baseRow(2, 2),
+        contact: { ...baseRow(2, 2).contact, identifier: null },
+      },
+    ];
+    render(
+      <ConversasTable
+        {...baseProps}
+        initialRows={rows}
+        documentTypes={undefined}
+      />,
+    );
+    const counter = screen.getByText(/Mostrando/i).closest("span");
+    expect(counter?.textContent).toMatch(/Mostrando\s*1-2\s*de\s*2/);
+  });
+
+  it("v0.35: documentTypes=['cpf', 'none'] retorna CPF OU Sem documento", () => {
+    const cpfRow = {
+      ...baseRow(1, 1),
+      contact: { ...baseRow(1, 1).contact, identifier: "07041511111" },
+    };
+    const cnpjRow = {
+      ...baseRow(2, 2),
+      contact: { ...baseRow(2, 2).contact, identifier: "12345678000195" },
+    };
+    const noneRow = {
+      ...baseRow(3, 3),
+      contact: { ...baseRow(3, 3).contact, identifier: null },
+    };
+    render(
+      <ConversasTable
+        {...baseProps}
+        initialRows={[cpfRow, cnpjRow, noneRow]}
+        documentTypes={["cpf", "none"]}
+      />,
+    );
+    const counter = screen.getByText(/Mostrando/i).closest("span");
+    expect(counter?.textContent).toMatch(/Mostrando\s*1-2\s*de\s*2/);
+  });
+
   it("colunas Estado/Departamento/Atendente NÃO quebram linha (single-line) v0.30", () => {
     const longRow: ConversaRow = {
       ...baseRow(1, 100),

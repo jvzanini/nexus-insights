@@ -57,6 +57,10 @@ import {
   type ConditionGroup,
 } from "@/lib/utils/apply-conditions";
 import { matchSearchClient } from "@/lib/reports/match-search-client";
+import {
+  matchDocumentTypes,
+  type DocumentTypeFilter,
+} from "@/lib/reports/match-document-types";
 import type { FetchConversasInput } from "@/lib/actions/reports/conversas";
 import type { ConversaRow } from "@/lib/chatwoot/queries/conversas-list";
 import type { SortRule } from "@/components/reports/sorting-dialog";
@@ -93,6 +97,12 @@ interface ConversasTableProps {
    * interno `searchTerm` preserva consumers já existentes).
    */
   searchClient: string;
+  /**
+   * Filtros por tipo de documento detectado (CPF/CNPJ/Sem). Aplicado
+   * client-side na pipeline ANTES de applyConditions. v0.32 F1 cabeou
+   * só UI; v0.35 cabeia a pipeline (bug fix).
+   */
+  documentTypes?: DocumentTypeFilter[];
 }
 
 type SortDirection = "asc" | "desc";
@@ -532,6 +542,7 @@ export function ConversasTable({
   onSortStackChange,
   conditionGroup,
   searchClient,
+  documentTypes,
 }: ConversasTableProps) {
   // Alias interno — preserva todos os consumers já existentes (OpenIdLink,
   // HighlightedText em colunas, ConversaDrillDown, Field) que recebem
@@ -638,16 +649,24 @@ export function ConversasTable({
     [rows, searchClient],
   );
 
+  // v0.35 F1 fix: aplica filtro Documento (faltava cabeamento na pipeline).
+  // Antes da v0.35, filterState.documentTypes ficava só na UI (chip + dropdown
+  // + Export) e a tabela ignorava — bug reportado pelo João.
+  const docFilteredRows = useMemo(
+    () => matchDocumentTypes(searchedRows, documentTypes),
+    [searchedRows, documentTypes],
+  );
+
   const filteredRows = useMemo(() => {
     if (
       !conditionGroup ||
       !conditionGroup.items ||
       conditionGroup.items.length === 0
     ) {
-      return searchedRows;
+      return docFilteredRows;
     }
-    return applyConditions(searchedRows, conditionGroup);
-  }, [searchedRows, conditionGroup]);
+    return applyConditions(docFilteredRows, conditionGroup);
+  }, [docFilteredRows, conditionGroup]);
 
   // ---- Ordenação aplicada no client (estável). -----
   const sortedRows = useMemo(() => {
