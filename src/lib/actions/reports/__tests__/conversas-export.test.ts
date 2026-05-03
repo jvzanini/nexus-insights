@@ -119,4 +119,173 @@ describe("exportConversasAction", () => {
     const r = await exportConversasAction({ filters: baseFilters, accountId: 9 });
     expect(r.truncated).toBe(true);
   });
+
+  describe("v0.32 — pipeline F9 (searchClient + conditionGroup + documentTypes + sortStack)", () => {
+    const buildRow = (id: number, overrides: Record<string, unknown> = {}) => ({
+      ...fixtureRow(id),
+      ...overrides,
+      contact: {
+        ...fixtureRow(id).contact,
+        ...((overrides as { contact?: Record<string, unknown> }).contact ?? {}),
+      },
+    });
+
+    beforeEach(() => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockedUser);
+      (isReportVisibleForUser as jest.Mock).mockResolvedValue(true);
+    });
+
+    it("aplica searchClient quando fornecido (filtra rows que não casam)", async () => {
+      const rows = [
+        buildRow(1, {
+          contact: {
+            id: 1,
+            name: "João Silva",
+            phone_number: null,
+            identifier: null,
+            additional_attributes: null,
+          },
+        }),
+        buildRow(2, {
+          contact: {
+            id: 2,
+            name: "Maria Souza",
+            phone_number: null,
+            identifier: null,
+            additional_attributes: null,
+          },
+        }),
+      ];
+      (conversasList as jest.Mock).mockResolvedValue({
+        data: { rows, nextCursor: null },
+        stale: false,
+        cached: false,
+      });
+      const r = await exportConversasAction({
+        filters: baseFilters,
+        accountId: 9,
+        searchClient: "joão",
+      });
+      // pipeline reduz a 1 row → ainda gera planilha com sucesso
+      expect(r.error).toBeUndefined();
+      expect(typeof r.base64).toBe("string");
+    });
+
+    it("retorna erro quando searchClient zera o resultado", async () => {
+      const rows = [
+        buildRow(1, {
+          contact: {
+            id: 1,
+            name: "Pedro",
+            phone_number: null,
+            identifier: null,
+            additional_attributes: null,
+          },
+        }),
+      ];
+      (conversasList as jest.Mock).mockResolvedValue({
+        data: { rows, nextCursor: null },
+        stale: false,
+        cached: false,
+      });
+      const r = await exportConversasAction({
+        filters: baseFilters,
+        accountId: 9,
+        searchClient: "naoexiste",
+      });
+      expect(r.error).toBe("Sem conversas para exportar");
+    });
+
+    it("aplica documentTypes quando fornecido (filtra 'sem documento')", async () => {
+      const rows = [
+        buildRow(1, {
+          contact: {
+            id: 1,
+            name: "Sem doc",
+            phone_number: null,
+            identifier: null,
+            additional_attributes: null,
+          },
+        }),
+        buildRow(2, {
+          contact: {
+            id: 2,
+            name: "Com CPF",
+            phone_number: null,
+            identifier: "12345678909", // CPF válido (sem formatação)
+            additional_attributes: null,
+          },
+        }),
+      ];
+      (conversasList as jest.Mock).mockResolvedValue({
+        data: { rows, nextCursor: null },
+        stale: false,
+        cached: false,
+      });
+      const r = await exportConversasAction({
+        filters: baseFilters,
+        accountId: 9,
+        documentTypes: ["none"],
+      });
+      // pipeline filtra para 1 row sem documento → planilha gerada
+      expect(r.error).toBeUndefined();
+      expect(typeof r.base64).toBe("string");
+    });
+
+    it("aplica conditionGroup quando fornecido (where-clause v2)", async () => {
+      const rows = [
+        buildRow(1, { status: 0 }),
+        buildRow(2, { status: 1 }),
+      ];
+      (conversasList as jest.Mock).mockResolvedValue({
+        data: { rows, nextCursor: null },
+        stale: false,
+        cached: false,
+      });
+      const r = await exportConversasAction({
+        filters: baseFilters,
+        accountId: 9,
+        conditionGroup: {
+          items: [
+            {
+              node: { field: "status", operator: "eq", value: 0 },
+            },
+          ],
+        },
+      });
+      expect(r.error).toBeUndefined();
+      expect(typeof r.base64).toBe("string");
+    });
+
+    it("aplica sortStack quando fornecido (não falha + gera planilha)", async () => {
+      const rows = [
+        buildRow(1, { display_id: 5 }),
+        buildRow(2, { display_id: 1 }),
+        buildRow(3, { display_id: 3 }),
+      ];
+      (conversasList as jest.Mock).mockResolvedValue({
+        data: { rows, nextCursor: null },
+        stale: false,
+        cached: false,
+      });
+      const r = await exportConversasAction({
+        filters: baseFilters,
+        accountId: 9,
+        sortStack: [{ key: "display_id", direction: "asc" }],
+      });
+      expect(r.error).toBeUndefined();
+      expect(typeof r.base64).toBe("string");
+    });
+
+    it("ignora pipeline quando args extras ausentes (backward-compat)", async () => {
+      (conversasList as jest.Mock).mockResolvedValue({
+        data: { rows: [fixtureRow(1)], nextCursor: null },
+        stale: false,
+        cached: false,
+      });
+      const r = await exportConversasAction({ filters: baseFilters, accountId: 9 });
+      expect(r.error).toBeUndefined();
+      expect(typeof r.base64).toBe("string");
+    });
+  });
 });

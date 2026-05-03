@@ -5,8 +5,15 @@ import { isReportVisibleForUser } from "@/lib/reports/visibility";
 import { conversasList } from "@/lib/chatwoot/queries/conversas-list";
 import { buildConversasXlsxBuffer } from "@/lib/reports/conversas-xlsx";
 import { getAccessibleTeamIds } from "@/lib/tenant";
+import { matchSearchClient } from "@/lib/reports/match-search-client";
+import { applyConditions } from "@/lib/utils/apply-conditions";
+import { matchDocumentTypes } from "@/lib/reports/match-document-types";
+import { sortConversasByStack } from "@/lib/reports/sort-conversas";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
 import type { AuthUser } from "@/lib/auth-helpers";
+import type { ConditionGroup } from "@/lib/utils/apply-conditions";
+import type { DocumentTypeFilter } from "@/lib/reports/match-document-types";
+import type { SortRule } from "@/components/reports/sorting-dialog";
 
 const DEFAULT_ACCOUNT_ID = 9; // Matrix Fitness Group (single-tenant atualmente).
 const MAX_EXPORT_ROWS = 50_000;
@@ -14,6 +21,26 @@ const MAX_EXPORT_ROWS = 50_000;
 export interface ExportConversasInput {
   filters: ReportFilters;
   accountId?: number;
+  /**
+   * v0.32 — busca client-side aplicada na barra "Buscar". Server replica via
+   * `matchSearchClient` para que o XLSX bata com a tabela visível.
+   */
+  searchClient?: string;
+  /**
+   * v0.32 — where-clause builder do filtro Avançado (ConditionGroup v2 com
+   * connector per-par). Server replica via `applyConditions`.
+   */
+  conditionGroup?: ConditionGroup;
+  /**
+   * v0.32 — filtro Documento (multi-select "Com CPF" / "Com CNPJ" / "Sem
+   * documento"). Server replica via `matchDocumentTypes`.
+   */
+  documentTypes?: DocumentTypeFilter[];
+  /**
+   * v0.32 — ordenação client-side (stack de SortRules). Server replica via
+   * `sortConversasByStack` (DRY com a tabela).
+   */
+  sortStack?: SortRule[];
 }
 
 export interface ExportConversasResult {
@@ -107,7 +134,27 @@ export async function exportConversasAction(
       limit: MAX_EXPORT_ROWS,
     });
 
-    const rows = result.data.rows;
+    let rows = result.data.rows;
+    if (rows.length === 0) {
+      return { error: "Sem conversas para exportar" };
+    }
+
+    // v0.32 — replica pipeline client-side para que o XLSX exportado bata
+    // exatamente com a tabela visível. Ordem espelha `<ConversasTable>`:
+    //   matchSearchClient → applyConditions → matchDocumentTypes → sortConversasByStack
+    if (args.searchClient && args.searchClient.trim()) {
+      rows = matchSearchClient(rows, args.searchClient);
+    }
+    if (args.conditionGroup && args.conditionGroup.items?.length) {
+      rows = applyConditions(rows, args.conditionGroup);
+    }
+    if (args.documentTypes && args.documentTypes.length > 0) {
+      rows = matchDocumentTypes(rows, args.documentTypes);
+    }
+    if (args.sortStack && args.sortStack.length > 0) {
+      rows = sortConversasByStack(rows, args.sortStack);
+    }
+
     if (rows.length === 0) {
       return { error: "Sem conversas para exportar" };
     }
