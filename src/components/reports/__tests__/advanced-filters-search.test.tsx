@@ -30,7 +30,6 @@ jest.mock("next/navigation", () => ({
 
 import * as React from "react";
 import { render, screen, fireEvent, createEvent } from "@testing-library/react";
-import { describe, it, expect, jest } from "@jest/globals";
 import { AdvancedFilters } from "@/components/reports/advanced-filters";
 import { EMPTY_FILTER_STATE } from "@/lib/reports/filter-state";
 
@@ -128,5 +127,21 @@ describe("AdvancedFilters search v0.25", () => {
     const title = exportBtn.getAttribute("title");
     expect(title).not.toBeNull();
     expect(title!).toMatch(/inclui os filtros aplicados, não a busca/i);
+  });
+
+  it("ExportButton continua habilitado quando search zera mas há rows no período", () => {
+    // tableRowCount reflete count "natural" do período (sem search/conditions);
+    // export é server-side e ignora searchClient — botão NÃO pode desabilitar
+    // só porque a busca client zerou o resultado.
+    render(
+      <AdvancedFilters
+        {...baseProps}
+        searchClient="xpto-naoexiste"
+        onSearchClientChange={() => {}}
+        tableRowCount={10}
+      />,
+    );
+    const exportBtn = screen.getByRole("button", { name: /Exportar/i });
+    expect(exportBtn).not.toBeDisabled();
   });
 });

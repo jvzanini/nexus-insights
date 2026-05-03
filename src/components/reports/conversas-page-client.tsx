@@ -120,11 +120,11 @@ export function ConversasPageClient({
 
   // ---- Busca + paginação client-side (v0.25) -----
   // searchClient é o estado de UI da caixa de busca; pageClient idem da paginação.
-  // filteredCount é notificado pela <ConversasTable> via onFilteredCountChange e
-  // propagado pro <ExportButton> dentro do <AdvancedFilters>.
+  // O <ExportButton> recebe initialRows.length (count "natural" do período
+  // aplicado, sem busca/conditions) — export é server-side e ignora
+  // searchClient/conditionGroup.
   const [searchClient, setSearchClient] = useState<string>("");
   const [pageClient, setPageClient] = useState<number>(1);
-  const [filteredCount, setFilteredCount] = useState<number>(initialRows.length);
 
   // Reset de página quando search/filters/sort/quickFilters mudam — UX padrão:
   // alterar critérios faz voltar pra primeira página automaticamente.
@@ -159,7 +159,7 @@ export function ConversasPageClient({
           onApplyPreset={handleApplyPreset}
           onOpenPresetsManager={() => setPresetsDialogOpen(true)}
           appliedReportFilters={reportFilters}
-          tableRowCount={filteredCount}
+          tableRowCount={initialRows.length}
           searchClient={searchClient}
           onSearchClientChange={setSearchClient}
         />
@@ -172,7 +172,6 @@ export function ConversasPageClient({
             pageClient={pageClient}
             pageSizeClient={PAGE_SIZE_CLIENT}
             onPageClientChange={setPageClient}
-            onFilteredCountChange={setFilteredCount}
             accountId={accountId}
             filters={reportFilters}
             sortStack={sortStack}
