@@ -46,9 +46,9 @@ export interface DonutWithCenterProps {
    */
   onSliceClick?: (name: string, index: number) => void;
   /**
-   * Posição fixa do tooltip dentro do container do chart.
-   * Mantém o tooltip lateral, sem cobrir o donut nem o valor central.
-   * Default: `"top-right"`.
+   * @deprecated Desde v0.24.0 o tooltip segue o mouse (default Recharts) com
+   * `offset=12` e `allowEscapeViewBox`. Esta prop é ignorada (no-op) e mantida
+   * apenas para back-compat. Será removida numa major futura.
    */
   tooltipPosition?: DonutTooltipPosition;
 }
@@ -134,9 +134,11 @@ export function donutTooltipWrapperStyle(
  * conversas).
  *
  * - Hover destaca slice ativo (opacity das demais cai para 0.45);
- * - Tooltip fixo lateral (default `top-right`) que não cobre o donut nem o
- *   valor central — mostra nome do item e valor formatado em duas linhas;
- * - Centro sempre legível (texto sobre var(--color-card) implícito);
+ * - Tooltip near-mouse (default Recharts) com `offset=12` e
+ *   `allowEscapeViewBox`, segue o cursor sem cobrir o donut nem ficar fixo
+ *   num canto longe do mouse;
+ * - Centro sempre legível (texto sobre var(--color-card) implícito) com
+ *   `px-6` pra respiro horizontal;
  * - Empty state explicativo.
  */
 export function DonutWithCenter({
@@ -144,8 +146,8 @@ export function DonutWithCenter({
   centerLabel,
   centerValue,
   height = 320,
-  innerRadius = 70,
-  outerRadius = 88,
+  innerRadius = 60,
+  outerRadius = 80,
   emptyMessage,
   emptyHint,
   formatValue,
@@ -153,7 +155,8 @@ export function DonutWithCenter({
   className,
   ariaLabel = "Donut chart",
   onSliceClick,
-  tooltipPosition = "top-right",
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  tooltipPosition: _tooltipPositionDeprecated,
 }: DonutWithCenterProps) {
   const prefersReducedMotion = useReducedMotion();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -197,8 +200,7 @@ export function DonutWithCenter({
         <PieChart margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
           <Tooltip
             cursor={false}
-            wrapperStyle={donutTooltipWrapperStyle(tooltipPosition)}
-            position={{ x: 0, y: 0 }}
+            offset={12}
             allowEscapeViewBox={{ x: true, y: true }}
             content={(props: { active?: boolean; payload?: unknown }) => (
               <DonutTooltipStacked
@@ -253,7 +255,7 @@ export function DonutWithCenter({
       </ResponsiveContainer>
       <div
         data-slot="donut-center"
-        className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 text-center"
+        className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 px-6 text-center"
       >
         <span className="text-xl font-bold tabular-nums text-foreground">
           {centerValue}

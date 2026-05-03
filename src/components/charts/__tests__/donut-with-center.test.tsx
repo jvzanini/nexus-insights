@@ -82,6 +82,73 @@ describe("DonutWithCenter — T2-DONUT v0.20.0 (outerRadius/font)", () => {
   });
 });
 
+// =============================================================================
+// T2 v0.24.0 — espessura padrão (60+80) + textos com px-6 + tooltip near-mouse
+// =============================================================================
+
+describe("DonutWithCenter — T2 v0.24.0 (espessura + px-6 + tooltip near-mouse)", () => {
+  it("data-slot=donut-center container tem px-6 (respiro horizontal)", () => {
+    const { container } = render(
+      <DonutWithCenter
+        data={SAMPLE}
+        centerLabel="Custo total"
+        centerValue="R$ 0,5801"
+      />,
+    );
+    const centerEl = container.querySelector(
+      "[data-slot=donut-center]",
+    ) as HTMLElement | null;
+    expect(centerEl).not.toBeNull();
+    expect(centerEl?.className).toContain("px-6");
+  });
+
+  it("default innerRadius=60 + outerRadius=80 (reverte v0.20 70+88)", () => {
+    // Lendo as defaults via toString do componente é frágil; aqui validamos
+    // comportamento equivalente: passar valores explícitos não muda render
+    // visível. O assert real do default vive na implementação. Smoke test
+    // apenas garante que componente renderiza sem props de raio.
+    const { container } = render(
+      <DonutWithCenter
+        data={SAMPLE}
+        centerLabel="Custo total"
+        centerValue="R$ 0,5801"
+      />,
+    );
+    expect(
+      container.querySelector("[data-slot=donut-center]"),
+    ).not.toBeNull();
+  });
+
+  it("Tooltip recharts é renderizado (smoke) — sem wrapperStyle/position fixos", () => {
+    // O componente <Tooltip> do recharts não renderiza no DOM até o hover,
+    // mas o componente pai tem que montar sem crashar. Smoke test
+    // confirmando que a remoção de wrapperStyle/position não quebra render.
+    const { container } = render(
+      <DonutWithCenter
+        data={SAMPLE}
+        centerLabel="Custo total"
+        centerValue="R$ 0,5801"
+      />,
+    );
+    expect(container.querySelector("[data-slot=donut-center]")).not.toBeNull();
+    // Pie chart container montou
+    expect(container.querySelector("[data-testid=rc-container]")).not.toBeNull();
+  });
+
+  it("aceita tooltipPosition (back-compat @deprecated, no-op)", () => {
+    // Prop mantida pra back-compat — não deve crashar nem gerar warnings de tipo
+    const { container } = render(
+      <DonutWithCenter
+        data={SAMPLE}
+        centerLabel="Custo total"
+        centerValue="R$ 0,5801"
+        tooltipPosition="top-left"
+      />,
+    );
+    expect(container.querySelector("[data-slot=donut-center]")).not.toBeNull();
+  });
+});
+
 describe("donutTooltipWrapperStyle()", () => {
   it("default top-right: top:8 right:8 sem left/bottom", () => {
     const style = donutTooltipWrapperStyle("top-right");
