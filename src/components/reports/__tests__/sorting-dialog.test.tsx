@@ -3,7 +3,38 @@
  */
 import "@testing-library/jest-dom";
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+
+// O CustomSelect real depende do Popover do base-ui, que não roda em jsdom
+// (acessa arrowRef.current sem fallback). Mockamos por um <select> nativo
+// expondo as mesmas options para podermos validar a lógica anti-duplicação
+// que depende do conjunto de options passado para cada critério.
+jest.mock("@/components/ui/custom-select", () => ({
+  CustomSelect: ({
+    value,
+    onChange,
+    options,
+    triggerClassName,
+  }: {
+    value: string;
+    onChange: (v: string) => void;
+    options: Array<{ value: string; label: string }>;
+    triggerClassName?: string;
+  }) => (
+    <select
+      data-testid="custom-select"
+      className={triggerClassName}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  ),
+}));
 
 import { SortingDialog } from "../sorting-dialog";
 
@@ -12,6 +43,12 @@ const options = [
   { key: "status", label: "Status" },
   { key: "waiting_seconds", label: "Sem resposta há" },
 ];
+
+function getOptionLabels(select: HTMLElement): string[] {
+  return within(select)
+    .getAllByRole("option")
+    .map((o) => (o.textContent || "").trim());
+}
 
 describe("SortingDialog", () => {
   test("Adicionar critério inclui novo item com direction=asc", () => {
@@ -49,5 +86,91 @@ describe("SortingDialog", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Limpar" }));
     expect(onClear).toHaveBeenCalled();
+  });
+});
+
+describe("SortingDialog — anti-duplicação", () => {
+  test("opção já usada em critério anterior NÃO aparece no select dos seguintes", () => {
+    render(
+      <SortingDialog
+        open
+        onOpenChange={jest.fn()}
+        applied={[{ key: "name", direction: "asc" }]}
+        options={options}
+        onApply={jest.fn()}
+        onClear={jest.fn()}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /adicionar critério/i }),
+    );
+
+    const selects = screen.getAllByTestId("custom-select");
+    expect(selects.length).toBe(2);
+
+    // Critério 2 não deve listar "Nome" (em uso pelo critério 1).
+    const labels2 = getOptionLabels(selects[1]!);
+    expect(labels2).not.toContain("Nome");
+    // O próprio valor selecionado do critério 2 ("Status") segue listado.
+    expect(labels2).toContain("Status");
+  });
+
+  test("a própria seleção do critério continua aparecendo no seu select", () => {
+    render(
+      <SortingDialog
+        open
+        onOpenChange={jest.fn()}
+        applied={[
+          { key: "name", direction: "asc" },
+          { key: "status", direction: "asc" },
+        ]}
+        options={options}
+        onApply={jest.fn()}
+        onClear={jest.fn()}
+      />,
+    );
+
+    const selects = screen.getAllByTestId("custom-select");
+    const labels1 = getOptionLabels(selects[0]!);
+    // Critério 1 = "Nome": "Nome" (auto) + "Sem resposta há" (livre);
+    // "Status" está em uso pelo critério 2 e deve sumir aqui.
+    expect(labels1).toContain("Nome");
+    expect(labels1).toContain("Sem resposta há");
+    expect(labels1).not.toContain("Status");
+  });
+
+  test("removendo critério N libera a opção pra outros critérios", () => {
+    render(
+      <SortingDialog
+        open
+        onOpenChange={jest.fn()}
+        applied={[
+          { key: "name", direction: "asc" },
+          { key: "status", direction: "desc" },
+        ]}
+        options={options}
+        onApply={jest.fn()}
+        onClear={jest.fn()}
+      />,
+    );
+
+    // Antes: critério 2 não enxerga "Nome".
+    const selectsAntes = screen.getAllByTestId("custom-select");
+    expect(getOptionLabels(selectsAntes[1]!)).not.toContain("Nome");
+
+    // Remove o critério 1.
+    const removeBtns = screen.getAllByRole("button", {
+      name: /remover critério/i,
+    });
+    fireEvent.click(removeBtns[0]!);
+
+    // Resta só o critério "Status" — agora "Nome" voltou a estar disponível.
+    const selectsDepois = screen.getAllByTestId("custom-select");
+    expect(selectsDepois.length).toBe(1);
+    const labels = getOptionLabels(selectsDepois[0]!);
+    expect(labels).toContain("Nome");
+    expect(labels).toContain("Status");
+    expect(labels).toContain("Sem resposta há");
   });
 });

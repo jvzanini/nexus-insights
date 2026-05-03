@@ -105,10 +105,16 @@ export function SortingDialog({
 
           <ul className="space-y-2">
             {draft.map((rule, idx) => {
-              const fieldOptions = options.map((o) => ({
-                value: o.key,
-                label: o.label,
-              }));
+              // Anti-duplicação: cada select só exibe opções ainda não usadas
+              // por OUTROS critérios. A própria seleção do critério permanece
+              // listada para que o trigger renderize o label correto e o usuário
+              // possa trocar para qualquer outra opção livre.
+              const usedByOthers = new Set(
+                draft.filter((_, i) => i !== idx).map((c) => c.key),
+              );
+              const fieldOptions = options
+                .filter((o) => !usedByOthers.has(o.key))
+                .map((o) => ({ value: o.key, label: o.label }));
               return (
                 <li
                   key={`${rule.key}-${idx}`}
