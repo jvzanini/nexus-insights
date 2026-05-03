@@ -84,7 +84,7 @@ describe("FiltersDialog v0.23 — sections fechadas + Limpar isolado + header di
     }
   });
 
-  test("'Limpar todos' zera só os filtros e mantém modal aberto + período/mode", () => {
+  test("'Limpar todos' (mode=simple) zera os 7 arrays simples e mantém modal aberto + período", () => {
     const onApply = jest.fn();
     const onOpenChange = jest.fn();
     const onClear = jest.fn();
@@ -96,8 +96,9 @@ describe("FiltersDialog v0.23 — sections fechadas + Limpar isolado + header di
       statuses: [0, 1],
       priorities: [0],
       labelIds: [5],
+      documentTypes: ["cpf"] satisfies ("cpf" | "cnpj" | "none")[],
       period: "mes_atual" as const,
-      mode: "advanced" as const,
+      mode: "simple" as const,
     };
     render(
       <FiltersDialog
@@ -130,9 +131,10 @@ describe("FiltersDialog v0.23 — sections fechadas + Limpar isolado + header di
     expect(next.statuses).toEqual([]);
     expect(next.priorities).toEqual([]);
     expect(next.labelIds).toEqual([]);
+    expect(next.documentTypes).toEqual([]);
     // Período e mode preservados
     expect(next.period).toBe("mes_atual");
-    expect(next.mode).toBe("advanced");
+    expect(next.mode).toBe("simple");
   });
 
   test("header mostra 'Filtros simples' quando mode === 'simple'", () => {
@@ -242,5 +244,113 @@ describe("FiltersDialog v0.32 T8 — AlertDialog ao trocar de tab com dados", ()
     expect(next.mode).toBe("advanced");
     expect(next.inboxIds).toEqual([]);
     expect(next.teamIds).toEqual([]);
+  });
+});
+
+describe("FiltersDialog v0.32 T9 — Limpar todos respeita tab ativo", () => {
+  const baseProps = {
+    open: true,
+    onOpenChange: jest.fn(),
+    applied: EMPTY_FILTER_STATE,
+    onApply: jest.fn(),
+    onClear: jest.fn(),
+    inboxes: [{ id: 1, name: "Geral" }],
+    teams: [{ id: 10, name: "Suporte" }],
+    assignees: [{ id: 100, name: "Ana" }],
+    labels: [{ id: 5, name: "VIP" }],
+  };
+
+  beforeEach(() => jest.clearAllMocks());
+
+  test("Limpar todos no Simples zera só simples (preserva conditionGroup)", () => {
+    const onApply = jest.fn();
+    const initial = {
+      ...EMPTY_FILTER_STATE,
+      inboxIds: [1],
+      mode: "simple" as const,
+      conditionGroup: {
+        items: [
+          {
+            connector: undefined,
+            node: { field: "status", operator: "eq" as const, value: 0 },
+          },
+        ],
+      },
+    };
+    render(
+      <FiltersDialog {...baseProps} applied={initial} onApply={onApply} />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /Limpar todos os filtros/i }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /aplicar filtros/i }));
+    const next = onApply.mock.calls[0][0];
+    expect(next.inboxIds).toEqual([]);
+    // conditionGroup preservado
+    expect(next.conditionGroup).toBeDefined();
+    expect(next.conditionGroup.items).toHaveLength(1);
+  });
+
+  test("Limpar todos no Avançado zera só conditionGroup (preserva simples)", () => {
+    const onApply = jest.fn();
+    const initial = {
+      ...EMPTY_FILTER_STATE,
+      inboxIds: [1],
+      teamIds: [10],
+      mode: "advanced" as const,
+      conditionGroup: {
+        items: [
+          {
+            connector: undefined,
+            node: { field: "status", operator: "eq" as const, value: 0 },
+          },
+        ],
+      },
+    };
+    render(
+      <FiltersDialog {...baseProps} applied={initial} onApply={onApply} />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /Limpar todos os filtros/i }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /aplicar filtros/i }));
+    const next = onApply.mock.calls[0][0];
+    // T9: conditionGroup zerado (undefined OU items vazio depois do reset).
+    const cg = next.conditionGroup;
+    expect(cg === undefined || (cg.items?.length ?? 0) === 0).toBe(true);
+    // arrays simples preservados
+    expect(next.inboxIds).toEqual([1]);
+    expect(next.teamIds).toEqual([10]);
+  });
+
+  test("Limpar todos é desabilitado no Simples vazio (mesmo com conditionGroup)", () => {
+    const initial = {
+      ...EMPTY_FILTER_STATE,
+      mode: "simple" as const,
+      conditionGroup: {
+        items: [
+          {
+            connector: undefined,
+            node: { field: "status", operator: "eq" as const, value: 0 },
+          },
+        ],
+      },
+    };
+    render(<FiltersDialog {...baseProps} applied={initial} />);
+    expect(
+      screen.getByRole("button", { name: /Limpar todos os filtros/i }),
+    ).toBeDisabled();
+  });
+
+  test("Limpar todos é desabilitado no Avançado vazio (mesmo com inboxIds)", () => {
+    const initial = {
+      ...EMPTY_FILTER_STATE,
+      inboxIds: [1],
+      mode: "advanced" as const,
+    };
+    render(<FiltersDialog {...baseProps} applied={initial} />);
+    expect(
+      screen.getByRole("button", { name: /Limpar todos os filtros/i }),
+    ).toBeDisabled();
   });
 });

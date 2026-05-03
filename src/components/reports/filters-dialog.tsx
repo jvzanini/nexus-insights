@@ -244,33 +244,45 @@ export function FiltersDialog({
     };
   }
 
-  // v0.23 — "Limpar todos" zera apenas os filtros do dialog (inboxIds, teamIds,
-  // assigneeIds, statuses, priorities, labelIds). NÃO toca período, customRange,
-  // mode, conditionGroup, search ou page; também NÃO fecha o modal nem chama
-  // onClear (que reseta período fora do dialog). O usuário decide quando aplicar.
+  // v0.32 T9 — "Limpar todos" respeita o TAB ATIVO:
+  // - draft.mode === 'simple': zera os 7 arrays simples (inboxIds, teamIds,
+  //   assigneeIds, statuses, priorities, labelIds, documentTypes); NÃO toca
+  //   conditionGroup (preservado pra quando o usuário voltar).
+  // - draft.mode === 'advanced': zera apenas conditionGroup; NÃO toca os
+  //   arrays simples.
+  // NÃO toca período, customRange, mode, search ou page; também NÃO fecha o
+  // modal nem chama onClear (que reseta período fora do dialog).
   function handleClearOnlyFilters() {
-    setDraft((prev) => ({
-      ...prev,
-      inboxIds: [],
-      teamIds: [],
-      assigneeIds: [],
-      statuses: [],
-      priorities: [],
-      labelIds: [],
-      documentTypes: [],
-    }));
+    setDraft((prev) => {
+      if (prev.mode === "simple") {
+        return {
+          ...prev,
+          inboxIds: [],
+          teamIds: [],
+          assigneeIds: [],
+          statuses: [],
+          priorities: [],
+          labelIds: [],
+          documentTypes: [],
+        };
+      }
+      return { ...prev, conditionGroup: undefined };
+    });
   }
 
   // Botão "Limpar todos" só faz sentido quando há ao menos um filtro selecionado
-  // entre os 7 arrays do dialog (independe de período/mode).
+  // no tab ATIVO (Simples vê os 7 arrays; Avançado vê o conditionGroup).
   const hasAnyFilter =
-    draft.inboxIds.length > 0 ||
-    draft.teamIds.length > 0 ||
-    draft.assigneeIds.length > 0 ||
-    draft.statuses.length > 0 ||
-    draft.priorities.length > 0 ||
-    draft.labelIds.length > 0 ||
-    (draft.documentTypes ?? []).length > 0;
+    draft.mode === "simple"
+      ? draft.inboxIds.length > 0 ||
+        draft.teamIds.length > 0 ||
+        draft.assigneeIds.length > 0 ||
+        draft.statuses.length > 0 ||
+        draft.priorities.length > 0 ||
+        draft.labelIds.length > 0 ||
+        (draft.documentTypes ?? []).length > 0
+      : !!draft.conditionGroup &&
+        (draft.conditionGroup.items?.length ?? 0) > 0;
 
   // v0.32 T8 — Confirmação ao trocar de tab quando o tab atual tem dados.
   // O usuário só pode usar UM modo por vez (decisão João): trocar limpa
