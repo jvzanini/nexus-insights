@@ -23,8 +23,7 @@ const toastMock = {
 };
 jest.mock("sonner", () => ({ toast: toastMock }));
 
-// O ConnectionFormDialog é importado pelo wizard pra Step 1 ("Criar nova").
-// Stub simplifica: ao abrir, expõe um botão "Salvar (mock)" que dispara onCreated.
+// Stub do ConnectionFormDialog (importado pelo wizard pra Step 1 "Criar nova").
 jest.mock("../../connection-form-dialog", () => ({
   ConnectionFormDialog: ({
     open,
@@ -48,13 +47,11 @@ const SAMPLE_CONNECTIONS = [
   {
     id: "conn-1",
     name: "Padrão (legado)",
-    webhookToken: "tok-abc-123",
     status: "active",
   },
   {
     id: "conn-2",
     name: "Conexão B",
-    webhookToken: "tok-def-456",
     status: "active",
   },
 ];
@@ -67,7 +64,7 @@ describe("<OnboardingWizard />", () => {
     toastMock.error.mockReset();
   });
 
-  it("renderiza Step 1 com lista de connections e stepper marcando 1 ativo", () => {
+  it("renderiza Step Conexão com lista de connections e stepper marcando 1 ativo", () => {
     render(
       <OnboardingWizard
         connections={SAMPLE_CONNECTIONS}
@@ -75,20 +72,18 @@ describe("<OnboardingWizard />", () => {
         onSuccess={jest.fn()}
       />,
     );
-    // Step 1 título
-    expect(screen.getByRole("heading", { name: /Escolher conexão/i })).toBeInTheDocument();
-    // Connections list
+    expect(
+      screen.getByRole("heading", { name: /Escolher conexão/i }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Padrão (legado)")).toBeInTheDocument();
     expect(screen.getByText("Conexão B")).toBeInTheDocument();
-    // Stepper indicador atual
     const stepper = screen.getByRole("list", { name: /etapas/i });
     expect(stepper).toBeInTheDocument();
-    // Step ativo é "1"
     const step1 = screen.getByRole("listitem", { name: /Etapa 1.*atual/i });
     expect(step1).toBeInTheDocument();
   });
 
-  it("avança Step 1 → 2 ao selecionar connection e clicar Próximo", () => {
+  it("v0.41: NÃO renderiza Step Webhook entre Identidade e Conclusão", () => {
     render(
       <OnboardingWizard
         connections={SAMPLE_CONNECTIONS}
@@ -96,74 +91,57 @@ describe("<OnboardingWizard />", () => {
         onSuccess={jest.fn()}
       />,
     );
-    // Botão Próximo desabilitado sem selecionar
+    // Stepper só tem 3 entradas (Conexão, Identidade, Conclusão)
+    const stepper = screen.getByRole("list", { name: /etapas/i });
+    const stepItems = stepper.querySelectorAll(":scope > li");
+    expect(stepItems).toHaveLength(3);
+    // Nenhum label "Webhook" no stepper
+    expect(
+      screen.queryByText(/^Webhook$/, { selector: "span" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("avança Step Conexão → Identidade ao selecionar e clicar Próximo", () => {
+    render(
+      <OnboardingWizard
+        connections={SAMPLE_CONNECTIONS}
+        onClose={jest.fn()}
+        onSuccess={jest.fn()}
+      />,
+    );
     const next = screen.getByRole("button", { name: /Próximo/i });
     expect(next).toBeDisabled();
-    // Selecionar conn-1
     fireEvent.click(screen.getByRole("radio", { name: /Padrão \(legado\)/i }));
     expect(next).toBeEnabled();
     fireEvent.click(next);
-    // Step 2 visível
-    expect(screen.getByRole("heading", { name: /Identidade da empresa/i })).toBeInTheDocument();
-  });
-
-  it("Step 2 valida accountId positivo e displayName não vazio", () => {
-    render(
-      <OnboardingWizard
-        connections={SAMPLE_CONNECTIONS}
-        onClose={jest.fn()}
-        onSuccess={jest.fn()}
-      />,
-    );
-    fireEvent.click(screen.getByRole("radio", { name: /Padrão \(legado\)/i }));
-    fireEvent.click(screen.getByRole("button", { name: /Próximo/i }));
-    // Step 2: campos vazios → Próximo disabled
-    const next = screen.getByRole("button", { name: /Próximo/i });
-    expect(next).toBeDisabled();
-    // accountId só → ainda disabled
-    fireEvent.change(screen.getByLabelText(/Account ID/i), {
-      target: { value: "42" },
-    });
-    expect(next).toBeDisabled();
-    // ambos preenchidos → habilita
-    fireEvent.change(screen.getByLabelText(/Nome de exibição/i), {
-      target: { value: "Empresa Foo" },
-    });
-    expect(next).toBeEnabled();
-  });
-
-  it("Step 3 mostra URL com origin + token e Próximo só habilita após checkbox", () => {
-    render(
-      <OnboardingWizard
-        connections={SAMPLE_CONNECTIONS}
-        onClose={jest.fn()}
-        onSuccess={jest.fn()}
-      />,
-    );
-    fireEvent.click(screen.getByRole("radio", { name: /Padrão \(legado\)/i }));
-    fireEvent.click(screen.getByRole("button", { name: /Próximo/i }));
-    fireEvent.change(screen.getByLabelText(/Account ID/i), {
-      target: { value: "42" },
-    });
-    fireEvent.change(screen.getByLabelText(/Nome de exibição/i), {
-      target: { value: "Empresa Foo" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /Próximo/i }));
-    // Step 3
-    expect(screen.getByRole("heading", { name: /Webhook/i })).toBeInTheDocument();
-    // jsdom default origin é http://localhost
     expect(
-      screen.getByText(/\/api\/webhooks\/nexus-chat\/tok-abc-123$/),
+      screen.getByRole("heading", { name: /Identidade da empresa/i }),
     ).toBeInTheDocument();
-    // Botão "Finalizar"
+  });
+
+  it("Step Identidade valida accountId positivo e displayName não vazio", () => {
+    render(
+      <OnboardingWizard
+        connections={SAMPLE_CONNECTIONS}
+        onClose={jest.fn()}
+        onSuccess={jest.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("radio", { name: /Padrão \(legado\)/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Próximo/i }));
     const finalize = screen.getByRole("button", { name: /Finalizar/i });
     expect(finalize).toBeDisabled();
-    // Marca checkbox
-    fireEvent.click(screen.getByRole("checkbox", { name: /Já cadastrei/i }));
+    fireEvent.change(screen.getByLabelText(/Account ID/i), {
+      target: { value: "42" },
+    });
+    expect(finalize).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/Nome de exibição/i), {
+      target: { value: "Empresa Foo" },
+    });
     expect(finalize).toBeEnabled();
   });
 
-  it("Step 3 → Submit chama createCompanyChatBinding com payload correto e mostra Step 4", async () => {
+  it("Step Identidade → Submit chama createCompanyChatBinding e mostra Step Conclusão", async () => {
     createCompanyChatBinding.mockResolvedValue({
       success: true,
       data: { id: "bind-new" },
@@ -184,8 +162,6 @@ describe("<OnboardingWizard />", () => {
     fireEvent.change(screen.getByLabelText(/Nome de exibição/i), {
       target: { value: "Empresa Foo" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /Próximo/i }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /Já cadastrei/i }));
     fireEvent.click(screen.getByRole("button", { name: /Finalizar/i }));
     await waitFor(() => {
       expect(createCompanyChatBinding).toHaveBeenCalledWith({
@@ -195,23 +171,21 @@ describe("<OnboardingWizard />", () => {
         enabled: true,
       });
     });
-    // Step 4 visível
     await waitFor(() => {
       expect(
         screen.getByRole("heading", { name: /Empresa onboardada/i }),
       ).toBeInTheDocument();
     });
-    // 2 CTAs lado-a-lado
     expect(
-      screen.getByRole("link", { name: /Ver eventos chegando/i }),
-    ).toHaveAttribute("href", "/bancos-de-dados/conn-1?tab=tempo-real");
+      screen.getByRole("link", { name: /Ver sincronização/i }),
+    ).toHaveAttribute("href", "/bancos-de-dados/conn-1?tab=sincronizacao");
     expect(
       screen.getByRole("link", { name: /Liberar acesso/i }),
     ).toHaveAttribute("href", "/usuarios");
     expect(onSuccess).toHaveBeenCalledWith("bind-new");
   });
 
-  it("Submit com erro mostra mensagem inline e mantém Step 3", async () => {
+  it("Submit com erro mostra mensagem inline e mantém Step Identidade", async () => {
     createCompanyChatBinding.mockResolvedValue({
       success: false,
       error: "Já existe uma empresa cadastrada com account_id=42",
@@ -231,21 +205,19 @@ describe("<OnboardingWizard />", () => {
     fireEvent.change(screen.getByLabelText(/Nome de exibição/i), {
       target: { value: "Empresa Dup" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /Próximo/i }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /Já cadastrei/i }));
     fireEvent.click(screen.getByRole("button", { name: /Finalizar/i }));
     await waitFor(() => {
       expect(toastMock.error).toHaveBeenCalled();
     });
-    // Mensagem inline
     expect(
       screen.getByRole("alert", { name: /Erro ao cadastrar empresa/i }),
     ).toHaveTextContent(/Já existe/);
-    // Continua no Step 3
-    expect(screen.getByRole("heading", { name: /Webhook/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /Identidade da empresa/i }),
+    ).toBeInTheDocument();
   });
 
-  it("Botão Voltar preserva state dos steps anteriores", () => {
+  it("Botão Voltar preserva state do Step Conexão", () => {
     render(
       <OnboardingWizard
         connections={SAMPLE_CONNECTIONS}
@@ -253,26 +225,18 @@ describe("<OnboardingWizard />", () => {
         onSuccess={jest.fn()}
       />,
     );
-    // Step 1 → seleciona conn-1 e avança
     fireEvent.click(screen.getByRole("radio", { name: /Padrão \(legado\)/i }));
     fireEvent.click(screen.getByRole("button", { name: /Próximo/i }));
-    // Step 2 → preenche e avança
     fireEvent.change(screen.getByLabelText(/Account ID/i), {
       target: { value: "42" },
     });
     fireEvent.change(screen.getByLabelText(/Nome de exibição/i), {
       target: { value: "Empresa Foo" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /Próximo/i }));
-    // Step 3 → Voltar → volta pra Step 2 com valores preservados
     fireEvent.click(screen.getByRole("button", { name: /Voltar/i }));
-    expect(screen.getByLabelText(/Account ID/i)).toHaveValue(42);
-    expect(screen.getByLabelText(/Nome de exibição/i)).toHaveValue(
-      "Empresa Foo",
-    );
-    // Volta de novo → Step 1 com radio ainda selecionado
-    fireEvent.click(screen.getByRole("button", { name: /Voltar/i }));
-    expect(screen.getByRole("radio", { name: /Padrão \(legado\)/i })).toBeChecked();
+    expect(
+      screen.getByRole("radio", { name: /Padrão \(legado\)/i }),
+    ).toBeChecked();
   });
 
   it("Botão Cancelar chama onClose", () => {
@@ -304,7 +268,7 @@ describe("<OnboardingWizard />", () => {
     ).toBeInTheDocument();
   });
 
-  it("Stepper mostra step 2 ativo após avançar de 1 pra 2", () => {
+  it("Stepper mostra step Identidade ativo após avançar do Step Conexão", () => {
     render(
       <OnboardingWizard
         connections={SAMPLE_CONNECTIONS}
@@ -314,7 +278,6 @@ describe("<OnboardingWizard />", () => {
     );
     fireEvent.click(screen.getByRole("radio", { name: /Padrão \(legado\)/i }));
     fireEvent.click(screen.getByRole("button", { name: /Próximo/i }));
-    // Etapa 2 ativa, Etapa 1 concluída
     expect(
       screen.getByRole("listitem", { name: /Etapa 2.*atual/i }),
     ).toBeInTheDocument();
@@ -323,7 +286,7 @@ describe("<OnboardingWizard />", () => {
     ).toBeInTheDocument();
   });
 
-  it("Step 4 botão 'Cadastrar outra empresa' reseta wizard pro Step 1", async () => {
+  it("Step Conclusão → 'Cadastrar outra empresa' reseta wizard pro Step Conexão", async () => {
     createCompanyChatBinding.mockResolvedValue({
       success: true,
       data: { id: "bind-new" },
@@ -343,8 +306,6 @@ describe("<OnboardingWizard />", () => {
     fireEvent.change(screen.getByLabelText(/Nome de exibição/i), {
       target: { value: "Empresa Foo" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /Próximo/i }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /Já cadastrei/i }));
     fireEvent.click(screen.getByRole("button", { name: /Finalizar/i }));
     await waitFor(() => {
       expect(
@@ -354,10 +315,78 @@ describe("<OnboardingWizard />", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /Cadastrar outra empresa/i }),
     );
-    // Volta pro Step 1 com tudo limpo
     expect(
       screen.getByRole("heading", { name: /Escolher conexão/i }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /Padrão \(legado\)/i })).not.toBeChecked();
+    expect(
+      screen.getByRole("radio", { name: /Padrão \(legado\)/i }),
+    ).not.toBeChecked();
+  });
+
+  /* -------------------- prefilledConnectionId -------------------- */
+
+  it("quando prefilledConnectionId, pula direto para Step Identidade", () => {
+    render(
+      <OnboardingWizard
+        connections={SAMPLE_CONNECTIONS}
+        onClose={jest.fn()}
+        onSuccess={jest.fn()}
+        prefilledConnectionId="conn-2"
+      />,
+    );
+    // Step Conexão não aparece
+    expect(
+      screen.queryByRole("heading", { name: /Escolher conexão/i }),
+    ).not.toBeInTheDocument();
+    // Step Identidade visível
+    expect(
+      screen.getByRole("heading", { name: /Identidade da empresa/i }),
+    ).toBeInTheDocument();
+    // Texto "Etapa 1 de 2" no header (em vez de stepper)
+    expect(screen.getByText(/Etapa 1 de 2/i)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("list", { name: /etapas/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("após Identidade preenchida no modo prefilled, botão Finalizar fecha fluxo com a connection prefilled", async () => {
+    createCompanyChatBinding.mockResolvedValue({
+      success: true,
+      data: { id: "bind-new" },
+    });
+    const onSuccess = jest.fn();
+    render(
+      <OnboardingWizard
+        connections={SAMPLE_CONNECTIONS}
+        onClose={jest.fn()}
+        onSuccess={onSuccess}
+        prefilledConnectionId="conn-2"
+      />,
+    );
+    fireEvent.change(screen.getByLabelText(/Account ID/i), {
+      target: { value: "13" },
+    });
+    fireEvent.change(screen.getByLabelText(/Nome de exibição/i), {
+      target: { value: "Empresa Pré" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Finalizar/i }));
+    await waitFor(() => {
+      expect(createCompanyChatBinding).toHaveBeenCalledWith({
+        connectionId: "conn-2",
+        chatwootAccountId: 13,
+        displayName: "Empresa Pré",
+        enabled: true,
+      });
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: /Empresa onboardada/i }),
+      ).toBeInTheDocument();
+    });
+    // Não deve haver botão Voltar no modo prefilled.
+    expect(
+      screen.queryByRole("button", { name: /Voltar/i }),
+    ).not.toBeInTheDocument();
+    expect(onSuccess).toHaveBeenCalledWith("bind-new");
   });
 });

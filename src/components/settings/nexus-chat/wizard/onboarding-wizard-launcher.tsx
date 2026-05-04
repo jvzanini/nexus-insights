@@ -17,14 +17,25 @@ import {
 
 interface Props {
   connections: WizardConnection[];
+  /**
+   * v0.41: quando setado, abre o wizard já com a conexão selecionada,
+   * pulando direto pra Identidade. Usado na page `/bancos-de-dados/[id]`.
+   */
+  prefilledConnectionId?: string;
+  /** Override opcional do label do botão (ex.: "Cadastrar empresa"). */
+  label?: string;
 }
 
 /**
  * Wrapper client que segura o open-state do Dialog do wizard. Usado em
- * `/bancos-de-dados` (page server) — o botão "Cadastrar empresa" abre o
- * Dialog que monta `<OnboardingWizard>`.
+ * `/bancos-de-dados` (page server) e na page de detalhe da conexão para
+ * abrir o wizard pré-filled com a conexão atual.
  */
-export function OnboardingWizardLauncher({ connections }: Props) {
+export function OnboardingWizardLauncher({
+  connections,
+  prefilledConnectionId,
+  label,
+}: Props) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -36,21 +47,23 @@ export function OnboardingWizardLauncher({ connections }: Props) {
         className="cursor-pointer"
       >
         <Plus className="mr-1 h-4 w-4" aria-hidden />
-        Cadastrar empresa
+        {label ?? "Cadastrar empresa"}
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-2xl">
           <DialogTitle className="sr-only">Cadastrar empresa</DialogTitle>
           <DialogDescription className="sr-only">
-            Wizard de 4 etapas para vincular uma conta do Nexus Chat a uma
-            conexão Postgres.
+            {prefilledConnectionId
+              ? "Wizard de 2 etapas para vincular uma nova conta do Nexus Chat à conexão atual."
+              : "Wizard de 3 etapas para vincular uma conta do Nexus Chat a uma conexão Postgres."}
           </DialogDescription>
           <OnboardingWizard
             connections={connections}
             onClose={() => setOpen(false)}
+            prefilledConnectionId={prefilledConnectionId}
             onSuccess={() => {
-              // Mantém o wizard aberto no Step 4 para mostrar CTAs;
+              // Mantém o wizard aberto na conclusão para mostrar CTAs;
               // o usuário fecha manualmente via X ou Cancelar.
             }}
           />

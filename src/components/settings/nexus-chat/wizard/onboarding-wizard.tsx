@@ -11,14 +11,13 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
-  Clipboard,
   Database,
   Loader2,
   Plus,
+  RefreshCw,
   Search,
   Sparkles,
   Users,
-  Webhook,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -35,13 +34,12 @@ import { createCompanyChatBinding } from "@/lib/actions/nexus-chat/bindings";
 import { ConnectionFormDialog } from "../connection-form-dialog";
 
 /**
- * Connection minimal pro Step 1 do wizard. Recebe-se via prop do server
+ * Connection minimal pro Step Conexão do wizard. Recebe-se via prop do server
  * component (page `/bancos-de-dados`).
  */
 export interface WizardConnection {
   id: string;
   name: string;
-  webhookToken: string | null;
   status: string;
 }
 
@@ -51,15 +49,13 @@ interface Props {
   onClose: () => void;
   /** Callback após `createCompanyChatBinding` retornar success. */
   onSuccess?: (bindingId: string) => void;
+  /**
+   * v0.41: quando setado, o wizard pula direto pro Step Identidade e usa
+   * essa connection já selecionada. Útil pra abrir o wizard de dentro de
+   * `/bancos-de-dados/[id]` sem repetir a escolha de conexão.
+   */
+  prefilledConnectionId?: string;
 }
-
-const CHATWOOT_WEBHOOK_EVENTS = [
-  "conversation_created",
-  "conversation_updated",
-  "conversation_resolved",
-  "message_created",
-  "conversation_status_changed",
-];
 
 const COMBOBOX_THRESHOLD = 20;
 
@@ -67,14 +63,18 @@ const COMBOBOX_THRESHOLD = 20;
 /*  Reducer                                                                   */
 /* -------------------------------------------------------------------------- */
 
-type WizardStep = 1 | 2 | 3 | 4;
+/**
+ * v0.41: o wizard tem agora 3 steps quando completo (1 Conexão, 2 Identidade,
+ * 3 Conclusão) e 2 steps quando pré-filled (2 Identidade, 3 Conclusão — o
+ * número do step segue o mesmo enum interno pra simplificar o reducer).
+ */
+type WizardStep = 1 | 2 | 3;
 
 interface WizardState {
   step: WizardStep;
   connectionId: string | null;
   accountId: string;
   displayName: string;
-  webhookConfirmed: boolean;
   submitting: boolean;
   error: string | null;
   createdBindingId: string | null;
@@ -84,24 +84,24 @@ type WizardAction =
   | { type: "set_connection"; connectionId: string | null }
   | { type: "set_account_id"; value: string }
   | { type: "set_display_name"; value: string }
-  | { type: "set_webhook_confirmed"; value: boolean }
   | { type: "next" }
   | { type: "back" }
   | { type: "submit_start" }
   | { type: "submit_success"; bindingId: string }
   | { type: "submit_error"; error: string }
-  | { type: "reset" };
+  | { type: "reset"; prefilledConnectionId?: string };
 
-const INITIAL_STATE: WizardState = {
-  step: 1,
-  connectionId: null,
-  accountId: "",
-  displayName: "",
-  webhookConfirmed: false,
-  submitting: false,
-  error: null,
-  createdBindingId: null,
-};
+function makeInitialState(prefilledConnectionId?: string): WizardState {
+  return {
+    step: prefilledConnectionId ? 2 : 1,
+    connectionId: prefilledConnectionId ?? null,
+    accountId: "",
+    displayName: "",
+    submitting: false,
+    error: null,
+    createdBindingId: null,
+  };
+}
 
 function wizardReducer(state: WizardState, action: WizardAction): WizardState {
   switch (action.type) {
@@ -111,10 +111,8 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
       return { ...state, accountId: action.value };
     case "set_display_name":
       return { ...state, displayName: action.value };
-    case "set_webhook_confirmed":
-      return { ...state, webhookConfirmed: action.value };
     case "next": {
-      const next = Math.min(state.step + 1, 4) as WizardStep;
+      const next = Math.min(state.step + 1, 3) as WizardStep;
       return { ...state, step: next, error: null };
     }
     case "back": {
@@ -127,13 +125,13 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
       return {
         ...state,
         submitting: false,
-        step: 4,
+        step: 3,
         createdBindingId: action.bindingId,
       };
     case "submit_error":
       return { ...state, submitting: false, error: action.error };
     case "reset":
-      return INITIAL_STATE;
+      return makeInitialState(action.prefilledConnectionId);
     default:
       return state;
   }
@@ -143,21 +141,29 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
 /*  Stepper                                                                   */
 /* -------------------------------------------------------------------------- */
 
-const STEP_LABELS = [
-  "Conexão",
-  "Identidade",
-  "Webhook",
-  "Conclusão",
-] as const;
+const STEP_LABELS_FULL = ["Conexão", "Identidade", "Conclusão"] as const;
+const STEP_LABELS_PREFILLED = ["Identidade", "Conclusão"] as const;
 
-function Stepper({ current }: { current: WizardStep }) {
+function Stepper({
+  current,
+  labels,
+}: {
+  current: WizardStep;
+  labels: readonly string[];
+}) {
+  // No modo full, mapeamento natural: step 1→idx 0, 2→idx 1, 3→idx 2.
+  const total = labels.length;
   return (
     <ol
       role="list"
       aria-label="Etapas do cadastro de empresa"
-      className="grid grid-cols-4 gap-2"
+      className={cn(
+        "grid gap-2",
+        total === 3 ? "grid-cols-3" : "grid-cols-2",
+      )}
     >
-      {STEP_LABELS.map((label, idx) => {
+      {labels.map((label, idx) => {
+        // step number na ordem real do wizard (1..total)
         const stepNumber = (idx + 1) as WizardStep;
         const isActive = current === stepNumber;
         const isDone = current > stepNumber;
@@ -168,13 +174,12 @@ function Stepper({ current }: { current: WizardStep }) {
             : `Etapa ${stepNumber}: ${label} (pendente)`;
         return (
           <li
-            key={stepNumber}
+            key={`${stepNumber}-${label}`}
             aria-label={ariaLabel}
             aria-current={isActive ? "step" : undefined}
             className="flex flex-col items-stretch gap-1.5"
           >
             <div className="flex items-center gap-2">
-              {/* Indicador (dot/número) */}
               <div
                 aria-hidden
                 className={cn(
@@ -193,8 +198,7 @@ function Stepper({ current }: { current: WizardStep }) {
                   stepNumber
                 )}
               </div>
-              {/* Linha de progresso (oculta no último) */}
-              {stepNumber < 4 ? (
+              {stepNumber < total ? (
                 <div
                   aria-hidden
                   className={cn(
@@ -232,22 +236,24 @@ function Stepper({ current }: { current: WizardStep }) {
 /*  Wizard root                                                               */
 /* -------------------------------------------------------------------------- */
 
-export function OnboardingWizard({ connections, onClose, onSuccess }: Props) {
+export function OnboardingWizard({
+  connections,
+  onClose,
+  onSuccess,
+  prefilledConnectionId,
+}: Props) {
   const router = useRouter();
-  const [state, dispatch] = useReducer(wizardReducer, INITIAL_STATE);
+  const [state, dispatch] = useReducer(
+    wizardReducer,
+    prefilledConnectionId,
+    makeInitialState,
+  );
   const [pending, startTransition] = useTransition();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
-  const selectedConnection = useMemo(
-    () => connections.find((c) => c.id === state.connectionId) ?? null,
-    [connections, state.connectionId],
-  );
-
-  const webhookUrl = useMemo(() => {
-    if (!selectedConnection?.webhookToken) return null;
-    if (typeof window === "undefined") return null;
-    return `${window.location.origin}/api/webhooks/nexus-chat/${selectedConnection.webhookToken}`;
-  }, [selectedConnection]);
+  const stepLabels = prefilledConnectionId
+    ? STEP_LABELS_PREFILLED
+    : STEP_LABELS_FULL;
 
   /* ---------- Validação por step ---------- */
 
@@ -257,21 +263,14 @@ export function OnboardingWizard({ connections, onClose, onSuccess }: Props) {
     Number.isInteger(accountIdNum) &&
     accountIdNum > 0 &&
     state.displayName.trim().length > 0;
-  const isValidStep3 = state.webhookConfirmed;
 
   const canAdvance =
-    state.step === 1
-      ? isValidStep1
-      : state.step === 2
-        ? isValidStep2
-        : state.step === 3
-          ? isValidStep3
-          : false;
+    state.step === 1 ? isValidStep1 : state.step === 2 ? isValidStep2 : false;
 
   /* ---------- Submit ---------- */
 
   function handleFinalize() {
-    if (!isValidStep3 || !state.connectionId) return;
+    if (!isValidStep2 || !state.connectionId) return;
     dispatch({ type: "submit_start" });
     startTransition(async () => {
       const result = await createCompanyChatBinding({
@@ -315,7 +314,13 @@ export function OnboardingWizard({ connections, onClose, onSuccess }: Props) {
             </p>
           </div>
         </div>
-        <Stepper current={state.step} />
+        {prefilledConnectionId ? (
+          <p className="text-xs text-muted-foreground">
+            Etapa {state.step === 2 ? 1 : 2} de 2
+          </p>
+        ) : (
+          <Stepper current={state.step} labels={stepLabels} />
+        )}
       </header>
 
       {/* Painel do step (fade entre steps; respeita reduced-motion) */}
@@ -347,32 +352,26 @@ export function OnboardingWizard({ connections, onClose, onSuccess }: Props) {
             onDisplayNameChange={(value) =>
               dispatch({ type: "set_display_name", value })
             }
-          />
-        ) : null}
-
-        {state.step === 3 ? (
-          <StepWebhook
-            webhookUrl={webhookUrl}
-            connectionName={selectedConnection?.name ?? null}
-            confirmed={state.webhookConfirmed}
-            onConfirmedChange={(value) =>
-              dispatch({ type: "set_webhook_confirmed", value })
-            }
             error={state.error}
           />
         ) : null}
 
-        {state.step === 4 && state.connectionId ? (
+        {state.step === 3 && state.connectionId ? (
           <StepDone
             connectionId={state.connectionId}
             displayName={state.displayName}
-            onReset={() => dispatch({ type: "reset" })}
+            onReset={() =>
+              dispatch({
+                type: "reset",
+                prefilledConnectionId,
+              })
+            }
           />
         ) : null}
       </div>
 
       {/* Footer com Voltar/Próximo/Finalizar/Cancelar */}
-      {state.step < 4 ? (
+      {state.step < 3 ? (
         <footer className="flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
           <Button
             type="button"
@@ -383,7 +382,8 @@ export function OnboardingWizard({ connections, onClose, onSuccess }: Props) {
             Cancelar
           </Button>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
-            {state.step > 1 ? (
+            {/* Voltar só faz sentido no modo full step 2 → step 1 */}
+            {state.step > 1 && !prefilledConnectionId ? (
               <Button
                 type="button"
                 variant="outline"
@@ -395,7 +395,7 @@ export function OnboardingWizard({ connections, onClose, onSuccess }: Props) {
                 Voltar
               </Button>
             ) : null}
-            {state.step < 3 ? (
+            {state.step < 2 ? (
               <Button
                 type="button"
                 onClick={() => dispatch({ type: "next" })}
@@ -433,8 +433,6 @@ export function OnboardingWizard({ connections, onClose, onSuccess }: Props) {
         open={createDialogOpen}
         onOpenChange={(open) => {
           setCreateDialogOpen(open);
-          // Server Action do create já refreshea a page; quando ela
-          // remontar, `connections` chega via prop atualizada.
         }}
         connection={null}
       />
@@ -466,16 +464,13 @@ function StepConnection({
           Escolher conexão
         </h3>
         <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-background/40 px-6 py-10 text-center">
-          <Database
-            className="h-7 w-7 text-muted-foreground"
-            aria-hidden
-          />
+          <Database className="h-7 w-7 text-muted-foreground" aria-hidden />
           <p className="text-sm font-medium text-foreground">
             Nenhuma conexão cadastrada
           </p>
           <p className="max-w-sm text-xs text-muted-foreground">
-            Crie uma conexão Postgres ao banco do Nexus Chat antes de
-            cadastrar a primeira empresa.
+            Crie uma conexão Postgres ao banco do Nexus Chat antes de cadastrar
+            a primeira empresa.
           </p>
           <Button
             type="button"
@@ -598,12 +593,6 @@ function ConnectionRadioRow({
         <span className="truncate font-medium text-foreground">
           {connection.name}
         </span>
-        {connection.webhookToken === null ? (
-          <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 ring-1 ring-inset ring-amber-500/20 dark:text-amber-300">
-            <Webhook className="h-2.5 w-2.5" aria-hidden />
-            sem webhook
-          </span>
-        ) : null}
       </div>
     </label>
   );
@@ -650,10 +639,7 @@ function ConnectionCombobox({
       </PopoverTrigger>
       <PopoverContent className="w-[var(--popover-trigger-width)] p-0">
         <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-          <Search
-            className="h-3.5 w-3.5 text-muted-foreground"
-            aria-hidden
-          />
+          <Search className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -727,11 +713,13 @@ function StepIdentity({
   displayName,
   onAccountIdChange,
   onDisplayNameChange,
+  error,
 }: {
   accountId: string;
   displayName: string;
   onAccountIdChange: (value: string) => void;
   onDisplayNameChange: (value: string) => void;
+  error: string | null;
 }) {
   return (
     <section className="grid gap-3">
@@ -777,116 +765,6 @@ function StepIdentity({
           </p>
         </div>
       </div>
-    </section>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/*  Step 3 — Webhook                                                          */
-/* -------------------------------------------------------------------------- */
-
-function StepWebhook({
-  webhookUrl,
-  connectionName,
-  confirmed,
-  onConfirmedChange,
-  error,
-}: {
-  webhookUrl: string | null;
-  connectionName: string | null;
-  confirmed: boolean;
-  onConfirmedChange: (value: boolean) => void;
-  error: string | null;
-}) {
-  return (
-    <section className="grid gap-3">
-      <div className="grid gap-0.5">
-        <h3 className="font-heading text-sm font-semibold text-foreground">
-          Webhook do Nexus Chat
-        </h3>
-        <p className="text-xs text-muted-foreground">
-          Cole esta URL no painel admin do Nexus Chat
-          {connectionName ? (
-            <>
-              {" "}para a conexão <strong>{connectionName}</strong>
-            </>
-          ) : null}
-          .
-        </p>
-      </div>
-
-      <div className="grid gap-1.5">
-        <Label className="text-xs text-muted-foreground">URL do webhook</Label>
-        {webhookUrl ? (
-          <CopyableCode value={webhookUrl} />
-        ) : (
-          <div className="flex items-center gap-2 rounded-md border border-dashed border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-            <AlertCircle className="h-3.5 w-3.5" aria-hidden />
-            Esta conexão ainda não tem webhook gerado. Edite-a antes para criar
-            o token.
-          </div>
-        )}
-      </div>
-
-      <div className="grid gap-1.5">
-        <Label className="text-xs text-muted-foreground">
-          Eventos a marcar no painel do Nexus Chat
-        </Label>
-        <ul className="grid gap-1 rounded-md border border-border bg-muted/30 p-3 font-mono text-xs text-muted-foreground">
-          {CHATWOOT_WEBHOOK_EVENTS.map((evt) => (
-            <li key={evt} className="flex items-center gap-1.5">
-              <span
-                aria-hidden
-                className="h-1 w-1 rounded-full bg-muted-foreground/50"
-              />
-              {evt}
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <label
-        htmlFor="wizard-webhook-confirmed"
-        className={cn(
-          "flex min-h-[44px] cursor-pointer items-start gap-2.5 rounded-md border bg-background/40 px-3 py-2.5 text-sm transition-colors",
-          confirmed
-            ? "border-emerald-500/40 bg-emerald-500/5"
-            : "border-border hover:bg-muted/40",
-        )}
-      >
-        <span className="relative mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
-          <input
-            id="wizard-webhook-confirmed"
-            type="checkbox"
-            checked={confirmed}
-            onChange={(e) => onConfirmedChange(e.target.checked)}
-            aria-label="Já cadastrei o webhook no painel do Nexus Chat"
-            className={cn(
-              "peer h-4 w-4 cursor-pointer appearance-none rounded-[4px] border transition-colors outline-none",
-              "focus-visible:ring-2 focus-visible:ring-ring/50",
-              confirmed
-                ? "border-violet-500 bg-violet-500"
-                : "border-input bg-background",
-            )}
-          />
-          <Check
-            aria-hidden
-            className={cn(
-              "pointer-events-none absolute h-3 w-3 text-white transition-opacity",
-              confirmed ? "opacity-100" : "opacity-0",
-            )}
-          />
-        </span>
-        <div className="grid gap-0.5">
-          <span className="font-medium text-foreground">
-            Já cadastrei o webhook no painel do Nexus Chat
-          </span>
-          <span className="text-[11px] font-normal text-muted-foreground">
-            Marque após colar a URL acima e selecionar os 5 eventos no painel
-            admin.
-          </span>
-        </div>
-      </label>
 
       {error ? (
         <div
@@ -894,10 +772,7 @@ function StepWebhook({
           aria-label="Erro ao cadastrar empresa"
           className="flex items-start gap-2 rounded-md border border-rose-500/40 bg-rose-500/5 px-3 py-2 text-xs text-rose-700 dark:text-rose-300"
         >
-          <AlertCircle
-            className="mt-0.5 h-3.5 w-3.5 shrink-0"
-            aria-hidden
-          />
+          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
           <span>{error}</span>
         </div>
       ) : null}
@@ -906,7 +781,7 @@ function StepWebhook({
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Step 4 — Conclusão                                                        */
+/*  Step 3 — Conclusão                                                        */
 /* -------------------------------------------------------------------------- */
 
 function StepDone({
@@ -931,23 +806,23 @@ function StepDone({
           Empresa onboardada
         </h3>
         <p className="max-w-sm text-xs text-muted-foreground">
-          <strong>{displayName}</strong> foi vinculada à conexão. Os eventos
-          começam a chegar assim que o painel do Nexus Chat dispara o primeiro
-          webhook.
+          <strong>{displayName}</strong> foi vinculada à conexão. Os dados
+          começam a aparecer assim que o próximo polling delta detectar
+          mudanças no banco.
         </p>
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2">
         <Link
-          href={`/bancos-de-dados/${connectionId}?tab=tempo-real`}
+          href={`/bancos-de-dados/${connectionId}?tab=sincronizacao`}
           className="group flex min-h-[64px] flex-col items-start gap-1 rounded-lg border border-border bg-background/40 p-3 text-left transition-colors hover:border-violet-500/40 hover:bg-violet-500/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         >
           <div className="flex items-center gap-1.5 text-violet-600 dark:text-violet-400">
-            <Webhook className="h-4 w-4" aria-hidden />
-            <span className="text-sm font-medium">Ver eventos chegando</span>
+            <RefreshCw className="h-4 w-4" aria-hidden />
+            <span className="text-sm font-medium">Ver sincronização</span>
           </div>
           <span className="text-[11px] text-muted-foreground">
-            Aba Tempo real desta conexão.
+            Aba Sincronização desta conexão.
           </span>
         </Link>
         <Link
@@ -976,43 +851,5 @@ function StepDone({
         </Button>
       </div>
     </section>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/*  Copy URL pattern                                                          */
-/* -------------------------------------------------------------------------- */
-
-function CopyableCode({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false);
-  async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      toast.success("URL copiada");
-      window.setTimeout(() => setCopied(false), 1500);
-    } catch {
-      toast.error("Não foi possível copiar. Selecione e copie manualmente.");
-    }
-  }
-  return (
-    <div className="flex items-stretch gap-2 rounded-md border border-border bg-background/60">
-      <code className="min-w-0 flex-1 select-all overflow-x-auto whitespace-nowrap px-3 py-2 font-mono text-xs leading-relaxed text-foreground">
-        {value}
-      </code>
-      <button
-        type="button"
-        onClick={handleCopy}
-        aria-label="Copiar URL do webhook"
-        title="Copiar para área de transferência"
-        className="inline-flex w-11 shrink-0 cursor-pointer items-center justify-center border-l border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-      >
-        {copied ? (
-          <Check className="h-4 w-4" aria-hidden />
-        ) : (
-          <Clipboard className="h-4 w-4" aria-hidden />
-        )}
-      </button>
-    </div>
   );
 }
