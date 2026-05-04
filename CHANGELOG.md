@@ -1,5 +1,80 @@
 # Changelog
 
+## [v0.41.0] 2026-05-04 — Polling Delta + UX Overhaul
+
+> **Pivot arquitetural.** Substitui webhook event-driven (v0.38-v0.40) por **polling delta universal** direto no banco Postgres do Chatwoot. Latência ≤45s p99 (default 30s), zero dependência de cadastro externo de webhook, cobre TODAS as mudanças (não só os ~8 eventos do Chatwoot — pega `inboxes`, `teams`, `users`, `account_users`, `contacts`, `reporting_events`, `taggings` etc). UX inteira de `/bancos-de-dados` reformulada: lista clicável, dialog limpo, wizard sem webhook, abas Conexão/Sincronização/Jobs/Saúde com dados úteis, **tour interativo** em todas as 6 telas.
+
+### Migração arquitetural — webhook → polling delta
+- **`src/lib/chatwoot/sync/`** (novo): `cursor.ts` (get/upsert/advance/recordError) + `types.ts` (TableSyncResult, SyncRunSummary, TableSync interface) + `table-syncs/` (10 tabelas: `conversations`, `messages`, `inboxes`, `teams`, `team_members`, `users`, `account_users`, `contacts`, `reporting_events`, `taggings`) + `run-delta-sync.ts` (orquestrador 1 conn × 10 tables × N accounts com probe early-abort + check `deletedAt` + isolamento de erro por table) + `run-full-sweep.ts` (DELETE handling v1: detecta órfãos sem deletar).
+- **`src/worker/jobs/chatwoot-sync/`** (novo): `delta-sync.ts` (processor BullMQ, audit sample 1/100 success / 100% fail), `full-sweep.ts` (processor cron diário 03:00 BRT), `scheduler.ts` (tick 5s enfileira por connection com jobId determinístico bucket-based para idempotência), `queues.ts`.
+- **`src/worker/index.ts`**: TZ explícito `America/Sao_Paulo`. 4 workers novos: delta-sync (concurrency 4), tick scheduler (queue separada `chatwoot-sync-delta-tick`, concurrency 1), cron dispatcher (queue `chatwoot-sync-sweep-cron`, pattern `0 3 * * *`, tz `America/Sao_Paulo`), sweep filhos (queue `chatwoot-sync-sweep`, concurrency 1).
+- **Integração com pré-agregação:** `runDeltaSync` enfileira `refresh-by-account/inbox/agent/team/hourly` jobs ao detectar mudança em vez de publicar `facts:refreshed` direto. Cron antigo de pré-agregação rebaixado de **5min → 30min** como fallback.
+
+### Schema (Prisma)
+- **ADD** `polling_interval_seconds INT DEFAULT 30 CHECK >= 20` + `last_sync_at TIMESTAMP NULL` em `nexus_chat_connections`.
+- **CREATE TABLE** `chatwoot_sync_cursors` (cursor por `(connection × account × tableName)` com `last_synced_at`/`last_synced_id`/`rows_synced`/`last_run_ms`/`last_error`/`last_error_at`).
+- **DROP** `webhook_token`, `webhook_secret_enc`, `last_webhook_at` de `nexus_chat_connections`.
+- **ALTER TYPE AuditAction**: remove 6 valores `webhook_*`, adiciona 5 `polling_*` (`polling_sync_completed`, `polling_sync_failed`, `polling_full_sweep_started`, `polling_full_sweep_completed`, `polling_interval_updated`). Cleanup batch dos audit_logs órfãos antes do drop.
+
+### Server Actions (super_admin)
+- **`updateConnectionPollingInterval(id, intervalSeconds)`** com validação Zod min 20s max 86400s + audit `polling_interval_updated` (before/after).
+- **`createNexusChatConnection`/`updateNexusChatConnection`**: `pollingIntervalSeconds` no `ConnectionInputSchema`. Removida `regenerateConnectionWebhookToken` e geração de `webhookToken`.
+- **`listRecentSyncRuns(connectionId, limit)`** (substitui `listRecentWebhookEvents`): cap LIMIT 500, filtra 5 actions `polling_*`.
+- **`getConnectionHealthSnapshot`** refator: `lastSyncAt` + `lastSyncLagMinutes` + `syncRunsLast24h` (× 100 sample-corrected) + `syncErrorsLast24h` + `jobErrorsLast24h`.
+
+### UX overhaul `/bancos-de-dados`
+- **Lista raiz** (`connection-list.tsx`): linha INTEIRA é `<Link>` clicável (sem botão "Abrir detalhes"). Ícones reformulados: **Activity** (testar — substitui o TestTube odiado), Edit2 (editar), Trash2 (apagar) com `stopPropagation` para não navegar. Tag "X empresas" mantida. Botão "Cadastrar empresa" do header REMOVIDO (agora só dentro de uma conexão).
+- **Edit Connection Dialog** (`connection-form-dialog.tsx`): bloco Webhook removido completamente. NOVO campo "Intervalo de sincronização (segundos)" com Input number min=20 step=1, helper text "Mínimo 20 segundos. Padrão 30."
+- **Wizard Cadastrar empresa** (`onboarding-wizard.tsx`): Step Webhook removido. Wizard tem 3 steps quando aberto na lista (Conexão → Identidade → Conclusão) ou **2 steps** quando aberto dentro de uma conexão (`prefilledConnectionId` pula Step 1; Identidade → Conclusão).
+- **Aba Conexão** (`tabs/conexao-tab.tsx`): mostra `intervalo Ns` no header. Botão "Cadastrar empresa" sibling à BindingsTable (`<OnboardingWizardLauncher prefilledConnectionId>`).
+- **Aba "Tempo real" → "Sincronização"** (`tabs/sincronizacao-tab.tsx` substitui `tempo-real-tab.tsx`): 4 KPI cards polling-aware (Última sync, Runs última 1h sample-corrected, Erros 24h, Linhas sync 1h). Lista de até 200 runs `polling_*` (polling UI 5s + Pause/Play). Texto explicativo "Esta tela atualiza a cada 5s. O worker faz o sync efetivo a cada {N}s".
+- **Aba Jobs** (`tabs/jobs-tab.tsx`): SSR-first (`getJobsStatus({ connectionId })` no server). `JobsPanel` agora aceita prop `connectionId` e filtra por accountIds dessa conn (lookup via Prisma). Empty state melhorado quando 0 rows.
+- **Aba Saúde** (`tabs/saude-tab.tsx`): 4 KPIs polling-aware (Heartbeat, Runs 24h est., Erros 24h, Jobs com erro 24h). NOVO bloco "Erros recentes (top 5)" com tabela compacta + empty state OK em emerald quando 0.
+
+### Tour interativo (NOVO)
+- **`<TourTriggerButton>`** reutilizável (botão "?" ghost h-8 w-8). Disparado em todas as 6 telas:
+  - **Lista raiz**: `listaTour` (4 steps).
+  - **Aba Conexão**: `conexaoTour` (4 steps).
+  - **Aba Sincronização**: `sincronizacaoTour` (4 steps).
+  - **Aba Jobs**: `jobsTour` (3 steps).
+  - **Aba Saúde**: `saudeTour` (3 steps).
+  - **Edit Connection Dialog**: `editConnectionTour` (4 steps).
+- `data-tour` attrs adicionados em ~30 elementos para servir de targets dos overlays.
+- 13 sanity tests em `__tests__/configs.test.ts` (id único, ≥1 step, targetSelectors `[data-tour=...]`, sem duplicação).
+
+### Limpezas / removals
+- `src/app/api/webhooks/nexus-chat/[token]/route.ts` + tests — DELETED.
+- `src/lib/nexus-chat/webhook-credentials.ts` + tests — DELETED.
+- `src/lib/actions/nexus-chat/realtime-stream.ts` + tests — DELETED (substituído por `sync-stream.ts`).
+- `src/components/settings/nexus-chat/tabs/tempo-real-tab.tsx` — DELETED (substituído por `sincronizacao-tab.tsx`).
+- `prisma/seed.ts` — removida Fase 2 backfill webhook.
+- `src/middleware.ts` — sem isenção `/api/webhooks/nexus-chat/*`.
+- `src/components/users/audits-table.tsx` — labels `webhook_*` substituídos por `polling_*`.
+
+### Métricas
+- ~50 commits granulares.
+- **108 tests novos** (cursor 6 + 10 table-syncs × 3 = 30 + run-delta-sync 6 + run-full-sweep 3 + delta-sync processor 3 + full-sweep processor 2 + scheduler 5 + connections 4 + sync-stream 3 + health-metrics 6 + form-dialog 3 + wizard 2 + connection-list 2 + sincronizacao-tab 4 + tour-configs 13 + jobs.ts 4 = ~108).
+- **1794/1814 verde** suite global (20 falhas restantes são pré-existentes em `integrations-power-bi.test.ts` desde v0.39, não introduzidas pela v0.41).
+- Typecheck zero erros em todos os arquivos da release.
+- 8 subagents paralelos (1 schema + B-lib + B-orquestrador + B-workers + C-actions + D-webhook-removal + E-UI + F-tour + G-docs).
+- ui-ux-pro-max invocado em todos os subagents UI.
+- Plan v1 (3793L) → Review #1 (28 achados) → v2 delta → Review #2 (20 achados) → v3 final consolidado (Apêndice C OVERRIDES com 9 tasks novas + 14 substituídas).
+
+### Checklist pós-deploy
+- [ ] `/api/health` retorna v0.41.0
+- [ ] Login + abrir `/bancos-de-dados` (linha clicável funcional)
+- [ ] `/bancos-de-dados/[id]?tab=sincronizacao` mostra runs aparecendo dentro de 1 min
+- [ ] **Pedir ao João:** acessar painel admin do Nexus Chat e **remover o webhook cadastrado** (endpoint dá 404 agora — Chatwoot retentaria 4xx pra sempre, gera lixo)
+- [ ] Validar tour funcional nas 6 telas (lista + 4 abas + Edit Dialog) — botões "?" abrem overlay
+
+### Não-objetivos (hotfix v0.42+)
+- DELETE real de IDs órfãos no full sweep (v1 só detecta).
+- Métricas de polling no dashboard global (sample correction precisa contexto melhor para confiança).
+- Configurar intervalo per-binding em vez de per-connection.
+- Constraint NOT NULL em `connection_id` em todos os legados (ainda usam `chatwootQuery`).
+
+---
+
 ## [v0.40.0] 2026-05-04 — Multi-tenant Realtime Fase 3 (UI completa em 4 abas + Wizard onboarding)
 
 > **Épico 3 de 3.** Transforma `/bancos-de-dados/[id]` em UI rica de 4 abas (Conexão / Tempo real / Jobs / Saúde) + wizard de onboarding empresa de 4 steps. Super_admin opera todo o ciclo (criar conn → cadastrar empresa → ver eventos webhook ao vivo → diagnosticar lag → testar conn) num lugar só, sem precisar saber URLs de páginas legadas.
