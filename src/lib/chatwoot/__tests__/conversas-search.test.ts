@@ -75,4 +75,13 @@ describe("buildConversasSearchClause", () => {
     expect(r.sql).toContain("'Alta'");
     expect(r.sql).toContain("'Urgente'");
   });
+
+  it("v0.42 — fonte declara @canonical periodColumn=active (default)", async () => {
+    const fs = await import("fs");
+    const src = fs.readFileSync(
+      "src/lib/chatwoot/conversas-search.ts",
+      "utf8",
+    );
+    expect(src).toContain("@canonical periodColumn=active");
+  });
 });

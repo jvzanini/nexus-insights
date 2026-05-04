@@ -15,6 +15,11 @@
  *
  * Status/prioridade entram no match via CASE WHEN — usuário pode digitar
  * "abert%" para filtrar status=0, "urg%" para priority=3, etc.
+ *
+ * @canonical periodColumn=active (default) — não filtra período diretamente,
+ * mas o caller (conversas-list.ts) consome o default 'active' de
+ * `buildBaseFilter`, então a busca textual sempre opera sobre conversas
+ * com movimento no período. Veja `src/lib/reports/canonical.ts`.
  */
 
 import {
