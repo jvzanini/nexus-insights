@@ -53,6 +53,12 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   company_chat_binding_created: "Binding empresa↔conexão criado",
   company_chat_binding_updated: "Binding empresa↔conexão atualizado",
   company_chat_binding_deleted: "Binding empresa↔conexão removido",
+  webhook_received: "Webhook Nexus Chat recebido",
+  webhook_rejected_hmac: "Webhook rejeitado (HMAC inválido)",
+  webhook_rejected_rate_limit: "Webhook rejeitado (rate limit)",
+  webhook_no_binding: "Webhook ignorado (sem binding)",
+  webhook_token_regenerated: "Token de webhook regenerado",
+  webhook_secret_regenerated: "Secret de webhook regenerado",
 };
 
 function getActionBadgeClasses(action: AuditAction): string {

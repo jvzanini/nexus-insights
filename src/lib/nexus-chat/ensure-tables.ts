@@ -36,6 +36,7 @@ const FACTS_TABLES = [
 ] as const;
 
 const NEW_AUDIT_ENUM_VALUES = [
+  // Fase 1
   "nexus_chat_connection_created",
   "nexus_chat_connection_updated",
   "nexus_chat_connection_deleted",
@@ -43,6 +44,13 @@ const NEW_AUDIT_ENUM_VALUES = [
   "company_chat_binding_created",
   "company_chat_binding_updated",
   "company_chat_binding_deleted",
+  // Fase 2 (webhook)
+  "webhook_received",
+  "webhook_rejected_hmac",
+  "webhook_rejected_rate_limit",
+  "webhook_no_binding",
+  "webhook_token_regenerated",
+  "webhook_secret_regenerated",
 ] as const;
 
 async function createTables(): Promise<void> {
@@ -127,6 +135,11 @@ async function createTables(): Promise<void> {
       `CREATE INDEX IF NOT EXISTS "${table}_connection_id_account_id_idx" ON "${table}"("connection_id", "account_id");`,
     );
   }
+
+  // Fase 2: timestamp do último webhook recebido (idempotente).
+  await pgPool.query(
+    `ALTER TABLE "nexus_chat_connections" ADD COLUMN IF NOT EXISTS "last_webhook_at" TIMESTAMP(3);`,
+  );
 }
 
 export async function ensureNexusChatTables(): Promise<void> {

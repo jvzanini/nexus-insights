@@ -58,6 +58,12 @@ enum AuditAction {
   company_chat_binding_created
   company_chat_binding_updated
   company_chat_binding_deleted
+  webhook_received
+  webhook_rejected_hmac
+  webhook_rejected_rate_limit
+  webhook_no_binding
+  webhook_token_regenerated
+  webhook_secret_regenerated
 }
 
 model User {
@@ -498,6 +504,9 @@ model NexusChatConnection {
   status           String    @default("active") @map("status")
   lastTestAt       DateTime? @map("last_test_at")
   lastTestError    String?   @map("last_test_error") @db.Text
+  // Fase 2: timestamp do último webhook recebido (populado pelo endpoint
+  // /api/webhooks/nexus-chat/[token]). Usado para detectar webhook quieto.
+  lastWebhookAt    DateTime? @map("last_webhook_at")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
   deletedAt        DateTime? @map("deleted_at")
