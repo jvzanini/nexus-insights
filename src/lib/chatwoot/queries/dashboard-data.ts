@@ -1,20 +1,19 @@
 /**
- * Dashboard v0.10 — coortes coerentes:
- *  - 4 KPIs no MESMO recorte (created_at no período):
- *      1. Conversas recebidas
- *      2. Conversas resolvidas (status=1)
- *      3. Conversas abertas (status=0)
- *      4. Taxa de resolução (resolvidas / recebidas) — sempre ≤ 100%
- *  - Chart bucketed (hora se ≤ 2 dias, dia caso contrário).
- *  - Top atendentes mais rápidos (first_response no período).
- *  - byTeam: contagem por departamento (open+pending+snoozed) com bucket
- *    "Sem departamento" (team_id IS NULL).
- *  - byStatus: contagem por status no período (4 fatias).
- *  - topInboxes: inboxes em aberto no período (status=0).
- *  - noResponse: total + mais antiga + 5 últimas — status=0 + última msg do contato.
- *  - 10 conversas mais recentes.
+ * Dashboard v0.42 — padrão canônico de consistência (ver
+ * `src/lib/reports/canonical.ts` e `docs/runbooks/canonical-data-rules.md`).
  *
- * Cache pull-through 30s. Cache key bumped (v2) — invalida v1 ao subir.
+ *  - KPI "Recebidas": ÚNICO recorte por `c.created_at` (canonical "created").
+ *  - Demais KPIs/distribuições/drill-downs: por `c.last_activity_at`
+ *    (canonical "active"), conforme glossário.
+ *  - Chart bucketed (hora se ≤ 2 dias, dia caso contrário) com UNION ALL:
+ *    bucket Recebidas via `created_at`, demais séries via `last_activity_at`.
+ *  - byStatus: query única por `c.last_activity_at`, `GROUP BY c.status`.
+ *  - noResponse / noResponseAgg: usam CTE canônica `last_classification_msg`
+ *    (incoming público) — `lcm.message_type = 0`.
+ *  - matrixClause: helper `chatwootMatrixIaClause(excludeMatrixIA)` (constante
+ *    `MATRIX_IA_INBOX_ID = 31`).
+ *
+ * Cache pull-through 30s. Cache key bumped: v9 → canonical-v0.42 (invalida v9).
  */
 
 import { queryNexusChat } from "@/lib/nexus-chat/pool";
@@ -22,6 +21,13 @@ import { withChatwootResilience } from "../resilience";
 import { withCache } from "@/lib/cache/pull-through";
 import { cacheKey, hashFilters } from "@/lib/cache/keys";
 import { getPlatformTz } from "@/lib/datetime";
+import {
+  buildLastClassificationMsgCte,
+  chatwootMatrixIaClause,
+  MSG_INCOMING,
+  STATUS_OPEN,
+  STATUS_RESOLVED,
+} from "@/lib/reports/canonical";
 
 const DEFAULT_TTL_SECONDS = 30;
 
@@ -218,11 +224,10 @@ export async function dashboardData(
     forcedGranularity: args.forcedGranularity ?? null,
   };
 
-  // Cache key v8 — bump v0.14.3 (noResponse filtra msg_type IN (0,1)
-  // ignorando activity/template, defensivo contra cache stale de v7).
+  // Cache key bumped na v0.42 (padrão canônico) — invalida v9 ao subir.
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-data-v9",
+    name: "dashboard-data-canonical-v0.42",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -240,9 +245,13 @@ export async function dashboardData(
             args.forcedGranularity ??
             (periodMs <= 1000 * 60 * 60 * 48 ? "hour" : "day");
 
-          const matrixClause = excludeMatrixIA ? " AND c.inbox_id <> 31" : "";
+          // matrixClause via helper canônico (constante MATRIX_IA_INBOX_ID).
+          // Concatenado com espaço inicial para fundir nas queries existentes.
+          const matrixHelper = chatwootMatrixIaClause(excludeMatrixIA);
+          const matrixClause = matrixHelper ? ` ${matrixHelper}` : "";
 
-          // ---------- 1. Recebidas no período ----------
+          // ---------- 1. Recebidas no período (canonical "created") ----------
+          // ÚNICO recorte que filtra por `c.created_at` — KPI "Recebidas".
           const sqlReceived = `
             SELECT COUNT(*)::bigint AS total
             FROM conversations c
@@ -252,28 +261,28 @@ export async function dashboardData(
               ${matrixClause}
           `;
 
-          // ---------- 2. Resolvidas — MESMA coorte (created_at no período + status=1 agora) ----------
+          // ---------- 2. Resolvidas (canonical "active") ----------
+          // v0.42: migrado de created_at → last_activity_at conforme glossário.
+          // "Resolvidas no período" = última atividade no período + status=1.
           const sqlResolved = `
             SELECT COUNT(*)::bigint AS total
             FROM conversations c
             WHERE c.account_id = $1
-              AND c.created_at >= $2
-              AND c.created_at < $3
-              AND c.status = 1
+              AND c.last_activity_at >= $2
+              AND c.last_activity_at < $3
+              AND c.status = ${STATUS_RESOLVED}
               ${matrixClause}
           `;
 
-          // ---------- 3. Abertas (no período) — coorte por ATIVIDADE no período ----------
-          // v0.14.2: troca created_at por last_activity_at. Isso captura conversas
-          // criadas antes do período mas REABERTAS dentro dele (com status=0).
-          // Bug original: conversa criada em 30/04 reaberta em 01/05 não aparecia.
+          // ---------- 3. Abertas (canonical "active") ----------
+          // Conversas com status=0 e atividade no período (capta reabertas).
           const sqlOpen = `
             SELECT COUNT(*)::bigint AS total
             FROM conversations c
             WHERE c.account_id = $1
               AND c.last_activity_at >= $2
               AND c.last_activity_at < $3
-              AND c.status = 0
+              AND c.status = ${STATUS_OPEN}
               ${matrixClause}
           `;
 
@@ -335,6 +344,7 @@ export async function dashboardData(
           `;
 
           // ---------- 6. Top atendentes mais rápidos ----------
+          // Filtra por `re.created_at` (evento first_response — domínio próprio).
           const sqlTopAgents = `
             SELECT u.id, u.name, AVG(re.value)::float AS avg_seconds
             FROM reporting_events re
@@ -345,7 +355,7 @@ export async function dashboardData(
               AND re.value IS NOT NULL
               AND re.created_at >= $2
               AND re.created_at < $3
-              ${excludeMatrixIA ? " AND c.inbox_id <> 31" : ""}
+              ${matrixClause}
             GROUP BY u.id, u.name
             HAVING COUNT(re.id) >= 3
             ORDER BY avg_seconds ASC
@@ -386,97 +396,66 @@ export async function dashboardData(
             ORDER BY total DESC
           `;
 
-          // ---------- 9. byStatus — distribuição por status (atividade no período) ----------
-          // v0.14.2: status 0/2/3 por last_activity_at; status 1 (resolved)
-          // por created_at (mantém coerência com KPI Resolvidas).
+          // ---------- 9. byStatus — distribuição por status (canonical "active") ----------
+          // v0.42: query única por `c.last_activity_at` para todos status,
+          // alinhada com KPI Resolvidas (que também passou para active).
           const sqlByStatus = `
-            SELECT status, total FROM (
-              SELECT
-                c.status::int AS status,
-                COUNT(*)::bigint AS total
-              FROM conversations c
-              WHERE c.account_id = $1
-                AND c.last_activity_at >= $2
-                AND c.last_activity_at < $3
-                AND c.status IN (0, 2, 3)
-                ${matrixClause}
-              GROUP BY c.status
-              UNION ALL
-              SELECT
-                1 AS status,
-                COUNT(*)::bigint AS total
-              FROM conversations c
-              WHERE c.account_id = $1
-                AND c.created_at >= $2
-                AND c.created_at < $3
-                AND c.status = 1
-                ${matrixClause}
-            ) sub
+            SELECT
+              c.status::int AS status,
+              COUNT(*)::bigint AS total
+            FROM conversations c
+            WHERE c.account_id = $1
+              AND c.last_activity_at >= $2
+              AND c.last_activity_at < $3
+              ${matrixClause}
+            GROUP BY c.status
           `;
 
           // ---------- 10. noResponse — preview (5) + agg ----------
-          // v0.14.2: filtra por last_activity_at no período (capta conversas
-          // reabertas com mensagem do contato sem resposta).
-          // v0.14.3: filtro `message_type IN (0,1)` ignora msgs de activity (2)
-          // e template (3) — sem isso, "última msg" frequentemente é uma
-          // notificação de sistema (atribuição, reabertura, template), o que
-          // fazia conversas com mensagem real do contato pendente sumirem do
-          // card "Conversas sem resposta".
+          // v0.42: usa CTE canônica `last_classification_msg` em vez de CTE
+          // inline ad-hoc. Filtro `lcm.message_type = 0` garante que estamos
+          // pegando conversas onde a ÚLTIMA mensagem (entre incoming público
+          // e outgoing qualquer privacidade) foi do cliente — i.e., conversa
+          // sem resposta do agente.
           const sqlNoResponse = `
-            WITH last_msg AS (
-              SELECT DISTINCT ON (m.conversation_id)
-                m.conversation_id,
-                m.created_at,
-                m.message_type
-              FROM messages m
-              WHERE m.message_type IN (0, 1)
-              ORDER BY m.conversation_id, m.created_at DESC
-            )
+            ${buildLastClassificationMsgCte()}
             SELECT
               c.id,
               c.display_id,
               ct.name AS contact_name,
               ix.name AS inbox_name,
               u.name AS assignee_name,
-              EXTRACT(EPOCH FROM (NOW() - lm.created_at))::int AS waiting_seconds,
-              lm.created_at AS last_incoming_at
+              EXTRACT(EPOCH FROM (NOW() - lcm.msg_created_at))::int AS waiting_seconds,
+              lcm.msg_created_at AS last_incoming_at
             FROM conversations c
-            JOIN last_msg lm
-              ON lm.conversation_id = c.id
-             AND lm.message_type = 0
+            JOIN last_classification_msg lcm
+              ON lcm.conversation_id = c.id
+             AND lcm.message_type = ${MSG_INCOMING}
             LEFT JOIN contacts ct ON ct.id = c.contact_id
             LEFT JOIN inboxes ix ON ix.id = c.inbox_id
             LEFT JOIN users u ON u.id = c.assignee_id
             WHERE c.account_id = $1
               AND c.last_activity_at >= $2
               AND c.last_activity_at < $3
-              AND c.status = 0
+              AND c.status = ${STATUS_OPEN}
               ${matrixClause}
             ORDER BY waiting_seconds DESC
             LIMIT 5
           `;
 
           const sqlNoResponseAgg = `
-            WITH last_msg AS (
-              SELECT DISTINCT ON (m.conversation_id)
-                m.conversation_id,
-                m.created_at,
-                m.message_type
-              FROM messages m
-              WHERE m.message_type IN (0, 1)
-              ORDER BY m.conversation_id, m.created_at DESC
-            )
+            ${buildLastClassificationMsgCte()}
             SELECT
               COUNT(*)::int AS total,
-              COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - lm.created_at))), 0)::int AS oldest_seconds
+              COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - lcm.msg_created_at))), 0)::int AS oldest_seconds
             FROM conversations c
-            JOIN last_msg lm
-              ON lm.conversation_id = c.id
-             AND lm.message_type = 0
+            JOIN last_classification_msg lcm
+              ON lcm.conversation_id = c.id
+             AND lcm.message_type = ${MSG_INCOMING}
             WHERE c.account_id = $1
               AND c.last_activity_at >= $2
               AND c.last_activity_at < $3
-              AND c.status = 0
+              AND c.status = ${STATUS_OPEN}
               ${matrixClause}
           `;
 
