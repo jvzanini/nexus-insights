@@ -3,7 +3,7 @@ import { getOrCreateCursor } from "../cursor";
 import type { TableSync, TableSyncArgs, TableSyncResult } from "../types";
 
 const DEFAULT_BATCH_LIMIT = 5000;
-const ID_ZERO = 0n;
+const ID_ZERO = BigInt(0);
 
 /**
  * Sync delta de `taggings` do Chatwoot.

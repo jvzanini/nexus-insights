@@ -26,7 +26,7 @@ describe("taggingsSync", () => {
     queryNexusChatMock.mockResolvedValue({
       rows: [
         {
-          id: 1n,
+          id: BigInt(1),
           tag_id: 10,
           taggable_id: 100,
           taggable_type: "Conversation",
@@ -44,13 +44,13 @@ describe("taggingsSync", () => {
     );
     expect(result.tableName).toBe("taggings");
     expect(result.rowsRead).toBe(1);
-    expect(result.nextCursor).toEqual({ kind: "id", value: 1n });
+    expect(result.nextCursor).toEqual({ kind: "id", value: BigInt(1) });
   });
 
   it("retorna nextCursor.kind=none quando 0 rows", async () => {
     cursorMock.getOrCreateCursor.mockResolvedValue({
       lastSyncedAt: null,
-      lastSyncedId: 100n,
+      lastSyncedId: BigInt(100),
     });
     queryNexusChatMock.mockResolvedValue({ rows: [] });
 
@@ -64,7 +64,7 @@ describe("taggingsSync", () => {
   it("respeita batchLimit", async () => {
     cursorMock.getOrCreateCursor.mockResolvedValue({
       lastSyncedAt: null,
-      lastSyncedId: 50n,
+      lastSyncedId: BigInt(50),
     });
     queryNexusChatMock.mockResolvedValue({ rows: [] });
 

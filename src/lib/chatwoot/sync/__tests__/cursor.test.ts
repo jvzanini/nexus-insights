@@ -21,7 +21,7 @@ describe("getOrCreateCursor", () => {
       tableName: "conversations",
       lastSyncedAt: new Date("2026-05-04T00:00:00Z"),
       lastSyncedId: null,
-      rowsSynced: 1234n,
+      rowsSynced: BigInt(1234),
       lastRunMs: 50,
       lastError: null,
       lastErrorAt: null,
@@ -43,7 +43,7 @@ describe("getOrCreateCursor", () => {
       tableName: "conversations",
       lastSyncedAt: null,
       lastSyncedId: null,
-      rowsSynced: 0n,
+      rowsSynced: BigInt(0),
       lastRunMs: null,
       lastError: null,
       lastErrorAt: null,
@@ -53,7 +53,7 @@ describe("getOrCreateCursor", () => {
 
     const c = await getOrCreateCursor("conn-1", 9, "conversations");
     expect(c.lastSyncedAt).toBeNull();
-    expect(c.rowsSynced).toBe(0n);
+    expect(c.rowsSynced).toBe(BigInt(0));
     expect(prismaMock.chatwootSyncCursor.create).toHaveBeenCalledWith({
       data: {
         connectionId: "conn-1",
@@ -84,7 +84,7 @@ describe("advanceCursor", () => {
       },
       data: {
         lastSyncedAt: new Date("2026-05-04T01:00:00Z"),
-        rowsSynced: { increment: 42n },
+        rowsSynced: { increment: BigInt(42) },
         lastRunMs: 120,
         lastError: null,
         lastErrorAt: null,
@@ -96,7 +96,7 @@ describe("advanceCursor", () => {
     prismaMock.chatwootSyncCursor.update.mockResolvedValue({} as never);
 
     await advanceCursor("conn-1", 9, "taggings", {
-      lastSyncedId: 99999n,
+      lastSyncedId: BigInt(99999),
       rowsAffected: 5,
       runMs: 30,
     });
@@ -104,8 +104,8 @@ describe("advanceCursor", () => {
     expect(prismaMock.chatwootSyncCursor.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          lastSyncedId: 99999n,
-          rowsSynced: { increment: 5n },
+          lastSyncedId: BigInt(99999),
+          rowsSynced: { increment: BigInt(5) },
         }),
       }),
     );

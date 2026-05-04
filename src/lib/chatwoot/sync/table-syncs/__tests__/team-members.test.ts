@@ -26,7 +26,7 @@ describe("teamMembersSync", () => {
     queryNexusChatMock.mockResolvedValue({
       rows: [
         {
-          id: 1n,
+          id: BigInt(1),
           user_id: 5,
           team_id: 2,
           account_id: 9,
@@ -43,13 +43,13 @@ describe("teamMembersSync", () => {
     );
     expect(result.tableName).toBe("team_members");
     expect(result.rowsRead).toBe(1);
-    expect(result.nextCursor).toEqual({ kind: "id", value: 1n });
+    expect(result.nextCursor).toEqual({ kind: "id", value: BigInt(1) });
   });
 
   it("retorna nextCursor.kind=none quando 0 rows", async () => {
     cursorMock.getOrCreateCursor.mockResolvedValue({
       lastSyncedAt: null,
-      lastSyncedId: 100n,
+      lastSyncedId: BigInt(100),
     });
     queryNexusChatMock.mockResolvedValue({ rows: [] });
 
@@ -63,7 +63,7 @@ describe("teamMembersSync", () => {
   it("respeita batchLimit", async () => {
     cursorMock.getOrCreateCursor.mockResolvedValue({
       lastSyncedAt: null,
-      lastSyncedId: 50n,
+      lastSyncedId: BigInt(50),
     });
     queryNexusChatMock.mockResolvedValue({ rows: [] });
 
