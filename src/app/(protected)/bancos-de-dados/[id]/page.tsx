@@ -11,6 +11,7 @@ import {
 import type { BindingTableItem } from "@/components/settings/nexus-chat/bindings-table";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { getJobsStatus } from "@/lib/actions/jobs";
 
 export const metadata = {
   title: "Detalhes da conexão | Nexus Insights",
@@ -22,12 +23,12 @@ interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-type TabKey = "conexao" | "tempo-real" | "jobs" | "saude";
+type TabKey = "conexao" | "sincronizacao" | "jobs" | "saude";
 
 function resolveDefaultTab(value: string | undefined): TabKey {
   if (
     value === "conexao" ||
-    value === "tempo-real" ||
+    value === "sincronizacao" ||
     value === "jobs" ||
     value === "saude"
   ) {
@@ -48,6 +49,22 @@ export default async function Page({ params, searchParams }: PageProps) {
 
   const connection = await prisma.nexusChatConnection.findUnique({
     where: { id, deletedAt: null },
+    select: {
+      id: true,
+      name: true,
+      host: true,
+      port: true,
+      database: true,
+      username: true,
+      sslMode: true,
+      applicationName: true,
+      status: true,
+      lastTestAt: true,
+      lastTestError: true,
+      lastSyncAt: true,
+      pollingIntervalSeconds: true,
+      createdAt: true,
+    },
   });
   if (!connection) notFound();
 
@@ -76,10 +93,16 @@ export default async function Page({ params, searchParams }: PageProps) {
     status: connection.status,
     lastTestAt: connection.lastTestAt?.toISOString() ?? null,
     lastTestError: connection.lastTestError,
-    lastWebhookAt: connection.lastWebhookAt?.toISOString() ?? null,
-    webhookToken: connection.webhookToken,
+    lastSyncAt: connection.lastSyncAt?.toISOString() ?? null,
+    pollingIntervalSeconds: connection.pollingIntervalSeconds,
     createdAt: connection.createdAt.toISOString(),
   };
+
+  // SSR-first: pré-busca status dos jobs filtrados pela connection.
+  // Em caso de erro, passa null e <JobsPanel> exibe banner via initialError.
+  const jobsResult = await getJobsStatus({ connectionId: id });
+  const initialJobsStatus =
+    jobsResult.success && jobsResult.data ? jobsResult.data : null;
 
   return (
     <PageShell variant="wide">
@@ -103,6 +126,7 @@ export default async function Page({ params, searchParams }: PageProps) {
         connection={detailData}
         bindings={items}
         defaultTab={defaultTab}
+        initialJobsStatus={initialJobsStatus}
       />
     </PageShell>
   );
