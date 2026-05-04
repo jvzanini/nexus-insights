@@ -4,15 +4,14 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  Activity,
   CheckCircle2,
   Database,
   Edit2,
   Loader2,
   PauseCircle,
   Plus,
-  TestTube,
   Trash2,
-  Users,
   XCircle,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -173,7 +172,10 @@ export function ConnectionList({ connections }: Props) {
   }
 
   return (
-    <section className="rounded-2xl border border-border bg-muted/30 p-2">
+    <section
+      data-tour="lista-header"
+      className="rounded-2xl border border-border bg-muted/30 p-2"
+    >
       <div className="flex items-start justify-between gap-3 px-4 pt-4 pb-3 sm:items-center">
         <div className="flex items-start gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/10">
@@ -198,6 +200,7 @@ export function ConnectionList({ connections }: Props) {
           size="sm"
           onClick={() => setDialog({ mode: "create" })}
           className="cursor-pointer"
+          data-tour="lista-new-connection"
         >
           <Plus className="mr-1 h-4 w-4" aria-hidden />
           Nova conexão
@@ -230,109 +233,123 @@ export function ConnectionList({ connections }: Props) {
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-background/40">
           <ul className="divide-y divide-border">
-            {connections.map((c) => {
+            {connections.map((c, idx) => {
               const meta = statusMeta(c.status);
               const StatusIcon = meta.icon;
               const isTesting = pending && testingId === c.id;
               return (
-                <li
-                  key={c.id}
-                  className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:gap-4"
-                >
-                  {/* Coluna identidade: nome + host masked + banco */}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="truncate text-sm font-medium text-foreground">
-                        {c.name}
-                      </p>
-                      <span
-                        data-testid={`conn-status-${c.id}`}
-                        className={cn(
-                          "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset",
-                          meta.badgeClass,
-                        )}
-                      >
-                        <StatusIcon className="h-3 w-3" aria-hidden />
-                        {meta.label}
-                      </span>
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
-                      <span
-                        data-testid={`conn-host-${c.id}`}
-                        className="font-mono tabular-nums"
-                      >
-                        {maskHost(c.host)}:{c.port}
-                      </span>
-                      <span aria-hidden>·</span>
-                      <span className="font-mono">{c.database}</span>
-                      <span aria-hidden>·</span>
-                      <span>
-                        Última verificação:{" "}
-                        <span className="tabular-nums">
-                          {formatLastTest(c.lastTestAt)}
+                <li key={c.id}>
+                  <Link
+                    href={`/bancos-de-dados/${c.id}`}
+                    aria-label={`Abrir detalhes da conexão ${c.name}`}
+                    data-tour={idx === 0 ? "lista-conn-card" : undefined}
+                    className="group flex flex-col gap-3 px-4 py-3 transition-colors hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset lg:flex-row lg:items-center lg:gap-4"
+                  >
+                    {/* Coluna identidade: nome + status + host masked + banco */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate text-sm font-medium text-foreground">
+                          {c.name}
+                        </p>
+                        <span
+                          data-testid={`conn-status-${c.id}`}
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset",
+                            meta.badgeClass,
+                          )}
+                        >
+                          <StatusIcon className="h-3 w-3" aria-hidden />
+                          {meta.label}
                         </span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                        <span
+                          data-testid={`conn-host-${c.id}`}
+                          className="font-mono tabular-nums"
+                        >
+                          {maskHost(c.host)}:{c.port}
+                        </span>
+                        <span aria-hidden>·</span>
+                        <span className="font-mono">{c.database}</span>
+                        <span aria-hidden>·</span>
+                        <span>
+                          Última verificação:{" "}
+                          <span className="tabular-nums">
+                            {formatLastTest(c.lastTestAt)}
+                          </span>
+                        </span>
+                      </div>
+                      {c.lastTestError ? (
+                        <p className="mt-1 line-clamp-2 break-words text-[11px] text-rose-500">
+                          {c.lastTestError}
+                        </p>
+                      ) : null}
+                    </div>
+
+                    {/* Tag empresas */}
+                    <div className="flex items-center gap-2 lg:shrink-0">
+                      <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[11px] text-muted-foreground tabular-nums ring-1 ring-inset ring-border">
+                        {c.bindingsCount}{" "}
+                        {c.bindingsCount === 1 ? "empresa" : "empresas"}
                       </span>
                     </div>
-                    {c.lastTestError ? (
-                      <p className="mt-1 line-clamp-2 break-words text-[11px] text-rose-500">
-                        {c.lastTestError}
-                      </p>
-                    ) : null}
-                  </div>
 
-                  {/* Coluna empresas: count + link pra page dedicada */}
-                  <div className="flex items-center gap-2 lg:shrink-0">
-                    <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[11px] text-muted-foreground tabular-nums ring-1 ring-inset ring-border">
-                      {c.bindingsCount}{" "}
-                      {c.bindingsCount === 1 ? "empresa" : "empresas"}
-                    </span>
-                    <Link
-                      href={`/bancos-de-dados/${c.id}`}
-                      className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-border bg-background/50 px-2.5 text-[11px] font-medium text-foreground transition-colors hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                    {/* Coluna ações: 3 ícones (Activity / Edit2 / Trash2).
+                        stopPropagation evita navegar quando user clica num
+                        ícone. */}
+                    <div
+                      className="flex items-center gap-1 lg:shrink-0"
+                      data-tour={idx === 0 ? "lista-actions" : undefined}
                     >
-                      <Users className="h-3 w-3" aria-hidden />
-                      Abrir detalhes
-                    </Link>
-                  </div>
-
-                  {/* Coluna ações */}
-                  <div className="flex items-center gap-1 lg:shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => handleTest(c)}
-                      disabled={isTesting}
-                      aria-label="Testar conexão"
-                      title="Testar conexão"
-                      className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-violet-500/10 hover:text-violet-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {isTesting ? (
-                        <Loader2
-                          className="h-4 w-4 animate-spin"
-                          aria-hidden
-                        />
-                      ) : (
-                        <TestTube className="h-4 w-4" aria-hidden />
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDialog({ mode: "edit", connection: c })}
-                      aria-label="Editar conexão"
-                      title="Editar conexão"
-                      className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                    >
-                      <Edit2 className="h-4 w-4" aria-hidden />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDeleteTarget(c)}
-                      aria-label="Apagar conexão"
-                      title="Apagar conexão"
-                      className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-rose-500/10 hover:text-rose-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                    >
-                      <Trash2 className="h-4 w-4" aria-hidden />
-                    </button>
-                  </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleTest(c);
+                        }}
+                        disabled={isTesting}
+                        aria-label="Testar conexão"
+                        title="Testar conexão"
+                        className="inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-violet-500/10 hover:text-violet-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {isTesting ? (
+                          <Loader2
+                            className="h-4 w-4 animate-spin"
+                            aria-hidden
+                          />
+                        ) : (
+                          <Activity className="h-4 w-4" aria-hidden />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setDialog({ mode: "edit", connection: c });
+                        }}
+                        aria-label="Editar conexão"
+                        title="Editar conexão"
+                        className="inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                      >
+                        <Edit2 className="h-4 w-4" aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setDeleteTarget(c);
+                        }}
+                        aria-label="Apagar conexão"
+                        title="Apagar conexão"
+                        className="inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-rose-500/10 hover:text-rose-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden />
+                      </button>
+                    </div>
+                  </Link>
                 </li>
               );
             })}
@@ -392,4 +409,3 @@ export function ConnectionList({ connections }: Props) {
     </section>
   );
 }
-

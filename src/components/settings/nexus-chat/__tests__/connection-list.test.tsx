@@ -8,6 +8,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 const testNexusChatConnection = jest.fn();
 const softDeleteNexusChatConnection = jest.fn();
 const refresh = jest.fn();
+const push = jest.fn();
 
 jest.mock("@/lib/actions/nexus-chat/connections", () => ({
   testNexusChatConnection: (...args: unknown[]) =>
@@ -27,7 +28,7 @@ jest.mock("@/lib/actions/nexus-chat/bindings", () => ({
 }));
 
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh }),
+  useRouter: () => ({ refresh, push }),
 }));
 
 const toastMock = {
@@ -66,6 +67,7 @@ describe("<ConnectionList />", () => {
     testNexusChatConnection.mockReset();
     softDeleteNexusChatConnection.mockReset();
     refresh.mockReset();
+    push.mockReset();
     toastMock.success.mockReset();
     toastMock.error.mockReset();
     toastMock.info.mockReset();
@@ -191,5 +193,31 @@ describe("<ConnectionList />", () => {
         expect.stringContaining("vinculadas"),
       );
     });
+  });
+
+  it("v0.41: linha INTEIRA da connection é um Link clicável para /bancos-de-dados/[id]", () => {
+    render(
+      <ConnectionList connections={[sampleConn({ id: "conn-link-1" })]} />,
+    );
+    const link = screen.getByRole("link", {
+      name: /Abrir detalhes da conexão/i,
+    });
+    expect(link).toHaveAttribute("href", "/bancos-de-dados/conn-link-1");
+  });
+
+  it("v0.41: clique no botão Activity (testar) tem stopPropagation — não dispara navegação", async () => {
+    testNexusChatConnection.mockResolvedValue({
+      success: true,
+      data: { durationMs: 10 },
+    });
+    render(<ConnectionList connections={[sampleConn()]} />);
+    const btn = screen.getByRole("button", { name: /Testar conexão/i });
+    fireEvent.click(btn);
+    await waitFor(() => {
+      expect(testNexusChatConnection).toHaveBeenCalled();
+    });
+    // router.push NÃO deve ser chamado — Link.href só dispara em click "real"
+    // do anchor, e o botão usa stopPropagation+preventDefault.
+    expect(push).not.toHaveBeenCalled();
   });
 });
