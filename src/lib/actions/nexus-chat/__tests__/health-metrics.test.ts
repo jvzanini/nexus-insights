@@ -36,7 +36,7 @@ beforeEach(() => {
 });
 
 describe("getConnectionHealthSnapshot", () => {
-  it("super_admin: retorna snapshot completo com lag em minutos", async () => {
+  it("super_admin: retorna snapshot completo com lag em minutos (sample-corrected)", async () => {
     userMock.mockResolvedValue({
       id: "u1",
       platformRole: "super_admin",
@@ -46,15 +46,15 @@ describe("getConnectionHealthSnapshot", () => {
     const fixedNow = new Date("2026-05-04T12:00:00Z");
     jest.useFakeTimers().setSystemTime(fixedNow);
 
-    // last webhook 30 min atrás
-    const lastWebhookAt = new Date("2026-05-04T11:30:00Z");
+    // último sync 30 min atrás
+    const lastSyncAt = new Date("2026-05-04T11:30:00Z");
     findUniqueMock.mockResolvedValue({
       id: "conn-1",
-      lastWebhookAt,
+      lastSyncAt,
     });
     auditCountMock
-      .mockResolvedValueOnce(120) // webhooks24h
-      .mockResolvedValueOnce(3); // errors24h
+      .mockResolvedValueOnce(120) // polling_sync_completed (sample 1/100 → 12000)
+      .mockResolvedValueOnce(3); // polling_sync_failed
     factsMetaCountMock.mockResolvedValue(1);
 
     const result = await getConnectionHealthSnapshot("conn-1");
@@ -62,10 +62,10 @@ describe("getConnectionHealthSnapshot", () => {
     expect(result.success).toBe(true);
     expect(result.data).toEqual({
       connectionId: "conn-1",
-      lastWebhookAt: lastWebhookAt.toISOString(),
-      lastWebhookLagMinutes: 30,
-      webhooksLast24h: 120,
-      errorsLast24h: 3,
+      lastSyncAt: lastSyncAt.toISOString(),
+      lastSyncLagMinutes: 30,
+      syncRunsLast24h: 12000,
+      syncErrorsLast24h: 3,
       jobErrorsLast24h: 1,
     });
 
@@ -104,14 +104,14 @@ describe("getConnectionHealthSnapshot", () => {
     expect(result.error).toMatch(/não encontrada/i);
   });
 
-  it("lastWebhookAt null → lag null (heartbeat indisponível)", async () => {
+  it("lastSyncAt null → lag null (heartbeat indisponível)", async () => {
     userMock.mockResolvedValue({
       id: "u1",
       platformRole: "super_admin",
     } as never);
     findUniqueMock.mockResolvedValue({
       id: "conn-1",
-      lastWebhookAt: null,
+      lastSyncAt: null,
     });
     auditCountMock.mockResolvedValueOnce(0).mockResolvedValueOnce(0);
     factsMetaCountMock.mockResolvedValue(0);
@@ -119,35 +119,38 @@ describe("getConnectionHealthSnapshot", () => {
     const result = await getConnectionHealthSnapshot("conn-1");
 
     expect(result.success).toBe(true);
-    expect(result.data?.lastWebhookAt).toBeNull();
-    expect(result.data?.lastWebhookLagMinutes).toBeNull();
+    expect(result.data?.lastSyncAt).toBeNull();
+    expect(result.data?.lastSyncLagMinutes).toBeNull();
+    expect(result.data?.syncRunsLast24h).toBe(0);
   });
 
-  it("conta correta de erros 24h (HMAC + rate limit)", async () => {
+  it("conta correta de syncErrorsLast24h (polling_sync_failed)", async () => {
     userMock.mockResolvedValue({
       id: "u1",
       platformRole: "super_admin",
     } as never);
     findUniqueMock.mockResolvedValue({
       id: "conn-1",
-      lastWebhookAt: new Date(),
+      lastSyncAt: new Date(),
     });
+    // 1ª chamada = polling_sync_completed; 2ª = polling_sync_failed
     auditCountMock.mockResolvedValueOnce(50).mockResolvedValueOnce(7);
     factsMetaCountMock.mockResolvedValue(0);
 
     const result = await getConnectionHealthSnapshot("conn-1");
 
-    expect(result.data?.errorsLast24h).toBe(7);
+    expect(result.data?.syncErrorsLast24h).toBe(7);
 
-    // Verifica que a query de erros usa "in" com os 2 actions corretos.
+    // Verifica filter da 2ª query (errors)
     const errorsCall = auditCountMock.mock.calls[1]?.[0] as {
-      where: { action: { in: string[] } };
+      where: { action: string };
     };
-    expect(errorsCall.where.action.in).toEqual(
-      expect.arrayContaining([
-        "webhook_rejected_hmac",
-        "webhook_rejected_rate_limit",
-      ]),
-    );
+    expect(errorsCall.where.action).toBe("polling_sync_failed");
+
+    // Verifica filter da 1ª query (completed)
+    const completedCall = auditCountMock.mock.calls[0]?.[0] as {
+      where: { action: string };
+    };
+    expect(completedCall.where.action).toBe("polling_sync_completed");
   });
 });
