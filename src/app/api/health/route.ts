@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { redis } from "@/lib/redis";
-import { getChatwootPool } from "@/lib/chatwoot/pool";
+import { queryNexusChat } from "@/lib/nexus-chat/pool";
 
 export const runtime = "nodejs";
 
@@ -55,15 +55,22 @@ async function listConnections(): Promise<HealthConnection[]> {
   }
 }
 
+async function probeFirstConnection(): Promise<boolean> {
+  const conn = await prisma.nexusChatConnection.findFirst({
+    where: { deletedAt: null, status: "active" },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+  if (!conn) return false;
+  await queryNexusChat(conn.id, "SELECT 1", []);
+  return true;
+}
+
 export async function GET() {
   const [database, redisCheck, chatwoot, connections] = await Promise.all([
     timed(() => prisma.$queryRaw`SELECT 1`, 1000),
     timed(() => redis.ping(), 500),
-    timed(async () => {
-      const pool = getChatwootPool();
-      await pool.query("SELECT 1");
-      return true;
-    }, 2000),
+    timed(probeFirstConnection, 2000),
     listConnections(),
   ]);
 
