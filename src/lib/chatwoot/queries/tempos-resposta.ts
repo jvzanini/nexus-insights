@@ -8,7 +8,7 @@
  * Retorno: avg, p50, p95, max e count por categoria. Tempos em segundos.
  */
 
-import { getChatwootPool } from "../pool";
+import { queryNexusChat } from "@/lib/nexus-chat/pool";
 import { withChatwootResilience } from "../resilience";
 import { withCache } from "@/lib/cache/pull-through";
 import { cacheKey, hashFilters } from "@/lib/cache/keys";
@@ -33,14 +33,14 @@ export interface TemposRespostaResult {
 
 const DEFAULT_TTL_SECONDS = 300;
 
-interface RawRow {
+type RawRow = {
   avg: string | null;
   p50: string | null;
   p95: string | null;
   max: string | null;
   count: string | null;
   bh_avg: string | null;
-}
+} & Record<string, unknown>;
 
 function parseStats(row: RawRow | undefined): TempoStats {
   return {
@@ -53,6 +53,7 @@ function parseStats(row: RawRow | undefined): TempoStats {
 }
 
 export async function temposResposta(args: {
+  connectionId: string;
   accountId: number;
   filters: ReportFilters;
   ttlSeconds?: number;
@@ -71,8 +72,6 @@ export async function temposResposta(args: {
     fetcher: () =>
       withChatwootResilience<TemposRespostaResult>(
         async () => {
-          const pool = getChatwootPool();
-
           // Filtros aplicáveis a reporting_events:
           // - account_id
           // - inbox_id, conversation_id (via JOIN), period (via re.created_at)
@@ -162,8 +161,13 @@ export async function temposResposta(args: {
           `;
 
           const [firstResp, resolution] = await Promise.all([
-            pool.query<RawRow>(buildEventSql("first_response"), params),
-            pool.query<RawRow>(
+            queryNexusChat<RawRow>(
+              args.connectionId,
+              buildEventSql("first_response"),
+              params,
+            ),
+            queryNexusChat<RawRow>(
+              args.connectionId,
               buildEventSql("conversation_resolved"),
               params,
             ),

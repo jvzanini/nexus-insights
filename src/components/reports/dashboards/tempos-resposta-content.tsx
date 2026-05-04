@@ -15,6 +15,7 @@ import type { DashboardContentProps } from "./types";
 import { TemposRespostaBar } from "./tempos-resposta-bar";
 
 export async function TemposRespostaContent({
+  connectionId,
   accountId,
   period,
   customStart,
@@ -25,7 +26,7 @@ export async function TemposRespostaContent({
     const excludeMatrixIA = await shouldExcludeMatrixIA();
     const filters: ReportFilters = { period: range, excludeMatrixIA };
 
-    const result = await temposResposta({ accountId, filters });
+    const result = await temposResposta({ connectionId, accountId, filters });
     const { first_response, resolution, business_hours } = result.data;
     const hasFirstResponse = first_response.count > 0;
     const hasResolution = resolution.count > 0;
