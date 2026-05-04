@@ -7,6 +7,9 @@
  *   (apenas eventos `first_response` cujo user_id == assignee atual).
  *
  * TTL 300s (histórico).
+ *
+ * @canonical periodColumn=active (default) — conversas com movimento no período.
+ *   Ver `src/lib/reports/canonical.ts` (`buildActivePeriodClause`).
  */
 
 import { queryNexusChat } from "@/lib/nexus-chat/pool";
@@ -47,7 +50,7 @@ export async function rankingAtendentes(args: {
   const limit = args.limit ?? DEFAULT_LIMIT;
   const key = cacheKey({
     scope: "report",
-    name: `ranking-atendentes-l${limit}`,
+    name: `ranking-atendentes-l${limit}-canonical-v0.42`,
     accountId: args.accountId,
     filtersHash: hashFilters(args.filters),
   });
