@@ -7,14 +7,14 @@
  *    `readFactsDaily` e agrega DOW em JS.
  *  - Fallback: quando filtros por inbox/team/assignee/status/priority/label
  *    estão presentes (não suportados nas facts daily by_account), cai para
- *    a query original no Chatwoot.
+ *    a query original no Nexus Chat (multi-tenant via `queryNexusChat`).
  *
  * NOTA TZ: bucket_date está em America/Sao_Paulo (data civil local).
  * Para evitar virada de dia por offset (-3 h em SP), usa UTC noon ao
  * computar o DOW a partir do ISO date.
  */
 
-import { getChatwootPool } from "../pool";
+import { queryNexusChat } from "@/lib/nexus-chat/pool";
 import { withChatwootResilience } from "../resilience";
 import { withCache } from "@/lib/cache/pull-through";
 import { cacheKey, hashFilters } from "@/lib/cache/keys";
@@ -28,10 +28,10 @@ export interface VolumetriaDowRow {
 
 const DEFAULT_TTL_SECONDS = 300;
 
-interface RawRow {
+type RawRow = {
   dow: string;
   total: string;
-}
+} & Record<string, unknown>;
 
 function shouldUseFacts(filters: ReportFilters): boolean {
   return (
@@ -50,6 +50,7 @@ function dowFromIsoDate(isoDate: string): number {
 }
 
 export async function volumetriaDow(args: {
+  connectionId: string;
   accountId: number;
   filters: ReportFilters;
   ttlSeconds?: number;
@@ -95,9 +96,8 @@ export async function volumetriaDow(args: {
           }
 
           // ---------------------------------------------------------------
-          // Caminho 2: fallback Chatwoot
+          // Caminho 2: fallback Nexus Chat (multi-tenant)
           // ---------------------------------------------------------------
-          const pool = getChatwootPool();
           const { whereSql, params } = buildBaseFilter(
             args.filters,
             args.accountId,
@@ -111,7 +111,11 @@ export async function volumetriaDow(args: {
             GROUP BY 1
             ORDER BY 1
           `;
-          const result = await pool.query<RawRow>(sql, params as unknown[]);
+          const result = await queryNexusChat<RawRow>(
+            args.connectionId,
+            sql,
+            params as unknown[],
+          );
           const map = new Map<number, number>();
           for (const r of result.rows) {
             map.set(Number(r.dow), Number(r.total));

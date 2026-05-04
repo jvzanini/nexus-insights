@@ -8,7 +8,8 @@
  *    menor (1-2 s → ~50 ms) para ranges longos.
  *  - Fallback: quando os filtros restringem por inbox/team (`inboxIds` /
  *    `teamIds`), as facts horárias atuais não têm essa granularidade ainda.
- *    Nesse caso caímos para a query original no Chatwoot.
+ *    Nesse caso caímos para a query original no Nexus Chat (multi-tenant
+ *    via `queryNexusChat`).
  *
  * NOTA TZ: a tabela hourly armazena buckets em America/Sao_Paulo
  * (`bucket_date` é a data civil local; `bucket_hour` ∈ [0..23] local).
@@ -16,7 +17,7 @@
  * em UTC noon — assim o dia civil não vira por offset (-3 h em SP).
  */
 
-import { getChatwootPool } from "../pool";
+import { queryNexusChat } from "@/lib/nexus-chat/pool";
 import { withChatwootResilience } from "../resilience";
 import { withCache } from "@/lib/cache/pull-through";
 import { cacheKey, hashFilters } from "@/lib/cache/keys";
@@ -31,11 +32,11 @@ export interface VolumetriaHeatmapRow {
 
 const DEFAULT_TTL_SECONDS = 300;
 
-interface RawRow {
+type RawRow = {
   dow: string;
   hour: string;
   total: string;
-}
+} & Record<string, unknown>;
 
 function shouldUseFacts(filters: ReportFilters): boolean {
   // Facts hourly só estão no nível by_account. Qualquer restrição por inbox
@@ -58,6 +59,7 @@ function dowFromIsoDate(isoDate: string): number {
 }
 
 export async function volumetriaHeatmap(args: {
+  connectionId: string;
   accountId: number;
   filters: ReportFilters;
   ttlSeconds?: number;
@@ -111,9 +113,8 @@ export async function volumetriaHeatmap(args: {
           }
 
           // ---------------------------------------------------------------
-          // Caminho 2: fallback Chatwoot (filtros não suportados em facts)
+          // Caminho 2: fallback Nexus Chat (multi-tenant)
           // ---------------------------------------------------------------
-          const pool = getChatwootPool();
           const { whereSql, params } = buildBaseFilter(
             args.filters,
             args.accountId,
@@ -128,7 +129,11 @@ export async function volumetriaHeatmap(args: {
             GROUP BY 1, 2
             ORDER BY 1, 2
           `;
-          const result = await pool.query<RawRow>(sql, params as unknown[]);
+          const result = await queryNexusChat<RawRow>(
+            args.connectionId,
+            sql,
+            params as unknown[],
+          );
           return result.rows.map((r) => ({
             dow: Number(r.dow),
             hour: Number(r.hour),

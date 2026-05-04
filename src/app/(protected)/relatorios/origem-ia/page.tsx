@@ -81,7 +81,7 @@ export default async function Page({ searchParams }: PageProps) {
   // com `getInboxesForUser` e `shouldExcludeMatrixIA`.
   const matrixVisible = await isMatrixIAVisibleForUser(user.platformRole);
 
-  const contentProps = { accountId, period, customStart, customEnd };
+  const contentProps = { connectionId, accountId, period, customStart, customEnd };
 
   const tabs = [
     {

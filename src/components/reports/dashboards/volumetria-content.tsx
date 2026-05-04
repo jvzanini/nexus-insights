@@ -16,6 +16,7 @@ import type { DashboardContentProps } from "./types";
 const DOW_LABEL = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
 export async function VolumetriaContent({
+  connectionId,
   accountId,
   period,
   customStart,
@@ -28,8 +29,8 @@ export async function VolumetriaContent({
     const excludeMatrixIA = await shouldExcludeMatrixIA();
     const filters: ReportFilters = { period: range, excludeMatrixIA };
     [dowResult, heatmapResult] = await Promise.all([
-      volumetriaDow({ accountId, filters }),
-      volumetriaHeatmap({ accountId, filters }),
+      volumetriaDow({ connectionId, accountId, filters }),
+      volumetriaHeatmap({ connectionId, accountId, filters }),
     ]);
   } catch (err) {
     console.error("[VolumetriaContent] erro:", err);

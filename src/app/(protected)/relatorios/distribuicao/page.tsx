@@ -64,7 +64,7 @@ export default async function Page({ searchParams }: PageProps) {
   await assertAccountAccess(user as AuthUser, accountId);
   const connectionId = await getActiveConnectionId(user as AuthUser);
 
-  const contentProps = { accountId, period, customStart, customEnd };
+  const contentProps = { connectionId, accountId, period, customStart, customEnd };
 
   return (
     <PageShell variant="wide">

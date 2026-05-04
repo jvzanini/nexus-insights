@@ -2,7 +2,7 @@
  * Tests for volumetria-dow migration to facts.
  *
  * Hybrid: usa readFactsDaily quando não há filtros por inbox/team;
- * caso contrário, fallback para a query Chatwoot.
+ * caso contrário, fallback para a query Nexus Chat (multi-tenant).
  */
 
 jest.mock("@/lib/cache/pull-through", () => ({
@@ -24,19 +24,20 @@ jest.mock("../../resilience", () => ({
 jest.mock("../../facts", () => ({
   readFactsDaily: jest.fn(),
 }));
-jest.mock("../../pool", () => ({
-  getChatwootPool: jest.fn(),
+jest.mock("@/lib/nexus-chat/pool", () => ({
+  queryNexusChat: jest.fn(),
 }));
 
 import { volumetriaDow } from "../volumetria-dow";
 
 const { readFactsDaily } = jest.requireMock("../../facts");
-const { getChatwootPool } = jest.requireMock("../../pool");
+const { queryNexusChat } = jest.requireMock("@/lib/nexus-chat/pool");
 
 const PERIOD_START = new Date("2026-04-13T00:00:00Z");
 const PERIOD_END = new Date("2026-04-19T23:59:59Z");
+const CONN_ID = "5e6a4eef-2a23-4f33-8d4e-1a2b3c4d5e6f";
 
-describe("volumetriaDow (facts-first)", () => {
+describe("volumetriaDow (facts-first, multi-tenant)", () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -53,6 +54,7 @@ describe("volumetriaDow (facts-first)", () => {
     ]);
 
     const result = await volumetriaDow({
+      connectionId: CONN_ID,
       accountId: 1,
       filters: {
         period: { start: PERIOD_START, end: PERIOD_END },
@@ -66,7 +68,7 @@ describe("volumetriaDow (facts-first)", () => {
       end: PERIOD_END,
       excludeMatrixIA: true,
     });
-    expect(getChatwootPool).not.toHaveBeenCalled();
+    expect(queryNexusChat).not.toHaveBeenCalled();
 
     // 0..6 sempre presentes; segunda(1)=10+3=13, terça(2)=5, domingo(0)=7.
     expect(result.data).toEqual([
@@ -80,13 +82,13 @@ describe("volumetriaDow (facts-first)", () => {
     ]);
   });
 
-  it("fallback para Chatwoot quando inboxIds está setado", async () => {
-    const queryMock = jest.fn().mockResolvedValue({
+  it("fallback para Nexus Chat quando inboxIds está setado, propaga connectionId", async () => {
+    (queryNexusChat as jest.Mock).mockResolvedValue({
       rows: [{ dow: "1", total: "20" }, { dow: "5", total: "8" }],
     });
-    (getChatwootPool as jest.Mock).mockReturnValue({ query: queryMock });
 
     const result = await volumetriaDow({
+      connectionId: CONN_ID,
       accountId: 1,
       filters: {
         period: { start: PERIOD_START, end: PERIOD_END },
@@ -95,7 +97,11 @@ describe("volumetriaDow (facts-first)", () => {
     });
 
     expect(readFactsDaily).not.toHaveBeenCalled();
-    expect(queryMock).toHaveBeenCalled();
+    expect(queryNexusChat).toHaveBeenCalledTimes(1);
+    const call = (queryNexusChat as jest.Mock).mock.calls[0];
+    expect(call[0]).toBe(CONN_ID);
+    expect(typeof call[1]).toBe("string");
+    expect(Array.isArray(call[2])).toBe(true);
     expect(result.data).toEqual([
       { dow: 0, total: 0 },
       { dow: 1, total: 20 },
@@ -107,11 +113,11 @@ describe("volumetriaDow (facts-first)", () => {
     ]);
   });
 
-  it("fallback para Chatwoot quando teamIds está setado", async () => {
-    const queryMock = jest.fn().mockResolvedValue({ rows: [] });
-    (getChatwootPool as jest.Mock).mockReturnValue({ query: queryMock });
+  it("fallback para Nexus Chat quando teamIds está setado", async () => {
+    (queryNexusChat as jest.Mock).mockResolvedValue({ rows: [] });
 
     await volumetriaDow({
+      connectionId: CONN_ID,
       accountId: 1,
       filters: {
         period: { start: PERIOD_START, end: PERIOD_END },
@@ -120,6 +126,7 @@ describe("volumetriaDow (facts-first)", () => {
     });
 
     expect(readFactsDaily).not.toHaveBeenCalled();
-    expect(queryMock).toHaveBeenCalled();
+    expect(queryNexusChat).toHaveBeenCalledTimes(1);
+    expect((queryNexusChat as jest.Mock).mock.calls[0][0]).toBe(CONN_ID);
   });
 });

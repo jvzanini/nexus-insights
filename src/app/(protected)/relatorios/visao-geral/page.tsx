@@ -63,7 +63,7 @@ export default async function Page({ searchParams }: PageProps) {
   // pra error boundary — UX padrão do app já cobre o caso.
   const connectionId = await getActiveConnectionId(user as AuthUser);
 
-  const contentProps = { accountId, period, customStart, customEnd };
+  const contentProps = { connectionId, accountId, period, customStart, customEnd };
 
   return (
     <PageShell variant="wide">
