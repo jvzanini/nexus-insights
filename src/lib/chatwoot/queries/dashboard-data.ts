@@ -216,7 +216,7 @@ export async function dashboardData(args: DashboardDataInput) {
   // ignorando activity/template, defensivo contra cache stale de v7).
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-data-v8",
+    name: "dashboard-data-v9",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -277,89 +277,58 @@ export async function dashboardData(args: DashboardDataInput) {
           const sqlReceivedPrev = sqlReceived;
           const sqlResolvedPrev = sqlResolved;
 
-          // ---------- 5. Chart bucketed (4 séries) ----------
+          // ---------- 5. Chart bucketed (4 séries) — v0.36 B2 fix ----------
           //
-          // v0.14.2 (hotfix coorte): UNION de 2 queries:
-          //  - Recebidas/Resolvidas: por bucket de `created_at` (mantém coerência
-          //    com KPIs Recebidas/Resolvidas que falam da coorte criada).
-          //  - Abertas/Pendentes: por bucket de `last_activity_at` filtrando
-          //    pelo `status` atual (mostra ATIVIDADE no bucket — captura
-          //    conversas reabertas, não só criadas).
+          // Refactor: WITH ... FULL OUTER JOIN → UNION ALL + GROUP BY
+          //  - Recebidas/Resolvidas: bucket por created_at (filtra created_at no período).
+          //  - Abertas/Pendentes: bucket por last_activity_at (filtra last_activity_at).
+          //  - Linhas viram união, agregação final via SUM por bucket.
           //
-          // Bug corrigido: conversa criada antes do período mas reaberta dentro
-          // dele não aparecia em "Abertas". Agora aparece via last_activity_at.
-          const sqlChart =
-            granularity === "hour"
-              ? `
-              WITH created_buckets AS (
-                SELECT
-                  (date_trunc('hour', c.created_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
-                  COUNT(*)::bigint AS received,
-                  COUNT(*) FILTER (WHERE c.status = 1)::bigint AS resolved
-                FROM conversations c
-                WHERE c.account_id = $1
-                  AND c.created_at >= $2
-                  AND c.created_at < $3
-                  ${matrixClause}
-                GROUP BY bucket
-              ),
-              activity_buckets AS (
-                SELECT
-                  (date_trunc('hour', c.last_activity_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
-                  COUNT(*) FILTER (WHERE c.status = 0)::bigint AS open,
-                  COUNT(*) FILTER (WHERE c.status = 2)::bigint AS pending
-                FROM conversations c
-                WHERE c.account_id = $1
-                  AND c.last_activity_at >= $2
-                  AND c.last_activity_at < $3
-                  ${matrixClause}
-                GROUP BY bucket
-              )
+          // Por quê: o JOIN dependia de match exato de timestamptz entre 2 CTEs. No
+          // cenário "1 conversa antiga reaberta hoje + 0 conversas criadas hoje", o
+          // bucket "hoje" só existia em activity_buckets. COALESCE deveria coalescer,
+          // mas observamos divergência empírica em produção (KPI Open=1 mas chart
+          // bucket Open=0 em Semana/Mês). UNION ALL elimina a dependência do JOIN.
+          //
+          // `truncUnit` é constante derivada de granularity (hard-coded "hour"|"day"),
+          // sem risco de SQL injection.
+          const truncUnit = granularity === "hour" ? "hour" : "day";
+          const sqlChart = `
+            WITH unioned AS (
               SELECT
-                COALESCE(cb.bucket, ab.bucket) AS bucket,
-                COALESCE(cb.received, 0)::bigint AS received,
-                COALESCE(cb.resolved, 0)::bigint AS resolved,
-                COALESCE(ab.open, 0)::bigint AS open,
-                COALESCE(ab.pending, 0)::bigint AS pending
-              FROM created_buckets cb
-              FULL OUTER JOIN activity_buckets ab ON cb.bucket = ab.bucket
-              ORDER BY bucket ASC
-            `
-              : `
-              WITH created_buckets AS (
-                SELECT
-                  (date_trunc('day', c.created_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
-                  COUNT(*)::bigint AS received,
-                  COUNT(*) FILTER (WHERE c.status = 1)::bigint AS resolved
-                FROM conversations c
-                WHERE c.account_id = $1
-                  AND c.created_at >= $2
-                  AND c.created_at < $3
-                  ${matrixClause}
-                GROUP BY bucket
-              ),
-              activity_buckets AS (
-                SELECT
-                  (date_trunc('day', c.last_activity_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
-                  COUNT(*) FILTER (WHERE c.status = 0)::bigint AS open,
-                  COUNT(*) FILTER (WHERE c.status = 2)::bigint AS pending
-                FROM conversations c
-                WHERE c.account_id = $1
-                  AND c.last_activity_at >= $2
-                  AND c.last_activity_at < $3
-                  ${matrixClause}
-                GROUP BY bucket
-              )
+                (date_trunc('${truncUnit}', c.created_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
+                1::bigint AS received,
+                (CASE WHEN c.status = 1 THEN 1 ELSE 0 END)::bigint AS resolved,
+                0::bigint AS open,
+                0::bigint AS pending
+              FROM conversations c
+              WHERE c.account_id = $1
+                AND c.created_at >= $2
+                AND c.created_at < $3
+                ${matrixClause}
+              UNION ALL
               SELECT
-                COALESCE(cb.bucket, ab.bucket) AS bucket,
-                COALESCE(cb.received, 0)::bigint AS received,
-                COALESCE(cb.resolved, 0)::bigint AS resolved,
-                COALESCE(ab.open, 0)::bigint AS open,
-                COALESCE(ab.pending, 0)::bigint AS pending
-              FROM created_buckets cb
-              FULL OUTER JOIN activity_buckets ab ON cb.bucket = ab.bucket
-              ORDER BY bucket ASC
-            `;
+                (date_trunc('${truncUnit}', c.last_activity_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
+                0::bigint AS received,
+                0::bigint AS resolved,
+                (CASE WHEN c.status = 0 THEN 1 ELSE 0 END)::bigint AS open,
+                (CASE WHEN c.status = 2 THEN 1 ELSE 0 END)::bigint AS pending
+              FROM conversations c
+              WHERE c.account_id = $1
+                AND c.last_activity_at >= $2
+                AND c.last_activity_at < $3
+                ${matrixClause}
+            )
+            SELECT
+              bucket,
+              SUM(received)::bigint AS received,
+              SUM(resolved)::bigint AS resolved,
+              SUM(open)::bigint AS open,
+              SUM(pending)::bigint AS pending
+            FROM unioned
+            GROUP BY bucket
+            ORDER BY bucket ASC
+          `;
 
           // ---------- 6. Top atendentes mais rápidos ----------
           const sqlTopAgents = `
