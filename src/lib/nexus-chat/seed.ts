@@ -5,6 +5,7 @@ import { encrypt } from "@/lib/encryption";
 import { prisma } from "@/lib/prisma";
 import { pgPool } from "@/lib/pg-pool";
 import { ensureNexusChatTables } from "./ensure-tables";
+import { generateWebhookCredentials } from "./webhook-credentials";
 
 /**
  * Seed idempotente da Fase 1 multi-tenant.
@@ -28,6 +29,7 @@ import { ensureNexusChatTables } from "./ensure-tables";
  */
 
 const SEED_LOCK_KEY = 8472938;
+const WEBHOOK_BACKFILL_LOCK_KEY = 8472939;
 
 const FACTS_TABLES = [
   "chatwoot_facts_daily_by_account",
@@ -42,9 +44,72 @@ export interface SeedResult {
   seeded: boolean;
   connectionId?: string;
   bindingsCreated?: number;
+  /** Fase 2: connections legadas que ganharam webhook (token+secret) no backfill. */
+  webhooksBackfilled?: number;
 }
 
-export async function runConnectionsSeedIfNeeded(): Promise<SeedResult> {
+/**
+ * Backfill idempotente Fase 2: connections existentes que não têm
+ * `webhookToken` ganham token+secret cifrado.
+ *
+ * - Lock advisory `8472939` distinto da seed Fase 1 (`8472938`) — evita
+ *   conflito.
+ * - Flag `app_settings.webhooks_seeded_at` previne reexecução.
+ * - Connections novas (criadas via UI após este backfill) já recebem webhook
+ *   na Server Action `createNexusChatConnection`.
+ */
+async function backfillWebhookCredentialsIfNeeded(): Promise<{
+  webhooksBackfilled: number;
+}> {
+  const lock = await pgPool.query<{ locked: boolean }>(
+    `SELECT pg_try_advisory_lock($1) AS locked`,
+    [WEBHOOK_BACKFILL_LOCK_KEY],
+  );
+  if (!lock.rows[0]?.locked) {
+    return { webhooksBackfilled: 0 };
+  }
+
+  try {
+    const flag = await prisma.appSetting.findUnique({
+      where: { key: "webhooks_seeded_at" },
+    });
+    if (flag) return { webhooksBackfilled: 0 };
+
+    const connections = await prisma.nexusChatConnection.findMany({
+      where: { deletedAt: null, webhookToken: null },
+      select: { id: true },
+    });
+
+    let count = 0;
+    for (const c of connections) {
+      const credentials = generateWebhookCredentials();
+      await prisma.nexusChatConnection.update({
+        where: { id: c.id },
+        data: {
+          webhookToken: credentials.token,
+          webhookSecretEnc: credentials.secretEnc,
+        },
+      });
+      count++;
+    }
+
+    await prisma.appSetting.create({
+      data: {
+        key: "webhooks_seeded_at",
+        value: { at: new Date().toISOString(), backfilled: count },
+        category: "system",
+      },
+    });
+
+    return { webhooksBackfilled: count };
+  } finally {
+    await pgPool.query(`SELECT pg_advisory_unlock($1)`, [
+      WEBHOOK_BACKFILL_LOCK_KEY,
+    ]);
+  }
+}
+
+async function runFase1Seed(): Promise<SeedResult> {
   // 1. Garante que as tabelas existem antes de qualquer query.
   await ensureNexusChatTables();
 
@@ -134,4 +199,20 @@ export async function runConnectionsSeedIfNeeded(): Promise<SeedResult> {
   } finally {
     await pgPool.query(`SELECT pg_advisory_unlock($1)`, [SEED_LOCK_KEY]);
   }
+}
+
+/**
+ * Fluxo de seed completo (Fase 1 + Fase 2 backfill webhook).
+ *
+ * Ordem:
+ *   1. Seed Fase 1: cria connection seed + bindings + backfill connection_id.
+ *      Idempotente via flag `connections_seeded_at`.
+ *   2. Backfill Fase 2 webhook: para cada connection sem `webhookToken`,
+ *      gera token+secret. Idempotente via flag `webhooks_seeded_at`.
+ */
+export async function runConnectionsSeedIfNeeded(): Promise<SeedResult> {
+  await ensureNexusChatTables();
+  const fase1 = await runFase1Seed();
+  const fase2 = await backfillWebhookCredentialsIfNeeded();
+  return { ...fase1, webhooksBackfilled: fase2.webhooksBackfilled };
 }

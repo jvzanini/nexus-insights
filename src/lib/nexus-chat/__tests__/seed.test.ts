@@ -10,6 +10,8 @@ jest.mock("@/lib/prisma", () => ({
     },
     nexusChatConnection: {
       create: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
+      update: jest.fn().mockResolvedValue({}),
     },
     userAccountAccess: {
       findMany: jest.fn(),
@@ -61,30 +63,31 @@ beforeEach(() => {
 });
 
 describe("runConnectionsSeedIfNeeded", () => {
-  it("retorna { seeded: false } se outro processo segura advisory lock", async () => {
-    queryMock.mockResolvedValueOnce({
-      rows: [{ locked: false }],
-      rowCount: 1,
-    } as never);
+  it("retorna { seeded: false } se outro processo segura advisory lock fase 1", async () => {
+    queryMock
+      .mockResolvedValueOnce({ rows: [{ locked: false }], rowCount: 1 } as never) // lock fase1 falha
+      .mockResolvedValueOnce({ rows: [{ locked: false }], rowCount: 1 } as never) // lock fase2 (backfill webhook) também
+      .mockResolvedValue({ rows: [], rowCount: 0 } as never);
 
     const result = await runConnectionsSeedIfNeeded();
 
-    expect(result).toEqual({ seeded: false });
+    expect(result.seeded).toBe(false);
     expect(findFlagMock).not.toHaveBeenCalled();
   });
 
   it("retorna { seeded: false } se flag connections_seeded_at já existe (idempotência)", async () => {
     queryMock
-      .mockResolvedValueOnce({ rows: [{ locked: true }] } as never) // pg_try_advisory_lock
-      .mockResolvedValueOnce({ rows: [] } as never); // pg_advisory_unlock
-    findFlagMock.mockResolvedValue({
-      key: "connections_seeded_at",
-      value: { at: "2026-05-01" },
-    });
+      .mockResolvedValueOnce({ rows: [{ locked: true }] } as never) // lock fase1
+      .mockResolvedValueOnce({ rows: [] } as never) // unlock fase1
+      .mockResolvedValueOnce({ rows: [{ locked: true }] } as never) // lock fase2
+      .mockResolvedValueOnce({ rows: [] } as never); // unlock fase2
+    findFlagMock
+      .mockResolvedValueOnce({ key: "connections_seeded_at", value: { at: "..." } }) // fase1 flag
+      .mockResolvedValueOnce({ key: "webhooks_seeded_at", value: { at: "..." } }); // fase2 flag
 
     const result = await runConnectionsSeedIfNeeded();
 
-    expect(result).toEqual({ seeded: false });
+    expect(result.seeded).toBe(false);
     expect(createConnMock).not.toHaveBeenCalled();
   });
 
@@ -169,5 +172,58 @@ describe("runConnectionsSeedIfNeeded", () => {
       String(c[0]).includes("pg_advisory_unlock"),
     );
     expect(unlockCalls.length).toBe(1);
+  });
+
+  it("Fase 2: backfill webhook gera token+secret nas connections legadas (idempotente)", async () => {
+    // Fase 1 já rodou (flag connections_seeded_at existe), só fase 2 backfill executa.
+    queryMock
+      .mockResolvedValueOnce({ rows: [{ locked: true }] } as never) // lock fase1
+      .mockResolvedValueOnce({ rows: [] } as never) // unlock fase1
+      .mockResolvedValueOnce({ rows: [{ locked: true }] } as never) // lock fase2
+      .mockResolvedValueOnce({ rows: [] } as never); // unlock fase2
+
+    findFlagMock
+      .mockResolvedValueOnce({
+        key: "connections_seeded_at",
+        value: { at: "..." },
+      }) // fase1 já feita
+      .mockResolvedValueOnce(null); // fase2 ainda não rodou
+
+    const findManyConnMock = (
+      prisma as unknown as {
+        nexusChatConnection: { findMany: jest.Mock; update: jest.Mock };
+      }
+    ).nexusChatConnection.findMany;
+    const updateConnMock = (
+      prisma as unknown as {
+        nexusChatConnection: { findMany: jest.Mock; update: jest.Mock };
+      }
+    ).nexusChatConnection.update;
+
+    findManyConnMock.mockResolvedValueOnce([
+      { id: "conn-legacy-1" },
+      { id: "conn-legacy-2" },
+    ]);
+    updateConnMock.mockResolvedValue({});
+    createFlagMock.mockResolvedValue({});
+
+    const result = await runConnectionsSeedIfNeeded();
+
+    expect(result.webhooksBackfilled).toBe(2);
+    expect(updateConnMock).toHaveBeenCalledTimes(2);
+    expect(updateConnMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "conn-legacy-1" },
+        data: expect.objectContaining({
+          webhookToken: expect.stringMatching(/^[0-9a-f]{64}$/),
+          webhookSecretEnc: expect.any(String),
+        }),
+      }),
+    );
+    expect(createFlagMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ key: "webhooks_seeded_at" }),
+      }),
+    );
   });
 });
