@@ -8,18 +8,19 @@ import { Database, HeartPulse, Radio, Settings2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { BindingTableItem } from "./bindings-table";
+import type { JobsStatusRow } from "@/lib/actions/jobs";
 
 /**
  * Lazy-load das 4 tabs — code splitting reduz bundle inicial: Recharts (Aba
- * 2) só baixa quando user clicar em Tempo real. Cada chunk fica em ~50KB
+ * 2) só baixa quando user clicar em Sincronização. Cada chunk fica em ~50KB
  * gzip vs 200KB monolítico.
  */
 const ConexaoTab = dynamic(
   () => import("./tabs/conexao-tab").then((m) => m.ConexaoTab),
   { loading: () => <TabSkeleton />, ssr: false },
 );
-const TempoRealTab = dynamic(
-  () => import("./tabs/tempo-real-tab").then((m) => m.TempoRealTab),
+const SincronizacaoTab = dynamic(
+  () => import("./tabs/sincronizacao-tab").then((m) => m.SincronizacaoTab),
   { loading: () => <TabSkeleton />, ssr: false },
 );
 const JobsTab = dynamic(
@@ -43,19 +44,32 @@ export interface ConnectionDetailData {
   status: string;
   lastTestAt: string | null;
   lastTestError: string | null;
-  lastWebhookAt: string | null;
-  webhookToken: string | null;
+  /**
+   * Timestamp do último polling delta executado com sucesso (ISO 8601).
+   * Substitui `lastWebhookAt` (v0.41 — webhook removido).
+   */
+  lastSyncAt: string | null;
+  /**
+   * Intervalo em segundos entre cada polling delta nesta conexão.
+   * Default schema = 30s, mínimo permitido = 20s.
+   */
+  pollingIntervalSeconds: number;
   createdAt: string;
 }
 
-type TabKey = "conexao" | "tempo-real" | "jobs" | "saude";
+type TabKey = "conexao" | "sincronizacao" | "jobs" | "saude";
 
-const TAB_KEYS: TabKey[] = ["conexao", "tempo-real", "jobs", "saude"];
+const TAB_KEYS: TabKey[] = ["conexao", "sincronizacao", "jobs", "saude"];
 
 interface Props {
   connection: ConnectionDetailData;
   bindings: BindingTableItem[];
   defaultTab?: TabKey;
+  /**
+   * Snapshot SSR de `getJobsStatus({ connectionId })` — usado pra hidratar
+   * `<JobsTab>` sem fetch initial no client. Polling 5s permanece.
+   */
+  initialJobsStatus?: { rows: JobsStatusRow[] } | null;
 }
 
 function isValidTab(value: string | null): value is TabKey {
@@ -66,6 +80,7 @@ export function ConnectionDetailTabs({
   connection,
   bindings,
   defaultTab = "conexao",
+  initialJobsStatus,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -95,9 +110,9 @@ export function ConnectionDetailTabs({
           <Database className="mr-1.5 h-3.5 w-3.5" aria-hidden />
           Conexão
         </TabsTrigger>
-        <TabsTrigger value="tempo-real">
+        <TabsTrigger value="sincronizacao">
           <Radio className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-          Tempo real
+          Sincronização
         </TabsTrigger>
         <TabsTrigger value="jobs">
           <Settings2 className="mr-1.5 h-3.5 w-3.5" aria-hidden />
@@ -112,14 +127,18 @@ export function ConnectionDetailTabs({
       <TabsContent value="conexao" className="mt-4">
         <ConexaoTab connection={connection} bindings={bindings} />
       </TabsContent>
-      <TabsContent value="tempo-real" className="mt-4">
-        <TempoRealTab
+      <TabsContent value="sincronizacao" className="mt-4">
+        <SincronizacaoTab
           connectionId={connection.id}
-          lastWebhookAt={connection.lastWebhookAt}
+          lastSyncAt={connection.lastSyncAt}
+          pollingIntervalSeconds={connection.pollingIntervalSeconds}
         />
       </TabsContent>
       <TabsContent value="jobs" className="mt-4">
-        <JobsTab connectionId={connection.id} />
+        <JobsTab
+          connectionId={connection.id}
+          initialStatus={initialJobsStatus ?? null}
+        />
       </TabsContent>
       <TabsContent value="saude" className="mt-4">
         <SaudeTab connectionId={connection.id} />
