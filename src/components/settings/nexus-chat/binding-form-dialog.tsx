@@ -21,7 +21,7 @@ import {
   createCompanyChatBinding,
   updateCompanyChatBinding,
 } from "@/lib/actions/nexus-chat/bindings";
-import type { BindingListItem } from "./binding-list-sheet";
+import type { BindingTableItem } from "./bindings-table";
 
 type Mode = "create" | "edit";
 
@@ -30,7 +30,7 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   connectionId: string;
-  binding: BindingListItem | null;
+  binding: BindingTableItem | null;
 }
 
 interface FormState {

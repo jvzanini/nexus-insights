@@ -1,10 +1,16 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-05-04
-**Versão atual em produção:** v0.38.0
+**Versão atual em produção:** v0.39.0
 **URL:** https://insights.nexusai360.com
 
 ---
+
+## Em produção (v0.39.0)
+
+### Release v0.39.0 (2026-05-04) — Hotfix Fase 2 (HMAC removido + sidebar + page bindings)
+
+Hotfix baseado em feedback do João pós-deploy v0.38. **Pesquisa confirmou: Account Webhooks no Chatwoot self-hosted não suportam HMAC** — apenas API Channel + Agent Bot Webhooks têm (desde Chatwoot v4.13.0). HMAC removido completamente; **token de 32 bytes random na URL é a única autenticação** (256 bits entropia, HTTPS-only, jobs idempotentes, rate limit 100/min, audit). UI Dialog simplificada (sem campo Secret confuso). Menu sidebar: nova entrada **"Bancos de dados"** no nível superior; "Jobs de pré-agregação" removida (page `/configuracoes/jobs` continua por URL até Fase 3 absorver). Sheet lateral de bindings substituído por page dedicada `/bancos-de-dados/[id]`.
 
 ## Em produção (v0.38.0)
 

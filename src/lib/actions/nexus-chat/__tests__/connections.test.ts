@@ -36,7 +36,7 @@ import {
   updateNexusChatConnection,
   softDeleteNexusChatConnection,
   testNexusChatConnection,
-  regenerateConnectionWebhookSecret,
+  regenerateConnectionWebhookToken,
 } from "../connections";
 
 const userMock = getCurrentUser as jest.MockedFunction<typeof getCurrentUser>;
@@ -107,7 +107,7 @@ describe("createNexusChatConnection", () => {
     );
   });
 
-  it("Fase 2: gera webhookToken + webhookSecretEnc + retorna secretPlain UMA VEZ", async () => {
+  it("v0.39: gera só webhookToken (HMAC removido, Account Webhooks Chatwoot não suportam)", async () => {
     userMock.mockResolvedValue({
       id: "u1",
       platformRole: "super_admin",
@@ -117,15 +117,16 @@ describe("createNexusChatConnection", () => {
     const result = await createNexusChatConnection(validInput);
 
     expect(result.success).toBe(true);
-    expect(result.data?.webhookSecretPlain).toMatch(/^[0-9a-f]{64}$/);
     expect(createMock).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           webhookToken: expect.stringMatching(/^[0-9a-f]{64}$/),
-          webhookSecretEnc: expect.any(String),
         }),
       }),
     );
+    // Não deve haver webhookSecretEnc na criação (apenas token).
+    const callArg = createMock.mock.calls[0]?.[0] as { data: Record<string, unknown> };
+    expect(callArg.data.webhookSecretEnc).toBeUndefined();
   });
 
   it("nao expoe password no audit details", async () => {
@@ -340,7 +341,7 @@ describe("testNexusChatConnection", () => {
   });
 });
 
-describe("regenerateConnectionWebhookSecret", () => {
+describe("regenerateConnectionWebhookToken", () => {
   it("super_admin regenera secret + audit log + retorna novo secretPlain", async () => {
     userMock.mockResolvedValue({
       id: "u1",
@@ -349,21 +350,21 @@ describe("regenerateConnectionWebhookSecret", () => {
     findUniqueMock.mockResolvedValue({ id: "c1", name: "Padrão (legado)" });
     updateMock.mockResolvedValue({ id: "c1" });
 
-    const result = await regenerateConnectionWebhookSecret("c1");
+    const result = await regenerateConnectionWebhookToken("c1");
 
     expect(result.success).toBe(true);
-    expect(result.data?.webhookSecretPlain).toMatch(/^[0-9a-f]{64}$/);
+    expect(result.data?.webhookToken).toMatch(/^[0-9a-f]{64}$/);
     expect(updateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "c1" },
         data: expect.objectContaining({
-          webhookSecretEnc: expect.any(String),
+          webhookToken: expect.any(String),
         }),
       }),
     );
     expect(auditMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        action: "webhook_secret_regenerated",
+        action: "webhook_token_regenerated",
         targetType: "nexus_chat_connection",
         targetId: "c1",
       }),
@@ -373,7 +374,7 @@ describe("regenerateConnectionWebhookSecret", () => {
   it("admin (não super_admin) é rejeitado", async () => {
     userMock.mockResolvedValue({ id: "u1", platformRole: "admin" } as never);
 
-    const result = await regenerateConnectionWebhookSecret("c1");
+    const result = await regenerateConnectionWebhookToken("c1");
 
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/super_admin/i);
@@ -387,7 +388,7 @@ describe("regenerateConnectionWebhookSecret", () => {
     } as never);
     findUniqueMock.mockResolvedValue(null);
 
-    const result = await regenerateConnectionWebhookSecret("c-nonexistent");
+    const result = await regenerateConnectionWebhookToken("c-nonexistent");
 
     expect(result.success).toBe(false);
     expect(updateMock).not.toHaveBeenCalled();

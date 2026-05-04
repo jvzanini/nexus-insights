@@ -214,10 +214,7 @@ describe("runConnectionsSeedIfNeeded", () => {
     expect(updateConnMock).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "conn-legacy-1" },
-        data: expect.objectContaining({
-          webhookToken: expect.stringMatching(/^[0-9a-f]{64}$/),
-          webhookSecretEnc: expect.any(String),
-        }),
+        data: { webhookToken: expect.stringMatching(/^[0-9a-f]{64}$/) },
       }),
     );
     expect(createFlagMock).toHaveBeenCalledWith(

@@ -135,8 +135,8 @@ export const NAV_ITEMS: NavItem[] = [
     superAdminOnly: true,
   },
   {
-    label: "Jobs de pré-agregação",
-    href: "/configuracoes/jobs",
+    label: "Bancos de dados",
+    href: "/bancos-de-dados",
     icon: Database,
     superAdminOnly: true,
   },

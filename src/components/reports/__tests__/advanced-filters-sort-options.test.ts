@@ -11,7 +11,7 @@ jest.mock("@/lib/actions/reports/conversas-export", () => ({
   exportConversasAction: jest.fn(),
 }));
 jest.mock("@/lib/actions/reports/period", () => ({
-  getMinReportDate: jest.fn().mockResolvedValue("2026-01-01"),
+  getMinReportDate: jest.fn(() => Promise.resolve("2026-01-01")),
 }));
 jest.mock("@/lib/auth", () => ({ auth: jest.fn() }));
 jest.mock("@/auth", () => ({ auth: jest.fn() }));

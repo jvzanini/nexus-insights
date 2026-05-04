@@ -1,17 +1,18 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
   Database,
   Edit2,
-  Eye,
   Loader2,
   PauseCircle,
   Plus,
   TestTube,
   Trash2,
+  Users,
   Webhook,
   XCircle,
 } from "lucide-react";
@@ -36,10 +37,6 @@ import {
 } from "@/lib/actions/nexus-chat/connections";
 import { cn } from "@/lib/utils";
 import { ConnectionFormDialog } from "./connection-form-dialog";
-import {
-  BindingListSheet,
-  type BindingListItem,
-} from "./binding-list-sheet";
 
 export type ConnectionStatus = "active" | "paused" | "error";
 
@@ -67,9 +64,6 @@ export interface ConnectionListItem {
 
 interface Props {
   connections: ConnectionListItem[];
-  /** Bindings agrupados por connectionId; lazy: só consultados quando o
-   *  Sheet abre. Default `{}`. */
-  bindingsByConnection?: Record<string, BindingListItem[]>;
 }
 
 const STATUS_META: Record<
@@ -138,14 +132,7 @@ type DialogState =
   | { mode: "create" }
   | { mode: "edit"; connection: ConnectionListItem };
 
-type SheetState =
-  | { mode: "closed" }
-  | { mode: "open"; connection: ConnectionListItem };
-
-export function ConnectionList({
-  connections,
-  bindingsByConnection = {},
-}: Props) {
+export function ConnectionList({ connections }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [testingId, setTestingId] = useState<string | null>(null);
@@ -153,7 +140,6 @@ export function ConnectionList({
     null,
   );
   const [dialog, setDialog] = useState<DialogState>({ mode: "closed" });
-  const [sheet, setSheet] = useState<SheetState>({ mode: "closed" });
 
   function handleTest(c: ConnectionListItem) {
     setTestingId(c.id);
@@ -296,22 +282,19 @@ export function ConnectionList({
                     ) : null}
                   </div>
 
-                  {/* Coluna bindings: count + Ver */}
+                  {/* Coluna empresas: count + link pra page dedicada */}
                   <div className="flex items-center gap-2 lg:shrink-0">
                     <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[11px] text-muted-foreground tabular-nums ring-1 ring-inset ring-border">
                       {c.bindingsCount}{" "}
                       {c.bindingsCount === 1 ? "empresa" : "empresas"}
                     </span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="xs"
-                      onClick={() => setSheet({ mode: "open", connection: c })}
-                      className="cursor-pointer"
+                    <Link
+                      href={`/bancos-de-dados/${c.id}`}
+                      className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-border bg-background/50 px-2.5 text-[11px] font-medium text-foreground transition-colors hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                     >
-                      <Eye className="mr-1 h-3 w-3" aria-hidden />
-                      Ver
-                    </Button>
+                      <Users className="h-3 w-3" aria-hidden />
+                      Empresas
+                    </Link>
                   </div>
 
                   {/* Coluna ações */}
@@ -367,18 +350,6 @@ export function ConnectionList({
             if (!open) setDialog({ mode: "closed" });
           }}
           connection={dialog.mode === "edit" ? dialog.connection : null}
-        />
-      ) : null}
-
-      {sheet.mode === "open" ? (
-        <BindingListSheet
-          open
-          onOpenChange={(open) => {
-            if (!open) setSheet({ mode: "closed" });
-          }}
-          connectionId={sheet.connection.id}
-          connectionName={sheet.connection.name}
-          bindings={bindingsByConnection[sheet.connection.id] ?? []}
         />
       ) : null}
 

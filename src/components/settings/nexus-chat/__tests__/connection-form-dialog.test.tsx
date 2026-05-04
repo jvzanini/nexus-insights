@@ -7,7 +7,6 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const createNexusChatConnection = jest.fn();
 const updateNexusChatConnection = jest.fn();
-const regenerateConnectionWebhookSecret = jest.fn();
 const refresh = jest.fn();
 
 jest.mock("@/lib/actions/nexus-chat/connections", () => ({
@@ -15,8 +14,6 @@ jest.mock("@/lib/actions/nexus-chat/connections", () => ({
     createNexusChatConnection(...args),
   updateNexusChatConnection: (...args: unknown[]) =>
     updateNexusChatConnection(...args),
-  regenerateConnectionWebhookSecret: (...args: unknown[]) =>
-    regenerateConnectionWebhookSecret(...args),
 }));
 
 // Mock clipboard para testes de copy.
@@ -42,7 +39,6 @@ describe("<ConnectionFormDialog />", () => {
   beforeEach(() => {
     createNexusChatConnection.mockReset();
     updateNexusChatConnection.mockReset();
-    regenerateConnectionWebhookSecret.mockReset();
     refresh.mockReset();
     toastMock.success.mockReset();
     toastMock.error.mockReset();
@@ -130,8 +126,13 @@ describe("<ConnectionFormDialog />", () => {
     expect(events).toHaveTextContent(/conversation_created/);
     expect(events).toHaveTextContent(/message_created/);
     expect(events).toHaveTextContent(/conversation_status_changed/);
-    // Botão Regenerar visível.
-    expect(screen.getByTestId("webhook-regen-btn")).toBeInTheDocument();
+    // v0.39: HMAC removido — UI não mostra mais botão Regenerar nem campo Secret.
+    expect(screen.queryByTestId("webhook-regen-btn")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("webhook-secret-alert")).not.toBeInTheDocument();
+    // Texto explicando que autenticação é por token na URL.
+    expect(section.textContent ?? "").toMatch(
+      /token único embutido na URL|painel do Nexus Chat não tem campo de secret/i,
+    );
   });
 
   it("modo edit sem webhookToken: bloco Webhook não renderiza", () => {
@@ -160,80 +161,10 @@ describe("<ConnectionFormDialog />", () => {
     expect(screen.queryByTestId("webhook-section")).not.toBeInTheDocument();
   });
 
-  it("clicar em Regenerar abre AlertDialog de confirmação", () => {
-    render(
-      <ConnectionFormDialog
-        mode="edit"
-        open
-        onOpenChange={jest.fn()}
-        connection={{
-          id: "conn-1",
-          name: "Padrão",
-          host: "db.example.com",
-          port: 5432,
-          database: "chatwoot",
-          username: "ro_user",
-          sslMode: "prefer",
-          applicationName: "nexus-insights",
-          status: "active",
-          lastTestAt: null,
-          lastTestError: null,
-          bindingsCount: 0,
-          webhookToken: "a".repeat(64),
-        }}
-      />,
-    );
-    fireEvent.click(screen.getByTestId("webhook-regen-btn"));
-    expect(
-      screen.getByRole("alertdialog", { name: /Regenerar secret/i }),
-    ).toBeInTheDocument();
-    expect(screen.getByTestId("webhook-regen-confirm")).toBeInTheDocument();
-  });
-
-  it("confirmar regeneração chama action e mostra Alert com novo secret", async () => {
-    regenerateConnectionWebhookSecret.mockResolvedValue({
-      success: true,
-      data: { webhookSecretPlain: "b".repeat(64) },
-    });
-    render(
-      <ConnectionFormDialog
-        mode="edit"
-        open
-        onOpenChange={jest.fn()}
-        connection={{
-          id: "conn-1",
-          name: "Padrão",
-          host: "db.example.com",
-          port: 5432,
-          database: "chatwoot",
-          username: "ro_user",
-          sslMode: "prefer",
-          applicationName: "nexus-insights",
-          status: "active",
-          lastTestAt: null,
-          lastTestError: null,
-          bindingsCount: 0,
-          webhookToken: "a".repeat(64),
-        }}
-      />,
-    );
-    fireEvent.click(screen.getByTestId("webhook-regen-btn"));
-    fireEvent.click(screen.getByTestId("webhook-regen-confirm"));
-    await waitFor(() => {
-      expect(regenerateConnectionWebhookSecret).toHaveBeenCalledWith("conn-1");
-    });
-    await waitFor(() => {
-      const alert = screen.getByTestId("webhook-secret-alert");
-      expect(alert).toBeInTheDocument();
-      expect(alert.textContent ?? "").toContain("b".repeat(64));
-    });
-    expect(toastMock.success).toHaveBeenCalled();
-  });
-
-  it("create com retorno webhookSecretPlain mostra Alert e mantém Dialog aberto", async () => {
+  it("v0.39: create fecha Dialog após sucesso (sem secret revelado)", async () => {
     createNexusChatConnection.mockResolvedValue({
       success: true,
-      data: { id: "new-id", webhookSecretPlain: "c".repeat(64) },
+      data: { id: "new-id" },
     });
     const onOpenChange = jest.fn();
     render(
@@ -261,12 +192,9 @@ describe("<ConnectionFormDialog />", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /^Salvar$/i }));
     await waitFor(() => {
-      const alert = screen.getByTestId("webhook-secret-alert");
-      expect(alert).toBeInTheDocument();
-      expect(alert.textContent ?? "").toContain("c".repeat(64));
+      expect(onOpenChange).toHaveBeenCalledWith(false);
     });
-    // Dialog NÃO fecha — super_admin precisa copiar antes.
-    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    expect(screen.queryByTestId("webhook-secret-alert")).not.toBeInTheDocument();
   });
 
   it("submit em create chama createNexusChatConnection e fecha", async () => {

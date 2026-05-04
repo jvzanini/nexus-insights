@@ -1,9 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { createHmac, timingSafeEqual } from "crypto";
 import { redis } from "@/lib/redis";
 import { prisma } from "@/lib/prisma";
-import { decrypt } from "@/lib/encryption";
 import {
   refreshByAccountQueue,
   refreshByInboxQueue,
@@ -18,7 +16,7 @@ export const dynamic = "force-dynamic";
 
 const RATE_LIMIT_PER_MINUTE = 100;
 const DEBOUNCE_MS = 2_000;
-const SAMPLE_RATE = 100; // log 1 a cada 100 eventos
+const SAMPLE_RATE = 100; // log audit 1 a cada 100 eventos
 const MAX_PAYLOAD_BYTES = 1_000_000; // 1 MB anti-DoS
 
 interface ChatwootWebhookPayload {
@@ -26,6 +24,18 @@ interface ChatwootWebhookPayload {
   account?: { id?: number };
 }
 
+/**
+ * Endpoint do webhook do Nexus Chat (Chatwoot).
+ *
+ * **Autenticação**: token único de 32 bytes random no path da URL.
+ * Account Webhooks no Chatwoot self-hosted **não suportam HMAC** (apenas
+ * API Channel + Agent Bot webhooks têm HMAC desde Chatwoot v4.13.0). O
+ * token na URL é a única autenticação:
+ *   - 256 bits de entropia → não-enumerável.
+ *   - HTTPS-only → não vaza em trânsito.
+ *   - Idempotência dos jobs → abuse causa carga, não corrompe dados.
+ *   - Rate limit 100/min/token → mitiga DoS.
+ */
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ token: string }> },
@@ -40,17 +50,12 @@ export async function POST(
   }
 
   // 1. Lookup da connection por webhookToken. 404 silencioso se inválido,
-  // paused/deleted, ou sem secret gerado — não revelamos existência de tokens.
+  // paused ou deleted — não revelamos existência de tokens.
   const conn = await prisma.nexusChatConnection.findFirst({
     where: { webhookToken: token, deletedAt: null },
-    select: {
-      id: true,
-      name: true,
-      status: true,
-      webhookSecretEnc: true,
-    },
+    select: { id: true, name: true, status: true },
   });
-  if (!conn || conn.status !== "active" || !conn.webhookSecretEnc) {
+  if (!conn || conn.status !== "active") {
     return new NextResponse(null, { status: 404 });
   }
 
@@ -82,43 +87,15 @@ export async function POST(
     });
   }
 
-  // 3. Ler body cru. HMAC é sobre raw bytes.
+  // 3. Ler body e validar tamanho.
   const rawBody = await req.text();
   if (rawBody.length > MAX_PAYLOAD_BYTES) {
     return new NextResponse(null, { status: 413 });
   }
 
-  // 4. Validação HMAC.
-  const headerSig = req.headers.get("x-chatwoot-hmac-sha256") ?? "";
-  if (!headerSig) {
-    void logAudit({
-      action: "webhook_rejected_hmac",
-      targetType: "nexus_chat_connection",
-      targetId: conn.id,
-      details: { reason: "missing_header", name: conn.name },
-    });
-    return new NextResponse(null, { status: 401 });
-  }
-  const secret = decrypt(conn.webhookSecretEnc);
-  const expected = createHmac("sha256", secret).update(rawBody).digest("hex");
-  const expectedBuf = Buffer.from(expected, "utf8");
-  const headerBuf = Buffer.from(headerSig, "utf8");
-  if (
-    expectedBuf.length !== headerBuf.length ||
-    !timingSafeEqual(expectedBuf, headerBuf)
-  ) {
-    void logAudit({
-      action: "webhook_rejected_hmac",
-      targetType: "nexus_chat_connection",
-      targetId: conn.id,
-      details: { reason: "mismatch", name: conn.name },
-    });
-    return new NextResponse(null, { status: 401 });
-  }
-
-  // 5. Parse JSON. Tolerante a JSON malformado (200 OK, log).
-  // Chatwoot trata 4xx como retry forever — sempre 200 OK quando a request é
-  // legítima mas o conteúdo não é processável.
+  // 4. Parse JSON. Tolerante a JSON malformado (200 OK + log).
+  // Chatwoot trata 4xx como retry forever — sempre 200 OK quando a request
+  // é legítima mas o conteúdo não é processável.
   let payload: ChatwootWebhookPayload;
   try {
     payload = JSON.parse(rawBody) as ChatwootWebhookPayload;
@@ -141,6 +118,7 @@ export async function POST(
     );
     return NextResponse.json({ ok: true, ignored: "invalid_json" });
   }
+
   const accountId = payload.account?.id;
   if (typeof accountId !== "number" || !Number.isFinite(accountId)) {
     console.log(
@@ -156,7 +134,7 @@ export async function POST(
     return NextResponse.json({ ok: true, ignored: "missing_account_id" });
   }
 
-  // 6. Resolver binding ativo (connectionId, accountId).
+  // 5. Resolver binding ativo (connectionId, accountId).
   const binding = await prisma.companyChatBinding.findFirst({
     where: {
       connectionId: conn.id,
@@ -188,7 +166,7 @@ export async function POST(
     return NextResponse.json({ ok: true, ignored: "no_binding" });
   }
 
-  // 7. Enfileirar 4 jobs com debounce (jobId único por bucket de 2s).
+  // 6. Enfileirar 4 jobs com debounce (jobId único por bucket de 2s).
   const bucket = Math.floor(Date.now() / DEBOUNCE_MS);
   const jobOpts = (dim: string) => ({
     jobId: `refresh:${dim}:${conn.id}:${accountId}:${bucket}`,
@@ -216,11 +194,10 @@ export async function POST(
         accountId,
       },
     });
-    // Webhook responde 200 mesmo assim — cron de 30 min cobrirá.
+    // Webhook responde 200 mesmo assim — cron fallback de 30 min cobrirá.
   }
 
-  // 8. Publish imediato no Pub/Sub (1 evento por dimensão para coalescência
-  // por filtro do hook). Fire-and-forget.
+  // 7. Publish imediato no Pub/Sub (1 evento por dimensão).
   const dims = ["by_account", "by_inbox", "by_agent", "by_team"] as const;
   for (const d of dims) {
     void publishRealtimeEvent({
@@ -231,12 +208,12 @@ export async function POST(
     });
   }
 
-  // 9. Update lastWebhookAt fire-and-forget (não bloqueia resposta).
+  // 8. Update lastWebhookAt fire-and-forget.
   void prisma.nexusChatConnection
     .update({ where: { id: conn.id }, data: { lastWebhookAt: new Date() } })
     .catch(() => {});
 
-  // 10. Audit log de evento recebido (sample 1/100 — não inundar).
+  // 9. Audit log sample 1/100 (anti-flood).
   if (Math.random() * SAMPLE_RATE < 1) {
     void logAudit({
       action: "webhook_received",
@@ -250,7 +227,7 @@ export async function POST(
     });
   }
 
-  // 11. Log estruturado SEMPRE em stdout (diagnóstico fora do audit log).
+  // 10. Log JSON estruturado SEMPRE (diagnóstico Portainer).
   console.log(
     JSON.stringify({
       kind: "webhook_received",

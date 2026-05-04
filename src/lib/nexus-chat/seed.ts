@@ -5,7 +5,7 @@ import { encrypt } from "@/lib/encryption";
 import { prisma } from "@/lib/prisma";
 import { pgPool } from "@/lib/pg-pool";
 import { ensureNexusChatTables } from "./ensure-tables";
-import { generateWebhookCredentials } from "./webhook-credentials";
+import { generateWebhookToken } from "./webhook-credentials";
 
 /**
  * Seed idempotente da Fase 1 multi-tenant.
@@ -82,13 +82,9 @@ async function backfillWebhookCredentialsIfNeeded(): Promise<{
 
     let count = 0;
     for (const c of connections) {
-      const credentials = generateWebhookCredentials();
       await prisma.nexusChatConnection.update({
         where: { id: c.id },
-        data: {
-          webhookToken: credentials.token,
-          webhookSecretEnc: credentials.secretEnc,
-        },
+        data: { webhookToken: generateWebhookToken() },
       });
       count++;
     }

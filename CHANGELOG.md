@@ -1,5 +1,91 @@
 # Changelog
 
+## [v0.39.0] 2026-05-04 — Hotfix Fase 2 (HMAC removido, sidebar reorganizado, page bindings)
+
+> Hotfix da Fase 2 baseado em screenshots e feedback do João pós-deploy v0.38. **Account Webhooks no Chatwoot self-hosted não suportam HMAC** (pesquisa confirmada — apenas API Channel + Agent Bot Webhooks têm desde Chatwoot v4.13.0). HMAC removido completamente; token de 32 bytes random na URL é a única autenticação. UI simplificada drasticamente (sem campo Secret confuso). Menu reorganizado conforme pedido: nova entrada "Bancos de dados" no nível superior do sidebar; "Jobs de pré-agregação" removido (page continua acessível por URL `/configuracoes/jobs` como backup operacional até Fase 3 absorver). Sheet lateral de bindings substituído por **page dedicada** `/bancos-de-dados/[id]`.
+
+### Mudanças
+
+- **Endpoint webhook (`src/app/api/webhooks/nexus-chat/[token]/route.ts`):**
+  - Removidos imports `crypto.createHmac`, `timingSafeEqual`, `decrypt`.
+  - Removida validação de header `x-chatwoot-hmac-sha256` (era 401).
+  - Connection lookup não exige mais `webhook_secret_enc` populado.
+  - Mantido tudo o resto: rate limit 100/min/token, debounce 2s, publish 4x, lastWebhookAt update, audit sample 1/100, log JSON estruturado, payload limit 1MB, JSON parse tolerante.
+  - 10/10 tests verde (cobrindo 9 cenários da spec — HMAC mismatch test removido).
+
+- **Geração de credenciais (`webhook-credentials.ts`):**
+  - `generateWebhookCredentials()` (com token+secretPlain+secretEnc) → `generateWebhookToken()` simples.
+  - Não usa mais `encrypt`.
+
+- **Server Actions (`actions/nexus-chat/connections.ts`):**
+  - `createNexusChatConnection` retorna `{ id }` (não mais `webhookSecretPlain`).
+  - `regenerateConnectionWebhookSecret` → `regenerateConnectionWebhookToken` (rotação de token, audit `webhook_token_regenerated`).
+  - 16/16 tests verde.
+
+- **Seed (`seed.ts`):**
+  - Backfill Fase 2 popula só `webhookToken`. `webhookSecretEnc` fica NULL nas connections.
+
+- **Sidebar (`lib/constants/nav.ts`):**
+  - Adicionada entrada **"Bancos de dados"** (super_admin only, ícone `Database`) no nível superior.
+  - Removida entrada **"Jobs de pré-agregação"** (page `/configuracoes/jobs` continua existindo, acessível por URL — substituída pela Fase 3 quando "Bancos de dados" virar UI rica em 4 abas).
+
+- **Rota nova (`/bancos-de-dados`):**
+  - `src/app/(protected)/bancos-de-dados/page.tsx` — lista de connections (igual à antiga em `/configuracoes/conexoes` mas com botão **Empresas** que linka pra detalhe ao invés de abrir Sheet).
+  - `src/app/(protected)/bancos-de-dados/[id]/page.tsx` — page detalhe da connection com tabela inline de bindings (não mais Sheet lateral).
+  - `src/app/(protected)/configuracoes/conexoes/page.tsx` virou redirect 302 para `/bancos-de-dados` (backwards compat).
+
+- **`<BindingsTable>` novo component (`bindings-table.tsx`):**
+  - Tabela com Empresa | Account ID | Status (switch enable/disable) | Ações (Editar/Apagar).
+  - Empty state amigável.
+  - Substitui `<BindingListSheet>` (deletado).
+
+- **`<ConnectionList>`:**
+  - Removido import + uso de `BindingListSheet`.
+  - Removido state `sheet`.
+  - Botão **Ver** (Eye) → **Empresas** (Users) navegando pra `/bancos-de-dados/[id]`.
+  - Removida prop `bindingsByConnection`.
+
+- **`<ConnectionFormDialog>`:**
+  - Removido bloco Alert success "Secret gerado".
+  - Removido botão "Regenerar secret" + `<AlertDialog>` confirmação.
+  - Removido state `revealedSecret`, `confirmRegenerate`, `regenPending`.
+  - Removidos imports `AlertTriangle`, `RotateCcw`, `ShieldCheck`, `regenerateConnectionWebhookSecret`.
+  - Bloco Webhook agora mostra: **URL copiável** + texto explicativo "O painel do Nexus Chat não tem campo de secret — a autenticação acontece pelo token único embutido na URL (32 bytes random)" + lista de eventos.
+  - 7/7 tests verde (4 antigos sobre Secret/Regenerar removidos, 1 novo sobre fluxo simplificado de create).
+
+- **PasswordInput onChange fix:** corrigido handler `onChange={(e) => update(...)}` → `onChange={(value) => update(...)}` (PasswordInput passa string, não event).
+
+### Decisão sobre HMAC (registro de pesquisa)
+
+Pesquisa concluída: **Account Webhooks no Chatwoot self-hosted NÃO TÊM campo Secret**. HMAC só existe em:
+- API Channel webhooks
+- Agent Bot webhooks
+
+Introduzidos em **Chatwoot v4.13.0 (abril 2024)**. Header correto seria `X-Chatwoot-Signature` (formato `sha256=<hex>`) com payload assinado `"{timestamp}.{raw_body}"`.
+
+Como o cliente Matrix usa Account Webhooks, HMAC é impossível pelo painel atual do Chatwoot. **Token de 32 bytes random no path da URL** é segurança suficiente:
+- 256 bits de entropia (não-enumerável).
+- HTTPS-only (não vaza em trânsito).
+- Idempotência dos jobs `refresh-by-*` (UPSERT) — abuse causa carga, não corrompe dados.
+- Rate limit 100/min/token mitiga DoS.
+- Audit log captura tudo (mesmo amostrado).
+
+Schema preserva coluna `webhook_secret_enc` (NULL na Fase 2) — caso futuro migre pra API Channel webhook ou Account Webhooks ganhem suporte HMAC, é só popular.
+
+### Métricas
+
+- ~12 commits granulares.
+- 79/79 tests verde no escopo (typecheck zero).
+- Suite global: 1715/1735 verde (mantém 20 falhas pré-existentes em integrations-power-bi).
+
+### Não-objetivos (Fase 3)
+
+- UI rica em 4 abas (Conexões / Tempo real / Jobs / Saúde) dentro de `/bancos-de-dados/[id]`.
+- Wizard de onboarding nova empresa.
+- Aba "Jobs" absorve a `/configuracoes/jobs` (que perde o entry no sidebar agora mas mantém URL).
+- Constraint `NOT NULL` em `connection_id` + nova PK.
+- Refator dos 4 sites legados (sla-content/csat-content/llm-tools/power-bi-dim-sync) ainda usando `chatwootQuery`.
+
 ## [v0.38.0] 2026-05-04 — Multi-tenant Realtime Fase 2 (Webhook event-driven)
 
 > **Épico 2 de 3.** Substitui cron de 5 min por **webhook event-driven**: Nexus Chat (Chatwoot) dispara `POST /api/webhooks/nexus-chat/[token]` a cada evento (`conversation_created`, `message_created`, etc), o app valida HMAC SHA-256 timing-safe, faz rate limit Redis (100/min/token), enfileira 4 jobs `refresh-by-*` com debounce 2s (coalescência de bursts via `jobId` único por bucket) e publica `facts:refreshed` no Pub/Sub. Latência: ~ms (vs 5 min cron). Cron rebaixado para 30 min como fallback.
