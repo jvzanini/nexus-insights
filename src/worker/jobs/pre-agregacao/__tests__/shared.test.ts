@@ -21,9 +21,12 @@ import { pgPool } from "@/lib/pg-pool";
 import { publishRealtimeEvent } from "@/lib/realtime";
 import {
   getAccountsToRefresh,
+  getBindingsToRefresh,
   rollingDates,
   withMetaUpdate,
 } from "../shared";
+
+const FAKE_CONN = "5e6a4eef-2a23-4f33-8d4e-1a2b3c4d5e6f";
 
 const mockedQuery = pgPool.query as jest.MockedFunction<typeof pgPool.query>;
 const mockedPublish = publishRealtimeEvent as jest.MockedFunction<
@@ -36,7 +39,37 @@ beforeEach(() => {
   mockedPublish.mockResolvedValue(undefined);
 });
 
-describe("getAccountsToRefresh", () => {
+describe("getBindingsToRefresh", () => {
+  it("retorna pares (connectionId, accountId) para bindings enabled + connection active", async () => {
+    mockedQuery.mockResolvedValueOnce({
+      rowCount: 2,
+      rows: [
+        { connection_id: FAKE_CONN, chatwoot_account_id: 9 },
+        { connection_id: FAKE_CONN, chatwoot_account_id: 2 },
+      ],
+    } as never);
+
+    const targets = await getBindingsToRefresh();
+
+    expect(targets).toEqual([
+      { connectionId: FAKE_CONN, accountId: 9 },
+      { connectionId: FAKE_CONN, accountId: 2 },
+    ]);
+    const sql = mockedQuery.mock.calls[0][0] as string;
+    expect(sql).toMatch(/company_chat_bindings/);
+    expect(sql).toMatch(/nexus_chat_connections/);
+    expect(sql).toMatch(/b\.enabled = true/);
+    expect(sql).toMatch(/c\.status = 'active'/);
+  });
+
+  it("retorna array vazio quando não há binding ativo", async () => {
+    mockedQuery.mockResolvedValueOnce({ rowCount: 0, rows: [] } as never);
+    const targets = await getBindingsToRefresh();
+    expect(targets).toEqual([]);
+  });
+});
+
+describe("getAccountsToRefresh (deprecated)", () => {
   it("retorna lista distinta e ordenada de account IDs", async () => {
     mockedQuery.mockResolvedValueOnce({
       rowCount: 3,
@@ -115,78 +148,90 @@ describe("withMetaUpdate", () => {
     mockedQuery.mockResolvedValueOnce({ rowCount: 1, rows: [] } as never);
   }
 
-  it("envolve fn() em pre/post update do meta no caminho feliz", async () => {
+  it("envolve fn() em pre/post update do meta no caminho feliz (com connectionId)", async () => {
     setupMetaUpsertHappyPath();
     const fn = jest.fn().mockResolvedValueOnce("ok");
 
-    const result = await withMetaUpdate("by_account", 9, fn);
+    const result = await withMetaUpdate("by_account", FAKE_CONN, 9, fn);
 
     expect(result).toBe("ok");
     expect(fn).toHaveBeenCalledTimes(1);
-    // 3 queries: pre (last_attempt), bucket-range, post (last_refresh)
     expect(mockedQuery).toHaveBeenCalledTimes(3);
 
     const preSql = mockedQuery.mock.calls[0][0] as string;
     expect(preSql).toMatch(/INSERT INTO chatwoot_facts_meta/);
     expect(preSql).toMatch(/last_attempt_at/);
+    expect(preSql).toMatch(/connection_id/);
     expect(preSql).toMatch(/ON CONFLICT/);
 
     const rangeSql = mockedQuery.mock.calls[1][0] as string;
     expect(rangeSql).toMatch(/MIN\(bucket_date\)/);
     expect(rangeSql).toMatch(/MAX\(bucket_date\)/);
     expect(rangeSql).toMatch(/chatwoot_facts_daily_by_account/);
+    expect(rangeSql).toMatch(/connection_id = \$2/);
 
     const postSql = mockedQuery.mock.calls[2][0] as string;
     expect(postSql).toMatch(/INSERT INTO chatwoot_facts_meta/);
     expect(postSql).toMatch(/last_refresh_at/);
-    expect(postSql).toMatch(/last_error/);
+    expect(postSql).toMatch(/connection_id/);
 
-    // T13: deve publicar facts:refreshed após sucesso
     expect(mockedPublish).toHaveBeenCalledTimes(1);
     expect(mockedPublish).toHaveBeenCalledWith({
       type: "facts:refreshed",
       dimension: "by_account",
+      connectionId: FAKE_CONN,
       accountId: 9,
     });
   });
 
   it("usa tabela hourly_by_account quando dimension = hourly_by_account", async () => {
     setupMetaUpsertHappyPath();
-    await withMetaUpdate("hourly_by_account", 2, jest.fn().mockResolvedValueOnce("x"));
+    await withMetaUpdate(
+      "hourly_by_account",
+      FAKE_CONN,
+      2,
+      jest.fn().mockResolvedValueOnce("x"),
+    );
 
     const rangeSql = mockedQuery.mock.calls[1][0] as string;
     expect(rangeSql).toMatch(/chatwoot_facts_hourly_by_account/);
   });
 
-  it("propaga erro de fn() e persiste last_error no meta", async () => {
-    // pre-update OK
+  it("propaga erro de fn() e persiste last_error + connection_id no meta", async () => {
     mockedQuery.mockResolvedValueOnce({ rowCount: 1, rows: [] } as never);
-    // error update OK
     mockedQuery.mockResolvedValueOnce({ rowCount: 1, rows: [] } as never);
 
     const err = new Error("boom");
     const fn = jest.fn().mockRejectedValueOnce(err);
 
-    await expect(withMetaUpdate("by_inbox", 9, fn)).rejects.toThrow("boom");
+    await expect(
+      withMetaUpdate("by_inbox", FAKE_CONN, 9, fn),
+    ).rejects.toThrow("boom");
 
     expect(mockedQuery).toHaveBeenCalledTimes(2);
     const errSql = mockedQuery.mock.calls[1][0] as string;
     expect(errSql).toMatch(/INSERT INTO chatwoot_facts_meta/);
     expect(errSql).toMatch(/last_error/);
-    // params devem conter a mensagem de erro
+    expect(errSql).toMatch(/connection_id/);
     const errParams = mockedQuery.mock.calls[1][1] as unknown[];
     expect(errParams).toContain("boom");
+    expect(errParams).toContain(FAKE_CONN);
 
-    // T13: NÃO deve publicar evento em caso de erro
     expect(mockedPublish).not.toHaveBeenCalled();
   });
 
-  it("publica facts:refreshed com dimension correta (hourly_by_account)", async () => {
+  it("publica facts:refreshed com connectionId correto", async () => {
     setupMetaUpsertHappyPath();
-    await withMetaUpdate("hourly_by_account", 2, jest.fn().mockResolvedValueOnce("x"));
+    await withMetaUpdate(
+      "hourly_by_account",
+      FAKE_CONN,
+      2,
+      jest.fn().mockResolvedValueOnce("x"),
+    );
     expect(mockedPublish).toHaveBeenCalledWith({
       type: "facts:refreshed",
       dimension: "hourly_by_account",
+      connectionId: FAKE_CONN,
       accountId: 2,
     });
   });
@@ -194,9 +239,13 @@ describe("withMetaUpdate", () => {
   it("não lança erro quando publishRealtimeEvent falha (best-effort)", async () => {
     setupMetaUpsertHappyPath();
     mockedPublish.mockRejectedValueOnce(new Error("redis down"));
-    // Não deve propagar o erro
     await expect(
-      withMetaUpdate("by_agent", 5, jest.fn().mockResolvedValueOnce("ok")),
+      withMetaUpdate(
+        "by_agent",
+        FAKE_CONN,
+        5,
+        jest.fn().mockResolvedValueOnce("ok"),
+      ),
     ).resolves.toBe("ok");
   });
 });
