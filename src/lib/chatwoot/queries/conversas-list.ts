@@ -14,7 +14,7 @@
  * Pode ser usada tanto em modo "live" quanto histórico — caller decide TTL.
  */
 
-import { getChatwootPool } from "../pool";
+import { queryNexusChat } from "@/lib/nexus-chat/pool";
 import { withChatwootResilience } from "../resilience";
 import { withCache } from "@/lib/cache/pull-through";
 import { cacheKey, hashFilters } from "@/lib/cache/keys";
@@ -115,6 +115,8 @@ interface RawRow {
   waiting_seconds: string | number | null;
   open_seconds: string | number | null;
   labels: ConversaLabel[] | null;
+  // Index signature exigida por `queryNexusChat<T extends Record<string, unknown>>`.
+  [key: string]: unknown;
 }
 
 function encodeCursor(c: ConversasListCursor): string {
@@ -145,6 +147,12 @@ function toNumberOrNull(v: string | number | null): number | null {
 }
 
 export async function conversasList(args: {
+  /**
+   * v0.37 (Fase 1 multi-tenant): UUID da `nexus_chat_connection` ativa.
+   * Resolvido via `getActiveConnectionId(user)` no caller. É a origem do
+   * Postgres de leitura — todas as queries vão para esse pool dinâmico.
+   */
+  connectionId: string;
   accountId: number;
   filters: ReportFilters;
   limit?: number;
@@ -174,6 +182,7 @@ export async function conversasList(args: {
     name: useOffset
       ? `conversas-list-${cacheScope}-p${effectivePage}s${effectivePageSize}`
       : `conversas-list-${cacheScope}-${limit}-${cursor ? `${cursor.lastActivityAt}-${cursor.id}` : "first"}`,
+    connectionId: args.connectionId,
     accountId: args.accountId,
     filtersHash: hashFilters(args.filters),
   });
@@ -184,7 +193,6 @@ export async function conversasList(args: {
     fetcher: () =>
       withChatwootResilience<ConversasListResult>(
         async () => {
-          const pool = getChatwootPool();
           const base = buildBaseFilter(args.filters, args.accountId);
           const params: unknown[] = [...base.params];
           let p = params.length;
@@ -340,10 +348,17 @@ export async function conversasList(args: {
 
           const [result, countResult] = useOffset
             ? await Promise.all([
-                pool.query<RawRow>(sql, params),
-                pool.query<{ total: string }>(countSql!, baseAndSearchParams),
+                queryNexusChat<RawRow>(args.connectionId, sql, params),
+                queryNexusChat<{ total: string }>(
+                  args.connectionId,
+                  countSql!,
+                  baseAndSearchParams,
+                ),
               ])
-            : ([await pool.query<RawRow>(sql, params), null] as const);
+            : ([
+                await queryNexusChat<RawRow>(args.connectionId, sql, params),
+                null,
+              ] as const);
           const hasMore = !useOffset && result.rows.length > limit;
           const sliced = hasMore ? result.rows.slice(0, limit) : result.rows;
 

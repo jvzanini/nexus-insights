@@ -122,7 +122,22 @@ export async function getUserFormOptions(): Promise<
     const teamsEntries = await Promise.all(
       accounts.map(async (a) => {
         try {
-          const result = await getTeams(a.id);
+          // v0.37 (Fase 1 multi-tenant): resolve connectionId via binding
+          // ativo do account. Se 0 ou >1 bindings, devolve [] silenciosamente
+          // (UI degrada graciosamente — wizard segue funcionando).
+          const bindings = await prisma.companyChatBinding.findMany({
+            where: {
+              chatwootAccountId: a.id,
+              enabled: true,
+              deletedAt: null,
+              connection: { deletedAt: null, status: "active" },
+            },
+            select: { connectionId: true },
+          });
+          if (bindings.length !== 1) {
+            return [a.id, [] as Array<{ id: number; name: string }>] as const;
+          }
+          const result = await getTeams(bindings[0].connectionId, a.id);
           return [a.id, result.data ?? []] as const;
         } catch {
           return [a.id, [] as Array<{ id: number; name: string }>] as const;

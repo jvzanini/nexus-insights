@@ -21,6 +21,7 @@ import { getTeams, getUsers } from "@/lib/chatwoot/queries/meta-cache";
 import { getInboxesForUser } from "@/lib/chatwoot/queries/meta-cache-for-user";
 import { fetchMensagensNaoRespondidas } from "@/lib/actions/reports/mensagens-nao-respondidas";
 import { getActiveAccountId } from "@/lib/reports/active-account";
+import { getActiveConnectionId } from "@/lib/reports/active-connection";
 import { assertAccountAccess } from "@/lib/tenant";
 import { shouldExcludeMatrixIA } from "@/lib/reports/exclude-matrix-ia";
 import { formatDuration } from "@/lib/utils/format-time";
@@ -55,6 +56,7 @@ export default async function MensagensNaoRespondidasPage({
 
   const accountId = await getActiveAccountId(user as AuthUser);
   await assertAccountAccess(user as AuthUser, accountId);
+  const connectionId = await getActiveConnectionId(user as AuthUser);
   const sp = await searchParams;
 
   const inboxRaw = typeof sp.inbox === "string" ? sp.inbox : undefined;
@@ -80,9 +82,9 @@ export default async function MensagensNaoRespondidasPage({
 
   const [inboxesResult, teamsResult, usersResult, dataResult] =
     await Promise.all([
-      getInboxesForUser(accountId, user).catch(() => null),
-      getTeams(accountId).catch(() => null),
-      getUsers(accountId).catch(() => null),
+      getInboxesForUser(connectionId, accountId, user).catch(() => null),
+      getTeams(connectionId, accountId).catch(() => null),
+      getUsers(connectionId, accountId).catch(() => null),
       fetchMensagensNaoRespondidas({
         filters: reportFilters,
         accountId,

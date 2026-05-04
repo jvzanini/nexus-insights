@@ -15,6 +15,7 @@ import { getTeams, getUsers, getLabels } from "@/lib/chatwoot/queries/meta-cache
 import { getInboxesForUser } from "@/lib/chatwoot/queries/meta-cache-for-user";
 import { fetchConversas } from "@/lib/actions/reports/conversas";
 import { getActiveAccountId } from "@/lib/reports/active-account";
+import { getActiveConnectionId } from "@/lib/reports/active-connection";
 import { assertAccountAccess } from "@/lib/tenant";
 import { resolvePeriod } from "@/lib/reports/resolve-period";
 import { shouldExcludeMatrixIA } from "@/lib/reports/exclude-matrix-ia";
@@ -38,6 +39,7 @@ export default async function ConversasPage({ searchParams }: PageProps) {
 
   const accountId = await getActiveAccountId(user as AuthUser);
   await assertAccountAccess(user as AuthUser, accountId);
+  const connectionId = await getActiveConnectionId(user as AuthUser);
   const sp = await searchParams;
 
   const params = new URLSearchParams();
@@ -80,10 +82,10 @@ export default async function ConversasPage({ searchParams }: PageProps) {
     labelsResult,
     conversasResult,
   ] = await Promise.all([
-    getInboxesForUser(accountId, user).catch(() => null),
-    getTeams(accountId).catch(() => null),
-    getUsers(accountId).catch(() => null),
-    getLabels(accountId).catch(() => null),
+    getInboxesForUser(connectionId, accountId, user).catch(() => null),
+    getTeams(connectionId, accountId).catch(() => null),
+    getUsers(connectionId, accountId).catch(() => null),
+    getLabels(connectionId, accountId).catch(() => null),
     fetchConversas({
       filters: reportFilters,
       accountId,

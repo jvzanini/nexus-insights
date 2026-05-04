@@ -10,6 +10,11 @@ jest.mock("@/lib/chatwoot/queries/conversas-list", () => ({
 jest.mock("@/lib/tenant", () => ({
   getAccessibleTeamIds: jest.fn().mockResolvedValue("all"),
 }));
+jest.mock("@/lib/reports/active-connection", () => ({
+  getActiveConnectionId: jest
+    .fn()
+    .mockResolvedValue("11111111-2222-3333-4444-555555555555"),
+}));
 
 import { exportConversasAction } from "@/lib/actions/reports/conversas-export";
 import { getCurrentUser } from "@/lib/auth";

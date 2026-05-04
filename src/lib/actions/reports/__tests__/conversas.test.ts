@@ -5,6 +5,11 @@ jest.mock("@/lib/chatwoot/queries/conversas-list", () => ({
 jest.mock("@/lib/tenant", () => ({
   getAccessibleTeamIds: jest.fn().mockResolvedValue("all"),
 }));
+jest.mock("@/lib/reports/active-connection", () => ({
+  getActiveConnectionId: jest
+    .fn()
+    .mockResolvedValue("11111111-2222-3333-4444-555555555555"),
+}));
 
 import { fetchConversas } from "@/lib/actions/reports/conversas";
 import { conversasList } from "@/lib/chatwoot/queries/conversas-list";
@@ -68,5 +73,16 @@ describe("fetchConversas v0.19", () => {
     const call = (conversasList as jest.Mock).mock.calls[0][0];
     expect(call.page).toBe(1);
     expect(call.pageSize).toBe(1000);
+  });
+
+  it("propaga connectionId resolvido para conversasList", async () => {
+    (conversasList as jest.Mock).mockResolvedValue({
+      data: { rows: [], nextCursor: null, total: 0, page: 1, pageSize: 1000 },
+      stale: false,
+      cached: false,
+    });
+    await fetchConversas({ filters: baseFilters, accountId: 9 });
+    const call = (conversasList as jest.Mock).mock.calls[0][0];
+    expect(call.connectionId).toBe("11111111-2222-3333-4444-555555555555");
   });
 });

@@ -18,12 +18,16 @@ interface UserShape {
  * Aceita tanto a forma legacy (`UserShape`) quanto `string` (apenas `platformRole`).
  * Mantém o cache de meta-cache compartilhado entre usuários; a filtragem é
  * em memória, sem TTL próprio.
+ *
+ * v0.37 (Fase 1 multi-tenant): assinatura ganha `connectionId` como 1º
+ * parâmetro, repassado para `getInboxes(connectionId, accountId)`.
  */
 export async function getInboxesForUser(
+  connectionId: string,
   accountId: number,
   userOrRole: UserShape | string | null | undefined,
 ): Promise<{ data: MetaItem[]; stale?: boolean }> {
-  const result = await getInboxes(accountId);
+  const result = await getInboxes(connectionId, accountId);
   const userRole =
     typeof userOrRole === "string" || userOrRole == null
       ? userOrRole

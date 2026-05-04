@@ -5,6 +5,7 @@ import { isReportVisibleForUser } from "@/lib/reports/visibility";
 import { conversasList } from "@/lib/chatwoot/queries/conversas-list";
 import { buildConversasXlsxBuffer } from "@/lib/reports/conversas-xlsx";
 import { getAccessibleTeamIds } from "@/lib/tenant";
+import { getActiveConnectionId } from "@/lib/reports/active-connection";
 import { matchSearchClient } from "@/lib/reports/match-search-client";
 import { applyConditions } from "@/lib/utils/apply-conditions";
 import { matchDocumentTypes } from "@/lib/reports/match-document-types";
@@ -127,7 +128,21 @@ export async function exportConversasAction(
   }
 
   try {
+    const connectionId = await getActiveConnectionId({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      platformRole: user.platformRole,
+      isOwner: user.isOwner,
+      mustChangePassword: user.mustChangePassword,
+      avatarUrl: user.avatarUrl,
+      theme: user.theme,
+      accountIds: user.accountIds,
+      teamIds: user.teamIds,
+    } satisfies AuthUser);
+
     const result = await conversasList({
+      connectionId,
       accountId,
       filters: scopedFilters,
       cursor: null,
