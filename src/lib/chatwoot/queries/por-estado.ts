@@ -6,6 +6,9 @@
  * - avgFirstResponseSec: AVG sobre reporting_events.value (evento first_response).
  *
  * TTL 300s (histórico).
+ *
+ * @canonical periodColumn=active (default) — conversas com movimento no período.
+ *   Ver `src/lib/reports/canonical.ts` (`buildActivePeriodClause`).
  */
 
 import { queryNexusChat } from "@/lib/nexus-chat/pool";
@@ -47,7 +50,7 @@ export async function porEstado(args: {
   const ttl = args.ttlSeconds ?? DEFAULT_TTL_SECONDS;
   const key = cacheKey({
     scope: "report",
-    name: "por-estado",
+    name: "por-estado-canonical-v0.42",
     accountId: args.accountId,
     filtersHash: hashFilters(args.filters),
   });
