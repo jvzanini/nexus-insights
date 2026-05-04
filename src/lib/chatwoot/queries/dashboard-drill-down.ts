@@ -14,7 +14,7 @@
  * (por hora completa, top 10 por inbox, listas de 20 conversas etc.).
  */
 
-import { getChatwootPool } from "../pool";
+import { queryNexusChat } from "@/lib/nexus-chat/pool";
 import { withChatwootResilience } from "../resilience";
 import { withCache } from "@/lib/cache/pull-through";
 import { cacheKey, hashFilters } from "@/lib/cache/keys";
@@ -187,28 +187,31 @@ export interface ByTeamDrillDownData {
   items: ByTeamDrillDownItem[];
 }
 
-interface RowCount {
+// WHY: usamos `type` (não `interface`) porque o helper `queryNexusChat` exige
+// `T extends Record<string, unknown>` — interfaces não casam por falta de
+// index signature; `type` literal casa.
+type RowCount = {
   total: string;
-}
-interface RowChart {
+};
+type RowChart = {
   bucket: Date;
   received: string;
   resolved: string;
-}
-interface RowInbox {
+};
+type RowInbox = {
   id: number;
   name: string | null;
   total: string;
-}
-interface RowHour {
+};
+type RowHour = {
   hour: string;
   total: string;
-}
-interface RowStatus {
+};
+type RowStatus = {
   status: number;
   total: string;
-}
-interface RowConversation {
+};
+type RowConversation = {
   id: number;
   display_id: number;
   contact_name: string | null;
@@ -217,13 +220,13 @@ interface RowConversation {
   assignee_name: string | null;
   status: number;
   last_activity_at: Date;
-}
-interface RowAgentRate {
+};
+type RowAgentRate = {
   id: number;
   name: string | null;
   received: string;
   resolved: string;
-}
+};
 
 const STATUS_LABELS: Record<number, string> = {
   0: "Aberta",
@@ -245,6 +248,7 @@ function pickGranularity(period: { start: Date; end: Date }): "hour" | "day" {
  * Retorna `items` + `recent` (alias deprecated por compat).
  */
 export async function getReceivedDrillDown(
+  connectionId: string,
   args: DrillDownPeriodInput & { page?: number; pageSize?: number },
 ) {
   const ttl = args.ttlSeconds ?? DEFAULT_TTL_SECONDS;
@@ -279,7 +283,6 @@ export async function getReceivedDrillDown(
     fetcher: () =>
       withChatwootResilience<ReceivedDrillDownData>(
         async () => {
-          const pool = getChatwootPool();
           const matrixClause = excludeMatrixIA ? " AND c.inbox_id <> 31" : "";
 
           const sqlTotal = `
@@ -365,29 +368,29 @@ export async function getReceivedDrillDown(
 
           const [totalRes, chartRes, byInboxRes, byHourRes, recentRes] =
             await Promise.all([
-              pool.query<RowCount>(sqlTotal, [
+              queryNexusChat<RowCount>(connectionId, sqlTotal, [
                 args.accountId,
                 args.period.start,
                 args.period.end,
               ]),
-              pool.query<RowChart>(sqlChart, [
-                args.accountId,
-                args.period.start,
-                args.period.end,
-                tz,
-              ]),
-              pool.query<RowInbox>(sqlByInbox, [
-                args.accountId,
-                args.period.start,
-                args.period.end,
-              ]),
-              pool.query<RowHour>(sqlByHour, [
+              queryNexusChat<RowChart>(connectionId, sqlChart, [
                 args.accountId,
                 args.period.start,
                 args.period.end,
                 tz,
               ]),
-              pool.query<RowConversation>(sqlRecent, [
+              queryNexusChat<RowInbox>(connectionId, sqlByInbox, [
+                args.accountId,
+                args.period.start,
+                args.period.end,
+              ]),
+              queryNexusChat<RowHour>(connectionId, sqlByHour, [
+                args.accountId,
+                args.period.start,
+                args.period.end,
+                tz,
+              ]),
+              queryNexusChat<RowConversation>(connectionId, sqlRecent, [
                 args.accountId,
                 args.period.start,
                 args.period.end,
@@ -444,6 +447,7 @@ export async function getReceivedDrillDown(
  * Default 50/pg, cap 200. Retorna `items` + `recent` (alias deprecated).
  */
 export async function getResolvedDrillDown(
+  connectionId: string,
   args: DrillDownPeriodInput & { page?: number; pageSize?: number },
 ) {
   const ttl = args.ttlSeconds ?? DEFAULT_TTL_SECONDS;
@@ -478,7 +482,6 @@ export async function getResolvedDrillDown(
     fetcher: () =>
       withChatwootResilience<ResolvedDrillDownData>(
         async () => {
-          const pool = getChatwootPool();
           const matrixClause = excludeMatrixIA ? " AND c.inbox_id <> 31" : "";
 
           // v0.10: coorte = created_at ∈ período (mesma de Recebidas/Abertas)
@@ -572,29 +575,29 @@ export async function getResolvedDrillDown(
 
           const [totalRes, chartRes, byInboxRes, byHourRes, recentRes] =
             await Promise.all([
-              pool.query<RowCount>(sqlTotal, [
+              queryNexusChat<RowCount>(connectionId, sqlTotal, [
                 args.accountId,
                 args.period.start,
                 args.period.end,
               ]),
-              pool.query<RowChart>(sqlChart, [
-                args.accountId,
-                args.period.start,
-                args.period.end,
-                tz,
-              ]),
-              pool.query<RowInbox>(sqlByInbox, [
-                args.accountId,
-                args.period.start,
-                args.period.end,
-              ]),
-              pool.query<RowHour>(sqlByHour, [
+              queryNexusChat<RowChart>(connectionId, sqlChart, [
                 args.accountId,
                 args.period.start,
                 args.period.end,
                 tz,
               ]),
-              pool.query<RowConversation>(sqlRecent, [
+              queryNexusChat<RowInbox>(connectionId, sqlByInbox, [
+                args.accountId,
+                args.period.start,
+                args.period.end,
+              ]),
+              queryNexusChat<RowHour>(connectionId, sqlByHour, [
+                args.accountId,
+                args.period.start,
+                args.period.end,
+                tz,
+              ]),
+              queryNexusChat<RowConversation>(connectionId, sqlRecent, [
                 args.accountId,
                 args.period.start,
                 args.period.end,
@@ -664,7 +667,10 @@ export interface StatusDrillDownInput extends DrillDownPeriodInput {
   pageSize?: number;
 }
 
-export async function getStatusDrillDown(args: StatusDrillDownInput) {
+export async function getStatusDrillDown(
+  connectionId: string,
+  args: StatusDrillDownInput,
+) {
   const ttl = args.ttlSeconds ?? DEFAULT_TTL_SECONDS;
   const excludeMatrixIA = args.excludeMatrixIA !== false;
   const page = Math.max(1, args.page ?? 1);
@@ -694,7 +700,6 @@ export async function getStatusDrillDown(args: StatusDrillDownInput) {
     fetcher: () =>
       withChatwootResilience<StatusDrillDownData>(
         async () => {
-          const pool = getChatwootPool();
           const matrixClause = excludeMatrixIA ? " AND c.inbox_id <> 31" : "";
 
           const sqlTotal = `
@@ -752,9 +757,9 @@ export async function getStatusDrillDown(args: StatusDrillDownInput) {
           const listParams = [...baseParams, pageSize, offset];
 
           const [totalRes, byInboxRes, listRes] = await Promise.all([
-            pool.query<RowCount>(sqlTotal, baseParams),
-            pool.query<RowInbox>(sqlByInbox, baseParams),
-            pool.query<RowConversation>(sqlList, listParams),
+            queryNexusChat<RowCount>(connectionId, sqlTotal, baseParams),
+            queryNexusChat<RowInbox>(connectionId, sqlByInbox, baseParams),
+            queryNexusChat<RowConversation>(connectionId, sqlList, listParams),
           ]);
 
           return {
@@ -794,6 +799,7 @@ export async function getStatusDrillDown(args: StatusDrillDownInput) {
  * payloads enquanto a UI antiga é gradualmente migrada.
  */
 export async function getOpenDrillDown(
+  connectionId: string,
   args: DrillDownPeriodInput & { page?: number; pageSize?: number },
 ) {
   const ttl = args.ttlSeconds ?? DEFAULT_TTL_SECONDS;
@@ -823,7 +829,6 @@ export async function getOpenDrillDown(
     fetcher: () =>
       withChatwootResilience<OpenDrillDownData>(
         async () => {
-          const pool = getChatwootPool();
           const matrixClause = excludeMatrixIA ? " AND c.inbox_id <> 31" : "";
 
           // Distribuição por status no recorte do período (open/pending/snoozed)
@@ -841,7 +846,7 @@ export async function getOpenDrillDown(
           `;
 
           const [statusResult, byStatusRes] = await Promise.all([
-            getStatusDrillDown({
+            getStatusDrillDown(connectionId, {
               accountId: args.accountId,
               period: args.period,
               excludeMatrixIA,
@@ -850,7 +855,7 @@ export async function getOpenDrillDown(
               page,
               pageSize,
             }),
-            pool.query<RowStatus>(sqlByStatus, [
+            queryNexusChat<RowStatus>(connectionId, sqlByStatus, [
               args.accountId,
               args.period.start,
               args.period.end,
@@ -876,7 +881,10 @@ export async function getOpenDrillDown(
 /**
  * Drill-down "Taxa de Resolução".
  */
-export async function getResolutionRateDrillDown(args: DrillDownPeriodInput) {
+export async function getResolutionRateDrillDown(
+  connectionId: string,
+  args: DrillDownPeriodInput,
+) {
   const ttl = args.ttlSeconds ?? DEFAULT_TTL_SECONDS;
   const excludeMatrixIA = args.excludeMatrixIA !== false;
   const tz = await getPlatformTz();
@@ -909,7 +917,6 @@ export async function getResolutionRateDrillDown(args: DrillDownPeriodInput) {
     fetcher: () =>
       withChatwootResilience<ResolutionRateDrillDownData>(
         async () => {
-          const pool = getChatwootPool();
           const matrixClause = excludeMatrixIA ? " AND c.inbox_id <> 31" : "";
 
           // Histórico bucketed: recebidas vs resolvidas no mesmo bucket de
@@ -978,24 +985,29 @@ export async function getResolutionRateDrillDown(args: DrillDownPeriodInput) {
 
           const [historyRes, aggCurrentRes, topAgentsRes, aggPrevRes] =
             await Promise.all([
-              pool.query<RowChart>(sqlHistory, [
+              queryNexusChat<RowChart>(connectionId, sqlHistory, [
                 args.accountId,
                 args.period.start,
                 args.period.end,
                 tz,
               ]),
-              pool.query<{ received: string; resolved: string }>(sqlAggCurrent, [
-                args.accountId,
-                args.period.start,
-                args.period.end,
-              ]),
-              pool.query<RowAgentRate>(sqlTopAgents, [
+              queryNexusChat<{ received: string; resolved: string }>(
+                connectionId,
+                sqlAggCurrent,
+                [
+                  args.accountId,
+                  args.period.start,
+                  args.period.end,
+                ],
+              ),
+              queryNexusChat<RowAgentRate>(connectionId, sqlTopAgents, [
                 args.accountId,
                 args.period.start,
                 args.period.end,
               ]),
               args.prevPeriod
-                ? pool.query<{ received: string; resolved: string }>(
+                ? queryNexusChat<{ received: string; resolved: string }>(
+                    connectionId,
                     sqlAggCurrent,
                     [
                       args.accountId,
@@ -1075,7 +1087,7 @@ export async function getResolutionRateDrillDown(args: DrillDownPeriodInput) {
 
 /* ----------------------------- noResponse ----------------------------- */
 
-interface RowNoResponseFull {
+type RowNoResponseFull = {
   id: number;
   display_id: number;
   contact_name: string | null;
@@ -1085,16 +1097,16 @@ interface RowNoResponseFull {
   waiting_seconds: number;
   last_incoming_at: Date;
   snippet: string | null;
-}
-interface RowNoResponseAggLocal {
+};
+type RowNoResponseAggLocal = {
   total: number;
   oldest_seconds: number;
-}
-interface RowNoResponseGroup {
+};
+type RowNoResponseGroup = {
   id: number | null;
   name: string;
   total: string;
-}
+};
 
 /**
  * Drill-down "Conversas sem resposta no período".
@@ -1102,7 +1114,10 @@ interface RowNoResponseGroup {
  * Definição: status=0 + última mensagem da conversa é do contato (message_type=0).
  * Coorte: created_at ∈ período.
  */
-export async function getNoResponseDrillDown(args: DrillDownPeriodInput) {
+export async function getNoResponseDrillDown(
+  connectionId: string,
+  args: DrillDownPeriodInput,
+) {
   const ttl = args.ttlSeconds ?? DEFAULT_TTL_SECONDS;
   const excludeMatrixIA = args.excludeMatrixIA !== false;
 
@@ -1126,7 +1141,6 @@ export async function getNoResponseDrillDown(args: DrillDownPeriodInput) {
     fetcher: () =>
       withChatwootResilience<NoResponseDrillDownData>(
         async () => {
-          const pool = getChatwootPool();
           const matrixClause = excludeMatrixIA ? " AND c.inbox_id <> 31" : "";
 
           const sqlAgg = `
@@ -1252,10 +1266,26 @@ export async function getNoResponseDrillDown(args: DrillDownPeriodInput) {
           ];
 
           const [aggRes, listRes, byInboxRes, byAssigneeRes] = await Promise.all([
-            pool.query<RowNoResponseAggLocal>(sqlAgg, periodParams),
-            pool.query<RowNoResponseFull>(sqlList, periodParams),
-            pool.query<RowNoResponseGroup>(sqlByInbox, periodParams),
-            pool.query<RowNoResponseGroup>(sqlByAssignee, periodParams),
+            queryNexusChat<RowNoResponseAggLocal>(
+              connectionId,
+              sqlAgg,
+              periodParams,
+            ),
+            queryNexusChat<RowNoResponseFull>(
+              connectionId,
+              sqlList,
+              periodParams,
+            ),
+            queryNexusChat<RowNoResponseGroup>(
+              connectionId,
+              sqlByInbox,
+              periodParams,
+            ),
+            queryNexusChat<RowNoResponseGroup>(
+              connectionId,
+              sqlByAssignee,
+              periodParams,
+            ),
           ]);
 
           const agg = aggRes.rows[0];
@@ -1295,7 +1325,7 @@ export async function getNoResponseDrillDown(args: DrillDownPeriodInput) {
 
 /* ------------------------------ byTeam ------------------------------ */
 
-interface RowByTeamItem {
+type RowByTeamItem = {
   id: number;
   display_id: number;
   contact_name: string | null;
@@ -1305,21 +1335,24 @@ interface RowByTeamItem {
   status: number;
   created_at: Date;
   last_activity_at: Date;
-}
+};
 
 /**
  * Drill-down de departamento (incluindo bucket "Sem departamento" quando teamId=null).
  *
  * Coorte: created_at ∈ período + status IN (0, 2, 3) (mesmo recorte do card).
  */
-export async function getByTeamDrillDown(args: {
-  accountId: number;
-  period: { start: Date; end: Date };
-  /** null = bucket "Sem departamento" */
-  teamId: number | null;
-  excludeMatrixIA?: boolean;
-  ttlSeconds?: number;
-}) {
+export async function getByTeamDrillDown(
+  connectionId: string,
+  args: {
+    accountId: number;
+    period: { start: Date; end: Date };
+    /** null = bucket "Sem departamento" */
+    teamId: number | null;
+    excludeMatrixIA?: boolean;
+    ttlSeconds?: number;
+  },
+) {
   const ttl = args.ttlSeconds ?? DEFAULT_TTL_SECONDS;
   const excludeMatrixIA = args.excludeMatrixIA !== false;
 
@@ -1344,7 +1377,6 @@ export async function getByTeamDrillDown(args: {
     fetcher: () =>
       withChatwootResilience<ByTeamDrillDownData>(
         async () => {
-          const pool = getChatwootPool();
           const matrixClause = excludeMatrixIA ? " AND c.inbox_id <> 31" : "";
           const teamClause =
             args.teamId === null
@@ -1412,12 +1444,13 @@ export async function getByTeamDrillDown(args: {
           `;
 
           const [totalRes, byStatusRes, listRes] = await Promise.all([
-            pool.query<{ total: string; team_name: string | null }>(
+            queryNexusChat<{ total: string; team_name: string | null }>(
+              connectionId,
               sqlTotalAndName,
               params,
             ),
-            pool.query<RowStatus>(sqlByStatus, params),
-            pool.query<RowByTeamItem>(sqlList, params),
+            queryNexusChat<RowStatus>(connectionId, sqlByStatus, params),
+            queryNexusChat<RowByTeamItem>(connectionId, sqlList, params),
           ]);
 
           const totalRow = totalRes.rows[0];

@@ -3,6 +3,7 @@
 import { getCurrentUser } from "@/lib/auth";
 import { getAccessibleAccountIds } from "@/lib/tenant";
 import { shouldExcludeMatrixIA } from "@/lib/reports/exclude-matrix-ia";
+import { getActiveConnectionId } from "@/lib/reports/active-connection";
 import type { AuthUser } from "@/lib/auth-helpers";
 import {
   getOpenDrillDown,
@@ -72,6 +73,7 @@ async function resolvePeriodRanges(period: DashboardPeriod): Promise<{
 async function authorize(accountId: number): Promise<{
   ok: true;
   excludeMatrixIA: boolean;
+  connectionId: string;
 } | {
   ok: false;
   error: string;
@@ -96,7 +98,11 @@ async function authorize(accountId: number): Promise<{
     return { ok: false, error: "Acesso negado a esta conta" };
   }
   const excludeMatrixIA = await shouldExcludeMatrixIA();
-  return { ok: true, excludeMatrixIA };
+  // WHY: connectionId resolvido via binding ativo do account → escopa as
+  // queries no pool dinâmico da nexus_chat_connection correta (multi-tenant
+  // fase 1). Erros (No/Ambiguous binding) propagam pra catch da action.
+  const connectionId = await getActiveConnectionId(authUser);
+  return { ok: true, excludeMatrixIA, connectionId };
 }
 
 export async function getReceivedDrillDownAction(args: {
@@ -109,7 +115,7 @@ export async function getReceivedDrillDownAction(args: {
     const auth = await authorize(args.accountId);
     if (!auth.ok) return { success: false, error: auth.error };
     const { current } = await resolvePeriodRanges(args.period);
-    const result = await getReceivedDrillDown({
+    const result = await getReceivedDrillDown(auth.connectionId, {
       accountId: args.accountId,
       period: current,
       excludeMatrixIA: auth.excludeMatrixIA,
@@ -133,7 +139,7 @@ export async function getResolvedDrillDownAction(args: {
     const auth = await authorize(args.accountId);
     if (!auth.ok) return { success: false, error: auth.error };
     const { current } = await resolvePeriodRanges(args.period);
-    const result = await getResolvedDrillDown({
+    const result = await getResolvedDrillDown(auth.connectionId, {
       accountId: args.accountId,
       period: current,
       excludeMatrixIA: auth.excludeMatrixIA,
@@ -162,7 +168,7 @@ export async function getStatusDrillDownAction(args: {
     const auth = await authorize(args.accountId);
     if (!auth.ok) return { success: false, error: auth.error };
     const { current } = await resolvePeriodRanges(args.period);
-    const result = await getStatusDrillDown({
+    const result = await getStatusDrillDown(auth.connectionId, {
       accountId: args.accountId,
       period: current,
       excludeMatrixIA: auth.excludeMatrixIA,
@@ -187,7 +193,7 @@ export async function getOpenDrillDownAction(args: {
     const auth = await authorize(args.accountId);
     if (!auth.ok) return { success: false, error: auth.error };
     const { current } = await resolvePeriodRanges(args.period);
-    const result = await getOpenDrillDown({
+    const result = await getOpenDrillDown(auth.connectionId, {
       accountId: args.accountId,
       period: current,
       excludeMatrixIA: auth.excludeMatrixIA,
@@ -209,7 +215,7 @@ export async function getNoResponseDrillDownAction(args: {
     const auth = await authorize(args.accountId);
     if (!auth.ok) return { success: false, error: auth.error };
     const { current } = await resolvePeriodRanges(args.period);
-    const result = await getNoResponseDrillDown({
+    const result = await getNoResponseDrillDown(auth.connectionId, {
       accountId: args.accountId,
       period: current,
       excludeMatrixIA: auth.excludeMatrixIA,
@@ -230,7 +236,7 @@ export async function getByTeamDrillDownAction(args: {
     const auth = await authorize(args.accountId);
     if (!auth.ok) return { success: false, error: auth.error };
     const { current } = await resolvePeriodRanges(args.period);
-    const result = await getByTeamDrillDown({
+    const result = await getByTeamDrillDown(auth.connectionId, {
       accountId: args.accountId,
       period: current,
       teamId: args.teamId,
@@ -251,7 +257,7 @@ export async function getResolutionRateDrillDownAction(args: {
     const auth = await authorize(args.accountId);
     if (!auth.ok) return { success: false, error: auth.error };
     const { current, prev } = await resolvePeriodRanges(args.period);
-    const result = await getResolutionRateDrillDown({
+    const result = await getResolutionRateDrillDown(auth.connectionId, {
       accountId: args.accountId,
       period: current,
       prevPeriod: prev,
