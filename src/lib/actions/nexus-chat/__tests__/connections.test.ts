@@ -36,7 +36,7 @@ import {
   updateNexusChatConnection,
   softDeleteNexusChatConnection,
   testNexusChatConnection,
-  regenerateConnectionWebhookToken,
+  updateConnectionPollingInterval,
 } from "../connections";
 
 const userMock = getCurrentUser as jest.MockedFunction<typeof getCurrentUser>;
@@ -107,7 +107,7 @@ describe("createNexusChatConnection", () => {
     );
   });
 
-  it("v0.39: gera só webhookToken (HMAC removido, Account Webhooks Chatwoot não suportam)", async () => {
+  it("v0.41: NÃO gera webhookToken (webhook removido) + default pollingIntervalSeconds=30", async () => {
     userMock.mockResolvedValue({
       id: "u1",
       platformRole: "super_admin",
@@ -117,16 +117,34 @@ describe("createNexusChatConnection", () => {
     const result = await createNexusChatConnection(validInput);
 
     expect(result.success).toBe(true);
+    const callArg = createMock.mock.calls[0]?.[0] as {
+      data: Record<string, unknown>;
+    };
+    expect(callArg.data.webhookToken).toBeUndefined();
+    expect(callArg.data.webhookSecretEnc).toBeUndefined();
+    expect(callArg.data.pollingIntervalSeconds).toBe(30);
+  });
+
+  it("v0.41: aceita pollingIntervalSeconds custom (45) e passa pro Prisma .create()", async () => {
+    userMock.mockResolvedValue({
+      id: "u1",
+      platformRole: "super_admin",
+    } as never);
+    createMock.mockResolvedValue({ id: "conn-1" });
+
+    const result = await createNexusChatConnection({
+      ...validInput,
+      pollingIntervalSeconds: 45,
+    });
+
+    expect(result.success).toBe(true);
     expect(createMock).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          webhookToken: expect.stringMatching(/^[0-9a-f]{64}$/),
+          pollingIntervalSeconds: 45,
         }),
       }),
     );
-    // Não deve haver webhookSecretEnc na criação (apenas token).
-    const callArg = createMock.mock.calls[0]?.[0] as { data: Record<string, unknown> };
-    expect(callArg.data.webhookSecretEnc).toBeUndefined();
   });
 
   it("nao expoe password no audit details", async () => {
@@ -226,6 +244,31 @@ describe("updateNexusChatConnection", () => {
     expect(updateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ passwordEnc: "enc:newsecret" }),
+      }),
+    );
+  });
+
+  it("v0.41: passa pollingIntervalSeconds no .update() data", async () => {
+    userMock.mockResolvedValue({
+      id: "u1",
+      platformRole: "super_admin",
+    } as never);
+    findUniqueMock.mockResolvedValue({
+      id: "c1",
+      passwordEnc: "enc:p",
+      name: "x",
+    });
+    updateMock.mockResolvedValue({ id: "c1" });
+
+    await updateNexusChatConnection("c1", {
+      ...validInput,
+      password: "",
+      pollingIntervalSeconds: 60,
+    });
+
+    expect(updateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ pollingIntervalSeconds: 60 }),
       }),
     );
   });
@@ -341,56 +384,76 @@ describe("testNexusChatConnection", () => {
   });
 });
 
-describe("regenerateConnectionWebhookToken", () => {
-  it("super_admin regenera secret + audit log + retorna novo secretPlain", async () => {
+describe("updateConnectionPollingInterval", () => {
+  it("rejeita valor < 20", async () => {
     userMock.mockResolvedValue({
       id: "u1",
       platformRole: "super_admin",
     } as never);
-    findUniqueMock.mockResolvedValue({ id: "c1", name: "Padrão (legado)" });
-    updateMock.mockResolvedValue({ id: "c1" });
 
-    const result = await regenerateConnectionWebhookToken("c1");
+    const r = await updateConnectionPollingInterval("conn-1", 10);
 
-    expect(result.success).toBe(true);
-    expect(result.data?.webhookToken).toMatch(/^[0-9a-f]{64}$/);
-    expect(updateMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: "c1" },
-        data: expect.objectContaining({
-          webhookToken: expect.any(String),
-        }),
-      }),
-    );
-    expect(auditMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: "webhook_token_regenerated",
-        targetType: "nexus_chat_connection",
-        targetId: "c1",
-      }),
-    );
-  });
-
-  it("admin (não super_admin) é rejeitado", async () => {
-    userMock.mockResolvedValue({ id: "u1", platformRole: "admin" } as never);
-
-    const result = await regenerateConnectionWebhookToken("c1");
-
-    expect(result.success).toBe(false);
-    expect(result.error).toMatch(/super_admin/i);
+    expect(r.success).toBe(false);
+    expect(r.error).toMatch(/mínimo de 20/i);
     expect(updateMock).not.toHaveBeenCalled();
   });
 
-  it("retorna erro se conexão não existe ou foi deletada", async () => {
+  it("aceita 30 e atualiza Prisma com pollingIntervalSeconds", async () => {
     userMock.mockResolvedValue({
       id: "u1",
       platformRole: "super_admin",
     } as never);
-    findUniqueMock.mockResolvedValue(null);
+    findUniqueMock.mockResolvedValue({
+      id: "conn-1",
+      name: "Padrão",
+      pollingIntervalSeconds: 60,
+    });
+    updateMock.mockResolvedValue({} as never);
 
-    const result = await regenerateConnectionWebhookToken("c-nonexistent");
+    const r = await updateConnectionPollingInterval("conn-1", 30);
 
-    expect(result.success).toBe(false);
+    expect(r.success).toBe(true);
+    expect(updateMock).toHaveBeenCalledWith({
+      where: { id: "conn-1" },
+      data: { pollingIntervalSeconds: 30 },
+    });
+  });
+
+  it("audita polling_interval_updated com before/after", async () => {
+    userMock.mockResolvedValue({
+      id: "u1",
+      platformRole: "super_admin",
+    } as never);
+    findUniqueMock.mockResolvedValue({
+      id: "conn-1",
+      name: "Padrão",
+      pollingIntervalSeconds: 60,
+    });
+    updateMock.mockResolvedValue({} as never);
+
+    await updateConnectionPollingInterval("conn-1", 25);
+
+    expect(auditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "polling_interval_updated",
+        targetType: "nexus_chat_connection",
+        targetId: "conn-1",
+        details: expect.objectContaining({
+          name: "Padrão",
+          before: 60,
+          after: 25,
+        }),
+      }),
+    );
+  });
+
+  it("rejeita user não super_admin", async () => {
+    userMock.mockResolvedValue({ id: "u1", platformRole: "manager" } as never);
+
+    const r = await updateConnectionPollingInterval("conn-1", 30);
+
+    expect(r.success).toBe(false);
+    expect(r.error).toMatch(/super_admin/i);
     expect(updateMock).not.toHaveBeenCalled();
   });
 });

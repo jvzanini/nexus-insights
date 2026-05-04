@@ -26,7 +26,6 @@ import {
   invalidateNexusChatPool,
   queryNexusChat,
 } from "@/lib/nexus-chat/pool";
-import { generateWebhookToken } from "@/lib/nexus-chat/webhook-credentials";
 
 type ActionResult<T = unknown> = {
   success: boolean;
@@ -45,6 +44,12 @@ const ConnectionInputSchema = z.object({
   password: z.string().max(500), // vazio em update = manter
   sslMode: SslModeSchema.default("prefer"),
   applicationName: z.string().max(100).default("nexus-insights"),
+  pollingIntervalSeconds: z
+    .number()
+    .int()
+    .min(20, "Intervalo mínimo de 20 segundos.")
+    .max(86400, "Intervalo máximo de 86400 segundos (1 dia).")
+    .default(30),
 });
 
 export type NexusChatConnectionInput = z.input<typeof ConnectionInputSchema>;
@@ -76,11 +81,6 @@ export async function createNexusChatConnection(
     return { success: false, error: "Senha obrigatória ao criar conexão." };
   }
 
-  // Toda conexão nova nasce com webhook token (32 bytes random).
-  // Account Webhooks no Chatwoot self-hosted não suportam HMAC — logo o
-  // token na URL é a única autenticação. webhook_secret_enc fica NULL.
-  const webhookToken = generateWebhookToken();
-
   const conn = await prisma.nexusChatConnection.create({
     data: {
       name: parsed.data.name,
@@ -93,7 +93,7 @@ export async function createNexusChatConnection(
       applicationName: parsed.data.applicationName,
       status: "active",
       createdById: auth.userId,
-      webhookToken,
+      pollingIntervalSeconds: parsed.data.pollingIntervalSeconds,
     },
   });
 
@@ -110,42 +110,11 @@ export async function createNexusChatConnection(
       username: parsed.data.username,
       sslMode: parsed.data.sslMode,
       applicationName: parsed.data.applicationName,
-      webhookTokenGenerated: true,
+      pollingIntervalSeconds: parsed.data.pollingIntervalSeconds,
     },
   });
 
   return { success: true, data: { id: conn.id } };
-}
-
-export async function regenerateConnectionWebhookToken(
-  id: string,
-): Promise<ActionResult<{ webhookToken: string }>> {
-  const auth = await requireSuperAdmin();
-  if (!auth.ok) return { success: false, error: auth.error };
-
-  const before = await prisma.nexusChatConnection.findUnique({
-    where: { id, deletedAt: null },
-  });
-  if (!before) {
-    return { success: false, error: "Conexão não encontrada." };
-  }
-
-  const webhookToken = generateWebhookToken();
-
-  await prisma.nexusChatConnection.update({
-    where: { id },
-    data: { webhookToken },
-  });
-
-  await logAudit({
-    userId: auth.userId,
-    action: "webhook_token_regenerated",
-    targetType: "nexus_chat_connection",
-    targetId: id,
-    details: { name: before.name },
-  });
-
-  return { success: true, data: { webhookToken } };
 }
 
 export async function updateNexusChatConnection(
@@ -176,6 +145,7 @@ export async function updateNexusChatConnection(
     username: parsed.data.username,
     sslMode: parsed.data.sslMode,
     applicationName: parsed.data.applicationName,
+    pollingIntervalSeconds: parsed.data.pollingIntervalSeconds,
   };
   const passwordChanged = Boolean(parsed.data.password);
   if (passwordChanged) {
@@ -297,4 +267,69 @@ export async function testNexusChatConnection(
 
   if (success) return { success: true, data: { durationMs } };
   return { success: false, error: errorMessage ?? "Erro desconhecido." };
+}
+
+const PollingIntervalSchema = z
+  .number()
+  .int()
+  .min(20, "Intervalo mínimo de 20 segundos.")
+  .max(86400, "Intervalo máximo de 86400 segundos (1 dia).");
+
+/**
+ * Atualiza apenas o `pollingIntervalSeconds` da connection. Server Action
+ * separada de `updateNexusChatConnection` porque o user pode querer ajustar
+ * sem mexer em host/senha.
+ *
+ * Validação: min 20s (também enforced por CHECK constraint no Postgres).
+ *
+ * NOTA: A mudança é detectada pelo scheduler no próximo tick (≤5s).
+ * Não invalida pool nem rota de leitura — não publica Pub/Sub.
+ *
+ * Audita `polling_interval_updated` 100% (raro evento).
+ */
+export async function updateConnectionPollingInterval(
+  id: string,
+  intervalSeconds: number,
+): Promise<ActionResult<{ id: string; intervalSeconds: number }>> {
+  const auth = await requireSuperAdmin();
+  if (!auth.ok) return { success: false, error: auth.error };
+
+  const parsed = PollingIntervalSchema.safeParse(intervalSeconds);
+  if (!parsed.success) {
+    const firstIssue = parsed.error.issues[0];
+    return {
+      success: false,
+      error: firstIssue?.message ?? "Intervalo inválido.",
+    };
+  }
+
+  const before = await prisma.nexusChatConnection.findUnique({
+    where: { id, deletedAt: null },
+    select: { id: true, pollingIntervalSeconds: true, name: true },
+  });
+  if (!before) {
+    return { success: false, error: "Conexão não encontrada." };
+  }
+
+  await prisma.nexusChatConnection.update({
+    where: { id },
+    data: { pollingIntervalSeconds: parsed.data },
+  });
+
+  await logAudit({
+    userId: auth.userId,
+    action: "polling_interval_updated",
+    targetType: "nexus_chat_connection",
+    targetId: id,
+    details: {
+      name: before.name,
+      before: before.pollingIntervalSeconds,
+      after: parsed.data,
+    },
+  });
+
+  return {
+    success: true,
+    data: { id, intervalSeconds: parsed.data },
+  };
 }
