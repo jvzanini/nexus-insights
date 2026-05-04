@@ -7,6 +7,8 @@ import {
   ConnectionList,
   type ConnectionListItem,
 } from "@/components/settings/nexus-chat/connection-list";
+import { TourTriggerButton } from "@/components/tour/tour-trigger-button";
+import { listaTour } from "@/components/tour/tours/bancos-de-dados/lista";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 
@@ -78,6 +80,7 @@ export default async function Page() {
         icon={Database}
         title="Bancos de dados"
         subtitle="Gerencie as conexões a bancos Postgres do Nexus Chat e as empresas vinculadas (account_id)."
+        actions={<TourTriggerButton config={listaTour} />}
       />
 
       <ConnectionList connections={items} />

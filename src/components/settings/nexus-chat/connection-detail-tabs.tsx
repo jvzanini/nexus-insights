@@ -7,6 +7,12 @@ import { Database, HeartPulse, Radio, Settings2 } from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TourTriggerButton } from "@/components/tour/tour-trigger-button";
+import type { TourConfig } from "@/components/tour/tour-provider";
+import { conexaoTour } from "@/components/tour/tours/bancos-de-dados/conexao";
+import { sincronizacaoTour } from "@/components/tour/tours/bancos-de-dados/sincronizacao";
+import { jobsTour } from "@/components/tour/tours/bancos-de-dados/jobs";
+import { saudeTour } from "@/components/tour/tours/bancos-de-dados/saude";
 import type { BindingTableItem } from "./bindings-table";
 import type { JobsStatusRow } from "@/lib/actions/jobs";
 
@@ -61,6 +67,17 @@ type TabKey = "conexao" | "sincronizacao" | "jobs" | "saude";
 
 const TAB_KEYS: TabKey[] = ["conexao", "sincronizacao", "jobs", "saude"];
 
+/**
+ * Tour exibido pelo botão "?" muda conforme a tab ativa — cada tab tem
+ * seu próprio fluxo guiado, então não faz sentido um único tour global.
+ */
+const TOUR_BY_TAB: Record<TabKey, TourConfig> = {
+  conexao: conexaoTour,
+  sincronizacao: sincronizacaoTour,
+  jobs: jobsTour,
+  saude: saudeTour,
+};
+
 interface Props {
   connection: ConnectionDetailData;
   bindings: BindingTableItem[];
@@ -105,24 +122,38 @@ export function ConnectionDetailTabs({
       orientation="horizontal"
       className="w-full"
     >
-      <TabsList variant="line" className="overflow-x-auto">
-        <TabsTrigger value="conexao">
-          <Database className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-          Conexão
-        </TabsTrigger>
-        <TabsTrigger value="sincronizacao">
-          <Radio className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-          Sincronização
-        </TabsTrigger>
-        <TabsTrigger value="jobs">
-          <Settings2 className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-          Jobs
-        </TabsTrigger>
-        <TabsTrigger value="saude">
-          <HeartPulse className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-          Saúde
-        </TabsTrigger>
-      </TabsList>
+      <div className="flex items-center justify-between gap-2">
+        <TabsList variant="line" className="overflow-x-auto">
+          <TabsTrigger value="conexao">
+            <span data-tour="aba-conexao" className="inline-flex items-center">
+              <Database className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+              Conexão
+            </span>
+          </TabsTrigger>
+          <TabsTrigger value="sincronizacao">
+            <span
+              data-tour="aba-sincronizacao"
+              className="inline-flex items-center"
+            >
+              <Radio className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+              Sincronização
+            </span>
+          </TabsTrigger>
+          <TabsTrigger value="jobs">
+            <span data-tour="aba-jobs" className="inline-flex items-center">
+              <Settings2 className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+              Jobs
+            </span>
+          </TabsTrigger>
+          <TabsTrigger value="saude">
+            <span data-tour="aba-saude" className="inline-flex items-center">
+              <HeartPulse className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+              Saúde
+            </span>
+          </TabsTrigger>
+        </TabsList>
+        <TourTriggerButton config={TOUR_BY_TAB[activeTab]} />
+      </div>
 
       <TabsContent value="conexao" className="mt-4">
         <ConexaoTab connection={connection} bindings={bindings} />

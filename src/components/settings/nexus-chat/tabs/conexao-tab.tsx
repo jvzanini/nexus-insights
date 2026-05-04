@@ -74,12 +74,16 @@ export function ConexaoTab({
           <h3 className="text-sm font-medium text-foreground">
             Empresas vinculadas
           </h3>
-          <OnboardingWizardLauncher
-            connections={[wizardConnection]}
-            prefilledConnectionId={connection.id}
-          />
+          <div data-tour="conexao-add-empresa">
+            <OnboardingWizardLauncher
+              connections={[wizardConnection]}
+              prefilledConnectionId={connection.id}
+            />
+          </div>
         </div>
-        <BindingsTable connectionId={connection.id} bindings={bindings} />
+        <div data-tour="conexao-bindings-table">
+          <BindingsTable connectionId={connection.id} bindings={bindings} />
+        </div>
       </section>
     </div>
   );
