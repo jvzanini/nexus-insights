@@ -3,6 +3,9 @@
  *
  * Estratégia: mockar `@/lib/pg-pool` (raw SQL via pgPool.query) — padrão
  * canônico do projeto (ver get-nex-bubble-enabled.test.ts).
+ *
+ * L6 multi-tenant: ganha cobertura de filtro `connection_id` opcional em
+ * readFactsDaily, readFactsHourly e readFactsMeta.
  */
 
 jest.mock("@/lib/pg-pool", () => ({
@@ -15,6 +18,8 @@ import {
   readFactsHourly,
   readFactsMeta,
 } from "../facts";
+
+const FAKE_CONN = "5e6a4eef-2a23-4f33-8d4e-1a2b3c4d5e6f";
 
 const mockedQuery = pgPool.query as jest.MockedFunction<typeof pgPool.query>;
 
@@ -95,6 +100,41 @@ describe("readFactsDaily — by_account", () => {
     const sql: string = mockedQuery.mock.calls[0][0] as string;
     expect(sql).toContain("chatwoot_facts_daily_by_account");
   });
+
+  it("sem connectionId, NÃO filtra por connection_id (compat L6)", async () => {
+    mockedQuery.mockResolvedValueOnce({
+      rows: [makeRawDailyRow()],
+      rowCount: 1,
+    } as never);
+
+    await readFactsDaily({
+      accountId: 1,
+      start: new Date("2026-04-01"),
+      end: new Date("2026-04-30"),
+    });
+
+    const sql: string = mockedQuery.mock.calls[0][0] as string;
+    expect(sql).not.toMatch(/connection_id\s*=/);
+  });
+
+  it("com connectionId, filtra WHERE connection_id = $X", async () => {
+    mockedQuery.mockResolvedValueOnce({
+      rows: [makeRawDailyRow()],
+      rowCount: 1,
+    } as never);
+
+    await readFactsDaily({
+      connectionId: FAKE_CONN,
+      accountId: 1,
+      start: new Date("2026-04-01"),
+      end: new Date("2026-04-30"),
+    });
+
+    const sql: string = mockedQuery.mock.calls[0][0] as string;
+    const params = mockedQuery.mock.calls[0][1] as unknown[];
+    expect(sql).toMatch(/connection_id\s*=\s*\$\d+/);
+    expect(params).toContain(FAKE_CONN);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -118,6 +158,26 @@ describe("readFactsDaily — by_inbox", () => {
 
     const sql: string = mockedQuery.mock.calls[0][0] as string;
     expect(sql).toContain("chatwoot_facts_daily_by_inbox");
+  });
+
+  it("com connectionId em by_inbox, filtra connection_id = $X", async () => {
+    mockedQuery.mockResolvedValueOnce({
+      rows: [],
+      rowCount: 0,
+    } as never);
+
+    await readFactsDaily({
+      connectionId: FAKE_CONN,
+      accountId: 1,
+      start: new Date("2026-04-01"),
+      end: new Date("2026-04-30"),
+      dimension: "by_inbox",
+    });
+
+    const sql: string = mockedQuery.mock.calls[0][0] as string;
+    const params = mockedQuery.mock.calls[0][1] as unknown[];
+    expect(sql).toMatch(/connection_id\s*=\s*\$\d+/);
+    expect(params).toContain(FAKE_CONN);
   });
 });
 
@@ -144,6 +204,29 @@ describe("readFactsDaily — dimensionIds filter", () => {
     expect(sql).toMatch(/ANY\(\$\d+\)/);
     expect(params).toContainEqual([1, 2, 3]);
   });
+
+  it("dimensionIds + connectionId convivem (params em ordem correta)", async () => {
+    mockedQuery.mockResolvedValueOnce({
+      rows: [],
+      rowCount: 0,
+    } as never);
+
+    await readFactsDaily({
+      connectionId: FAKE_CONN,
+      accountId: 1,
+      start: new Date("2026-04-01"),
+      end: new Date("2026-04-30"),
+      dimension: "by_agent",
+      dimensionIds: [1, 2, 3],
+    });
+
+    const sql: string = mockedQuery.mock.calls[0][0] as string;
+    const params = mockedQuery.mock.calls[0][1] as unknown[];
+    expect(sql).toMatch(/ANY\(\$\d+\)/);
+    expect(sql).toMatch(/connection_id\s*=\s*\$\d+/);
+    expect(params).toContainEqual([1, 2, 3]);
+    expect(params).toContain(FAKE_CONN);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -167,6 +250,27 @@ describe("readFactsDaily — excludeMatrixIA by_account", () => {
     expect(sql).toContain("LEFT JOIN");
     expect(sql).toContain("chatwoot_facts_daily_by_inbox");
     expect(sql).toContain("31");
+  });
+
+  it("excludeMatrixIA + connectionId filtram nas duas tabelas (a + i)", async () => {
+    mockedQuery.mockResolvedValueOnce({
+      rows: [makeRawDailyRow()],
+      rowCount: 1,
+    } as never);
+
+    await readFactsDaily({
+      connectionId: FAKE_CONN,
+      accountId: 1,
+      start: new Date("2026-04-01"),
+      end: new Date("2026-04-30"),
+      excludeMatrixIA: true,
+    });
+
+    const sql: string = mockedQuery.mock.calls[0][0] as string;
+    const params = mockedQuery.mock.calls[0][1] as unknown[];
+    expect(sql).toMatch(/a\.connection_id\s*=\s*\$\d+/);
+    expect(sql).toMatch(/i\.connection_id\s*=\s*\$\d+/);
+    expect(params).toContain(FAKE_CONN);
   });
 });
 
@@ -210,6 +314,17 @@ describe("readFactsDaily — validação de args", () => {
       }),
     ).rejects.toThrow();
   });
+
+  it("lança erro quando connectionId não é UUID válido", async () => {
+    await expect(
+      readFactsDaily({
+        connectionId: "not-a-uuid",
+        accountId: 1,
+        start: new Date("2026-04-01"),
+        end: new Date("2026-04-30"),
+      }),
+    ).rejects.toThrow();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -248,6 +363,41 @@ describe("readFactsHourly", () => {
     // ORDER BY inclui bucket_date e bucket_hour
     expect(sql).toContain("bucket_date");
     expect(sql).toContain("bucket_hour");
+  });
+
+  it("sem connectionId, NÃO filtra por connection_id (compat)", async () => {
+    mockedQuery.mockResolvedValueOnce({
+      rows: [],
+      rowCount: 0,
+    } as never);
+
+    await readFactsHourly({
+      accountId: 1,
+      start: new Date("2026-04-01"),
+      end: new Date("2026-04-30"),
+    });
+
+    const sql: string = mockedQuery.mock.calls[0][0] as string;
+    expect(sql).not.toMatch(/connection_id\s*=/);
+  });
+
+  it("com connectionId, filtra WHERE connection_id = $X", async () => {
+    mockedQuery.mockResolvedValueOnce({
+      rows: [],
+      rowCount: 0,
+    } as never);
+
+    await readFactsHourly({
+      connectionId: FAKE_CONN,
+      accountId: 1,
+      start: new Date("2026-04-01"),
+      end: new Date("2026-04-30"),
+    });
+
+    const sql: string = mockedQuery.mock.calls[0][0] as string;
+    const params = mockedQuery.mock.calls[0][1] as unknown[];
+    expect(sql).toMatch(/connection_id\s*=\s*\$\d+/);
+    expect(params).toContain(FAKE_CONN);
   });
 });
 
@@ -334,5 +484,19 @@ describe("readFactsMeta — lagSeconds e status", () => {
 
     const params = mockedQuery.mock.calls[0][1] as unknown[];
     expect(params).toContain("by_account");
+  });
+
+  it("com connectionId, filtra connection_id = $X", async () => {
+    mockedQuery.mockResolvedValueOnce({
+      rows: [makeRawMetaRow()],
+      rowCount: 1,
+    } as never);
+
+    await readFactsMeta({ connectionId: FAKE_CONN, accountId: 1 });
+
+    const sql: string = mockedQuery.mock.calls[0][0] as string;
+    const params = mockedQuery.mock.calls[0][1] as unknown[];
+    expect(sql).toMatch(/connection_id\s*=\s*\$\d+/);
+    expect(params).toContain(FAKE_CONN);
   });
 });

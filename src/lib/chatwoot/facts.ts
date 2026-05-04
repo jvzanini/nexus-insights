@@ -2,7 +2,17 @@
  * Camada de leitura das tabelas de pré-agregação (facts).
  *
  * Lê do Postgres interno via pgPool.query (raw SQL — NÃO usa Prisma client
- * para manter o path de leitura leve). NÃO usa chatwootQuery.
+ * para manter o path de leitura leve). NÃO usa chatwootQuery / queryNexusChat —
+ * todos os reads aqui são contra o banco interno (mesmo banco do app).
+ *
+ * Multi-tenant (L6 fase 1):
+ *   - Args ganham `connectionId?: string` (opcional na Fase 1 por compat).
+ *   - Quando `connectionId` é fornecido, SELECTs filtram
+ *     `WHERE connection_id = $X AND account_id = $Y`.
+ *   - Sem `connectionId`, mantém comportamento legado (filtro só por
+ *     `account_id`) — usado enquanto callers em L2/L3/L4 ainda estão sendo
+ *     refatorados. Em L9, `connectionId` vira obrigatório e este branch
+ *     é removido.
  */
 
 import { z } from "zod";
@@ -62,6 +72,12 @@ export interface FactsMeta {
 
 const ReadFactsDailyArgsSchema = z
   .object({
+    /**
+     * Opcional na Fase 1 por compat com callers ainda não refatorados.
+     * Quando presente, filtra `WHERE connection_id = $X AND account_id = $Y`.
+     * Em L9 vira obrigatório.
+     */
+    connectionId: z.string().uuid().optional(),
     accountId: z.number().int().positive(),
     start: z.date(),
     end: z.date(),
@@ -80,6 +96,7 @@ export type ReadFactsDailyArgs = z.input<typeof ReadFactsDailyArgsSchema>;
 
 const ReadFactsHourlyArgsSchema = z
   .object({
+    connectionId: z.string().uuid().optional(),
     accountId: z.number().int().positive(),
     start: z.date(),
     end: z.date(),
@@ -93,6 +110,7 @@ const ReadFactsHourlyArgsSchema = z
 export type ReadFactsHourlyArgs = z.input<typeof ReadFactsHourlyArgsSchema>;
 
 const ReadFactsMetaArgsSchema = z.object({
+  connectionId: z.string().uuid().optional(),
   accountId: z.number().int().positive(),
   dimension: z.string().optional(),
 });
@@ -177,7 +195,7 @@ function mapDailyRow(row: RawDailyRow, dimension: FactsDimension): FactsDailyRow
 
 export async function readFactsDaily(args: ReadFactsDailyArgs): Promise<FactsDailyRow[]> {
   const parsed = ReadFactsDailyArgsSchema.parse(args);
-  const { accountId, start, end, dimension, dimensionIds, excludeMatrixIA } = parsed;
+  const { connectionId, accountId, start, end, dimension, dimensionIds, excludeMatrixIA } = parsed;
 
   const startDate = start.toISOString().slice(0, 10);
   const endDate = end.toISOString().slice(0, 10);
@@ -188,6 +206,14 @@ export async function readFactsDaily(args: ReadFactsDailyArgs): Promise<FactsDai
       // Nota: percentis NÃO são subtraídos — subtração de percentis é
       // estatisticamente inválida. Aceita-se a aproximação quando Matrix IA
       // é excluída: os percentis refletem o universo completo.
+      const params: unknown[] = [accountId, startDate, endDate];
+      let connFilterA = "";
+      let connFilterI = "";
+      if (connectionId) {
+        params.push(connectionId);
+        connFilterA = `AND a.connection_id = $${params.length}`;
+        connFilterI = `AND i.connection_id = $${params.length}`;
+      }
       const sql = `
         SELECT
           a.bucket_date,
@@ -207,15 +233,23 @@ export async function readFactsDaily(args: ReadFactsDailyArgs): Promise<FactsDai
           ON  i.account_id = a.account_id
           AND i.bucket_date = a.bucket_date
           AND i.inbox_id = 31
+          ${connFilterI}
         WHERE a.account_id = $1
           AND a.bucket_date BETWEEN $2 AND $3
+          ${connFilterA}
         ORDER BY a.bucket_date ASC
       `;
-      const result = await pgPool.query<RawDailyRow>(sql, [accountId, startDate, endDate]);
+      const result = await pgPool.query<RawDailyRow>(sql, params);
       return result.rows.map((r) => mapDailyRow(r, "by_account"));
     }
 
     // Consulta simples sem exclusão
+    const params: unknown[] = [accountId, startDate, endDate];
+    let connFilter = "";
+    if (connectionId) {
+      params.push(connectionId);
+      connFilter = `AND connection_id = $${params.length}`;
+    }
     const sql = `
       SELECT
         bucket_date,
@@ -233,9 +267,10 @@ export async function readFactsDaily(args: ReadFactsDailyArgs): Promise<FactsDai
       FROM chatwoot_facts_daily_by_account
       WHERE account_id = $1
         AND bucket_date BETWEEN $2 AND $3
+        ${connFilter}
       ORDER BY bucket_date ASC
     `;
-    const result = await pgPool.query<RawDailyRow>(sql, [accountId, startDate, endDate]);
+    const result = await pgPool.query<RawDailyRow>(sql, params);
     return result.rows.map((r) => mapDailyRow(r, "by_account"));
   }
 
@@ -259,6 +294,12 @@ export async function readFactsDaily(args: ReadFactsDailyArgs): Promise<FactsDai
     matrixFilter = "AND inbox_id <> 31";
   }
 
+  let connFilter = "";
+  if (connectionId) {
+    params.push(connectionId);
+    connFilter = `AND connection_id = $${params.length}`;
+  }
+
   const sql = `
     SELECT
       bucket_date,
@@ -279,6 +320,7 @@ export async function readFactsDaily(args: ReadFactsDailyArgs): Promise<FactsDai
       AND bucket_date BETWEEN $2 AND $3
       ${anyFilter}
       ${matrixFilter}
+      ${connFilter}
     ORDER BY bucket_date ASC
   `;
 
@@ -303,13 +345,20 @@ interface RawHourlyRow {
 
 export async function readFactsHourly(args: ReadFactsHourlyArgs): Promise<FactsHourlyRow[]> {
   const parsed = ReadFactsHourlyArgsSchema.parse(args);
-  const { accountId, start, end } = parsed;
+  const { connectionId, accountId, start, end } = parsed;
 
   // excludeMatrixIA é no-op aqui — não há tabela hourly-by-inbox para subtrair.
   // Aceita-se a limitação; o dado horário reflete o universo completo de inboxes.
 
   const startDate = start.toISOString().slice(0, 10);
   const endDate = end.toISOString().slice(0, 10);
+
+  const params: unknown[] = [accountId, startDate, endDate];
+  let connFilter = "";
+  if (connectionId) {
+    params.push(connectionId);
+    connFilter = `AND connection_id = $${params.length}`;
+  }
 
   const sql = `
     SELECT
@@ -324,10 +373,11 @@ export async function readFactsHourly(args: ReadFactsHourlyArgs): Promise<FactsH
     FROM chatwoot_facts_hourly_by_account
     WHERE account_id = $1
       AND bucket_date BETWEEN $2 AND $3
+      ${connFilter}
     ORDER BY bucket_date ASC, bucket_hour ASC
   `;
 
-  const result = await pgPool.query<RawHourlyRow>(sql, [accountId, startDate, endDate]);
+  const result = await pgPool.query<RawHourlyRow>(sql, params);
   return result.rows.map((r) => ({
     bucketDate: toIsoDate(r.bucket_date),
     bucketHour: Number(r.bucket_hour),
@@ -363,14 +413,19 @@ function computeMetaStatus(lagSeconds: number | null): FactsMeta["status"] {
 
 export async function readFactsMeta(args: ReadFactsMetaArgs): Promise<FactsMeta[]> {
   const parsed = ReadFactsMetaArgsSchema.parse(args);
-  const { accountId, dimension } = parsed;
+  const { connectionId, accountId, dimension } = parsed;
 
   const params: unknown[] = [accountId];
   let dimFilter = "";
-
   if (dimension) {
     params.push(dimension);
     dimFilter = `AND dimension = $${params.length}`;
+  }
+
+  let connFilter = "";
+  if (connectionId) {
+    params.push(connectionId);
+    connFilter = `AND connection_id = $${params.length}`;
   }
 
   const sql = `
@@ -385,6 +440,7 @@ export async function readFactsMeta(args: ReadFactsMetaArgs): Promise<FactsMeta[
     FROM chatwoot_facts_meta
     WHERE account_id = $1
       ${dimFilter}
+      ${connFilter}
     ORDER BY dimension ASC
   `;
 
