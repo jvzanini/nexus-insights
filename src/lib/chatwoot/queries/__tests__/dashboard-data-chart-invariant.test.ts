@@ -10,6 +10,9 @@
  *
  * Antes de T4 (sqlChart ainda usa "WITH created_buckets") os tests falham —
  * é o estado RED da TDD.
+ *
+ * v0.37.0 (multi-tenant fase 1): dashboardData passa a receber `connectionId`
+ * como primeiro argumento e usa `queryNexusChat` em vez de `getChatwootPool`.
  */
 import { dashboardData } from "../dashboard-data";
 import type { DashboardChartPoint } from "../dashboard-data";
@@ -17,10 +20,12 @@ import { fromZonedTime } from "date-fns-tz";
 
 const mockQuery = jest.fn();
 
-jest.mock("../../pool", () => ({
-  getChatwootPool: () => ({
-    query: (...args: unknown[]) => mockQuery(...args),
-  }),
+jest.mock("@/lib/nexus-chat/pool", () => ({
+  queryNexusChat: (
+    _connectionId: string,
+    sql: string,
+    params: unknown[] = [],
+  ) => mockQuery(sql, params),
 }));
 jest.mock("../../resilience", () => ({
   withChatwootResilience: <T,>(fn: () => Promise<T>) =>
@@ -97,6 +102,8 @@ function setupOpenConvo03_05_11h() {
   });
 }
 
+const CONNECTION_ID = "5e6a4eef-2a23-4f33-8d4e-1a2b3c4d5e6f";
+
 const baseInput = (
   period: { start: Date; end: Date },
   prev: { start: Date; end: Date },
@@ -114,6 +121,7 @@ describe("dashboardData chart invariant cross-period (v0.36 B2)", () => {
   it("DIA 03/05 (granularity=hour) retorna soma open=1 no chart", async () => {
     setupOpenConvo03_05_11h();
     const result = await dashboardData(
+      CONNECTION_ID,
       baseInput(
         {
           start: fromZonedTime("2026-05-03T00:00:00", TZ),
@@ -133,6 +141,7 @@ describe("dashboardData chart invariant cross-period (v0.36 B2)", () => {
   it("SEMANA 27/04—03/05 (granularity=day) retorna open=1 no bucket 03/05", async () => {
     setupOpenConvo03_05_11h();
     const result = await dashboardData(
+      CONNECTION_ID,
       baseInput(
         {
           start: fromZonedTime("2026-04-27T00:00:00", TZ),
@@ -155,6 +164,7 @@ describe("dashboardData chart invariant cross-period (v0.36 B2)", () => {
   it("MÊS 01/05—31/05 (granularity=day) retorna open=1 no bucket 03/05", async () => {
     setupOpenConvo03_05_11h();
     const result = await dashboardData(
+      CONNECTION_ID,
       baseInput(
         {
           start: fromZonedTime("2026-05-01T00:00:00", TZ),
@@ -177,6 +187,7 @@ describe("dashboardData chart invariant cross-period (v0.36 B2)", () => {
   it("CONSISTÊNCIA: dia(soma)=semana(bucket-03/05)=mês(bucket-03/05)=1", async () => {
     setupOpenConvo03_05_11h();
     const dia = await dashboardData(
+      CONNECTION_ID,
       baseInput(
         {
           start: fromZonedTime("2026-05-03T00:00:00", TZ),
@@ -190,6 +201,7 @@ describe("dashboardData chart invariant cross-period (v0.36 B2)", () => {
       ),
     );
     const semana = await dashboardData(
+      CONNECTION_ID,
       baseInput(
         {
           start: fromZonedTime("2026-04-27T00:00:00", TZ),
@@ -203,6 +215,7 @@ describe("dashboardData chart invariant cross-period (v0.36 B2)", () => {
       ),
     );
     const mes = await dashboardData(
+      CONNECTION_ID,
       baseInput(
         {
           start: fromZonedTime("2026-05-01T00:00:00", TZ),

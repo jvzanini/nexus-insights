@@ -13,6 +13,7 @@ import {
   DASHBOARD_DEFAULTS,
 } from "@/lib/dashboard-settings";
 import { getPlatformTz, DEFAULT_TZ } from "@/lib/datetime";
+import { getActiveConnectionId } from "@/lib/reports/active-connection";
 import type { AuthUser } from "@/lib/auth-helpers";
 
 export type DashboardPeriod = "dia" | "semana" | "mes";
@@ -109,7 +110,12 @@ export async function getDashboardData(args: {
     const forcedGranularity: "hour" | "day" =
       args.period === "dia" ? "hour" : "day";
 
-    const result = await dashboardData({
+    // WHY: connectionId resolvido via binding ativo do account → escopa a
+    // query no pool dinâmico da nexus_chat_connection correta (multi-tenant
+    // fase 1).
+    const connectionId = await getActiveConnectionId(authUser);
+
+    const result = await dashboardData(connectionId, {
       accountId: args.accountId,
       period: current,
       prevPeriod: prev,

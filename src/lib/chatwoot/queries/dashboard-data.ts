@@ -17,7 +17,7 @@
  * Cache pull-through 30s. Cache key bumped (v2) — invalida v1 ao subir.
  */
 
-import { getChatwootPool } from "../pool";
+import { queryNexusChat } from "@/lib/nexus-chat/pool";
 import { withChatwootResilience } from "../resilience";
 import { withCache } from "@/lib/cache/pull-through";
 import { cacheKey, hashFilters } from "@/lib/cache/keys";
@@ -129,36 +129,39 @@ export interface DashboardDataInput {
   forcedGranularity?: "hour" | "day";
 }
 
-interface RowCount {
+// WHY: usamos `type` (não `interface`) porque o helper `queryNexusChat` exige
+// `T extends Record<string, unknown>` — interfaces não casam por falta de
+// index signature; `type` literal casa.
+type RowCount = {
   total: string;
-}
-interface RowChart {
+};
+type RowChart = {
   bucket: Date;
   received: string;
   resolved: string;
   open: string;
   pending: string;
-}
-interface RowAgent {
+};
+type RowAgent = {
   id: number | null;
   name: string | null;
   avg_seconds: string | null;
-}
-interface RowInbox {
+};
+type RowInbox = {
   id: number;
   name: string | null;
   total: string;
-}
-interface RowByTeam {
+};
+type RowByTeam = {
   id: number | null;
   name: string;
   total: string;
-}
-interface RowByStatus {
+};
+type RowByStatus = {
   status: number;
   total: string;
-}
-interface RowNoResponse {
+};
+type RowNoResponse = {
   id: number;
   display_id: number;
   contact_name: string | null;
@@ -166,12 +169,12 @@ interface RowNoResponse {
   assignee_name: string | null;
   waiting_seconds: number;
   last_incoming_at: Date;
-}
-interface RowNoResponseAgg {
+};
+type RowNoResponseAgg = {
   total: number;
   oldest_seconds: number;
-}
-interface RowRecent {
+};
+type RowRecent = {
   id: number;
   display_id: number;
   contact_name: string | null;
@@ -179,7 +182,7 @@ interface RowRecent {
   assignee_name: string | null;
   status: number;
   last_activity_at: Date;
-}
+};
 
 function pctDiff(current: number, previous: number): number | null {
   if (previous === 0) return current === 0 ? 0 : null;
@@ -193,7 +196,10 @@ const STATUS_LABELS: Record<DashboardStatusCode, DashboardByStatus["label"]> = {
   3: "Adiado",
 };
 
-export async function dashboardData(args: DashboardDataInput) {
+export async function dashboardData(
+  connectionId: string,
+  args: DashboardDataInput,
+) {
   const ttl = args.ttlSeconds ?? DEFAULT_TTL_SECONDS;
   const excludeMatrixIA = args.excludeMatrixIA !== false;
   const tz = await getPlatformTz();
@@ -227,8 +233,6 @@ export async function dashboardData(args: DashboardDataInput) {
     fetcher: () =>
       withChatwootResilience<DashboardData>(
         async () => {
-          const pool = getChatwootPool();
-
           // Granularidade: forçada pelo caller, ou hora se janela <= ~48h.
           const periodMs =
             args.period.end.getTime() - args.period.start.getTime();
@@ -523,25 +527,51 @@ export async function dashboardData(args: DashboardDataInput) {
             noResponseAggRes,
             recentRes,
           ] = await Promise.all([
-            pool.query<RowCount>(sqlReceived, periodParams),
-            pool.query<RowCount>(sqlResolved, periodParams),
-            pool.query<RowCount>(sqlOpen, periodParams),
-            pool.query<RowCount>(sqlReceivedPrev, prevPeriodParams),
-            pool.query<RowCount>(sqlResolvedPrev, prevPeriodParams),
-            pool.query<RowCount>(sqlOpen, prevPeriodParams),
-            pool.query<RowChart>(sqlChart, [
+            queryNexusChat<RowCount>(connectionId, sqlReceived, periodParams),
+            queryNexusChat<RowCount>(connectionId, sqlResolved, periodParams),
+            queryNexusChat<RowCount>(connectionId, sqlOpen, periodParams),
+            queryNexusChat<RowCount>(
+              connectionId,
+              sqlReceivedPrev,
+              prevPeriodParams,
+            ),
+            queryNexusChat<RowCount>(
+              connectionId,
+              sqlResolvedPrev,
+              prevPeriodParams,
+            ),
+            queryNexusChat<RowCount>(connectionId, sqlOpen, prevPeriodParams),
+            queryNexusChat<RowChart>(connectionId, sqlChart, [
               args.accountId,
               args.period.start,
               args.period.end,
               tz,
             ]),
-            pool.query<RowAgent>(sqlTopAgents, periodParams),
-            pool.query<RowInbox>(sqlTopInboxes, periodParams),
-            pool.query<RowByTeam>(sqlByTeam, periodParams),
-            pool.query<RowByStatus>(sqlByStatus, periodParams),
-            pool.query<RowNoResponse>(sqlNoResponse, periodParams),
-            pool.query<RowNoResponseAgg>(sqlNoResponseAgg, periodParams),
-            pool.query<RowRecent>(sqlRecent, [args.accountId]),
+            queryNexusChat<RowAgent>(connectionId, sqlTopAgents, periodParams),
+            queryNexusChat<RowInbox>(
+              connectionId,
+              sqlTopInboxes,
+              periodParams,
+            ),
+            queryNexusChat<RowByTeam>(connectionId, sqlByTeam, periodParams),
+            queryNexusChat<RowByStatus>(
+              connectionId,
+              sqlByStatus,
+              periodParams,
+            ),
+            queryNexusChat<RowNoResponse>(
+              connectionId,
+              sqlNoResponse,
+              periodParams,
+            ),
+            queryNexusChat<RowNoResponseAgg>(
+              connectionId,
+              sqlNoResponseAgg,
+              periodParams,
+            ),
+            queryNexusChat<RowRecent>(connectionId, sqlRecent, [
+              args.accountId,
+            ]),
           ]);
 
           const received = Number(receivedRes.rows[0]?.total ?? 0);
