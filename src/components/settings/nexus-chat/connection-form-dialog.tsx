@@ -24,6 +24,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { TourTriggerButton } from "@/components/tour/tour-trigger-button";
+import { editConnectionTour } from "@/components/tour/tours/bancos-de-dados/edit-connection";
 import {
   createNexusChatConnection,
   updateNexusChatConnection,
@@ -152,9 +154,12 @@ export function ConnectionFormDialog({
       <DialogContent className="sm:max-w-lg">
         <form onSubmit={handleSubmit} className="grid gap-4">
           <DialogHeader>
-            <DialogTitle>
-              {mode === "create" ? "Nova conexão" : "Editar conexão"}
-            </DialogTitle>
+            <div className="flex items-start justify-between gap-2">
+              <DialogTitle>
+                {mode === "create" ? "Nova conexão" : "Editar conexão"}
+              </DialogTitle>
+              <TourTriggerButton config={editConnectionTour} />
+            </div>
             <DialogDescription>
               Banco Postgres do Nexus Chat. As credenciais são cifradas em
               repouso (AES-256-GCM).
@@ -162,7 +167,7 @@ export function ConnectionFormDialog({
           </DialogHeader>
 
           <div className="grid gap-3">
-            <div className="grid gap-1.5">
+            <div className="grid gap-1.5" data-tour="conn-form-name">
               <Label htmlFor="conn-name">Nome</Label>
               <Input
                 id="conn-name"
@@ -175,7 +180,10 @@ export function ConnectionFormDialog({
               />
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-[1fr_120px]">
+            <div
+              className="grid gap-3 sm:grid-cols-[1fr_120px]"
+              data-tour="conn-form-host"
+            >
               <div className="grid gap-1.5">
                 <Label htmlFor="conn-host">Host</Label>
                 <Input
@@ -204,47 +212,49 @@ export function ConnectionFormDialog({
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="grid gap-1.5">
-                <Label htmlFor="conn-database">Banco</Label>
-                <Input
-                  id="conn-database"
-                  value={form.database}
-                  onChange={(e) => update("database", e.target.value)}
-                  placeholder="chatwoot"
-                  autoComplete="off"
-                  required
-                  disabled={pending}
-                />
+            <div className="grid gap-3" data-tour="conn-form-credentials">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="conn-database">Banco</Label>
+                  <Input
+                    id="conn-database"
+                    value={form.database}
+                    onChange={(e) => update("database", e.target.value)}
+                    placeholder="chatwoot"
+                    autoComplete="off"
+                    required
+                    disabled={pending}
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="conn-username">Usuário</Label>
+                  <Input
+                    id="conn-username"
+                    value={form.username}
+                    onChange={(e) => update("username", e.target.value)}
+                    placeholder="chatwoot_leitura"
+                    autoComplete="off"
+                    required
+                    disabled={pending}
+                  />
+                </div>
               </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="conn-username">Usuário</Label>
-                <Input
-                  id="conn-username"
-                  value={form.username}
-                  onChange={(e) => update("username", e.target.value)}
-                  placeholder="chatwoot_leitura"
-                  autoComplete="off"
-                  required
-                  disabled={pending}
-                />
-              </div>
-            </div>
 
-            <div className="grid gap-1.5">
-              <Label htmlFor="conn-password">Senha</Label>
-              <PasswordInput
-                id="conn-password"
-                value={form.password}
-                onChange={(value) => update("password", value)}
-                placeholder={
-                  mode === "edit"
-                    ? "Deixe em branco para manter a senha atual"
-                    : "Senha do banco"
-                }
-                autoComplete="new-password"
-                disabled={pending}
-              />
+              <div className="grid gap-1.5">
+                <Label htmlFor="conn-password">Senha</Label>
+                <PasswordInput
+                  id="conn-password"
+                  value={form.password}
+                  onChange={(value) => update("password", value)}
+                  placeholder={
+                    mode === "edit"
+                      ? "Deixe em branco para manter a senha atual"
+                      : "Senha do banco"
+                  }
+                  autoComplete="new-password"
+                  disabled={pending}
+                />
+              </div>
             </div>
 
             <div className="grid gap-1.5">
@@ -274,7 +284,7 @@ export function ConnectionFormDialog({
               </Select>
             </div>
 
-            <div className="grid gap-1.5">
+            <div className="grid gap-1.5" data-tour="conn-form-polling">
               <Label htmlFor="conn-polling">
                 Intervalo de sincronização (segundos)
               </Label>
