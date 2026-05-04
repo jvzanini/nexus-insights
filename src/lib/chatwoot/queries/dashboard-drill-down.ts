@@ -10,8 +10,23 @@
  *  - cache pull-through 30s;
  *  - resilience com fallback ao cache stale.
  *
- * Reaproveita ao máximo os SQLs do `dashboard-data.ts` mas com mais detalhe
- * (por hora completa, top 10 por inbox, listas de 20 conversas etc.).
+ * v0.42 padrão canônico (ver `src/lib/reports/canonical.ts` e
+ * `docs/runbooks/canonical-data-rules.md`):
+ *  - `getReceivedDrillDown` — único drill que filtra por `c.created_at`
+ *    (canonical "created"). KPI Recebidas é a exceção do glossário.
+ *  - `getResolvedDrillDown`, `getOpenDrillDown`/`getStatusDrillDown`,
+ *    `getNoResponseDrillDown`, `getByTeamDrillDown` — todos filtram por
+ *    `c.last_activity_at` (canonical "active") para alinhar com o KPI
+ *    correspondente.
+ *  - `getResolutionRateDrillDown` — coorte mista intencional (Apêndice A.2):
+ *    Recebidas filtra `c.created_at`, Resolvidas filtra `c.last_activity_at +
+ *    status=1`. Taxa = Resolvidas/Recebidas pode passar de 100% (equipe
+ *    trabalhando backlog); a UI clampa em 100%.
+ *  - `getNoResponseDrillDown` usa CTE canônica `last_classification_msg`
+ *    (substitui CTE inline `last_msg`).
+ *  - `matrixClause` via helper `chatwootMatrixIaClause`.
+ *
+ * Cache keys bumped: v* → canonical-v0.42 (invalida payloads anteriores).
  */
 
 import { queryNexusChat } from "@/lib/nexus-chat/pool";
@@ -19,6 +34,13 @@ import { withChatwootResilience } from "../resilience";
 import { withCache } from "@/lib/cache/pull-through";
 import { cacheKey, hashFilters } from "@/lib/cache/keys";
 import { getPlatformTz } from "@/lib/datetime";
+import {
+  buildLastClassificationMsgCte,
+  chatwootMatrixIaClause,
+  MSG_INCOMING,
+  STATUS_OPEN,
+  STATUS_RESOLVED,
+} from "@/lib/reports/canonical";
 
 const DEFAULT_TTL_SECONDS = 30;
 
@@ -221,13 +243,6 @@ type RowConversation = {
   status: number;
   last_activity_at: Date;
 };
-type RowAgentRate = {
-  id: number;
-  name: string | null;
-  received: string;
-  resolved: string;
-};
-
 const STATUS_LABELS: Record<number, string> = {
   0: "Aberta",
   1: "Resolvida",
@@ -272,7 +287,7 @@ export async function getReceivedDrillDown(
 
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-drill-received-v4",
+    name: "dashboard-drill-received-canonical-v0.42",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -283,7 +298,10 @@ export async function getReceivedDrillDown(
     fetcher: () =>
       withChatwootResilience<ReceivedDrillDownData>(
         async () => {
-          const matrixClause = excludeMatrixIA ? " AND c.inbox_id <> 31" : "";
+          // canonical "created" — único drill que filtra por c.created_at
+          // (alinhado com KPI Recebidas). matrixClause via helper canônico.
+          const matrixHelper = chatwootMatrixIaClause(excludeMatrixIA);
+          const matrixClause = matrixHelper ? ` ${matrixHelper}` : "";
 
           const sqlTotal = `
             SELECT COUNT(*)::bigint AS total
@@ -471,7 +489,7 @@ export async function getResolvedDrillDown(
 
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-drill-resolved-v4",
+    name: "dashboard-drill-resolved-canonical-v0.42",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -482,45 +500,47 @@ export async function getResolvedDrillDown(
     fetcher: () =>
       withChatwootResilience<ResolvedDrillDownData>(
         async () => {
-          const matrixClause = excludeMatrixIA ? " AND c.inbox_id <> 31" : "";
+          // canonical "active" — coorte = last_activity_at ∈ período + status=1.
+          // Alinha com KPI Resolvidas; conversas resolvidas dentro do período
+          // (mesmo que criadas antes) entram. matrixClause via helper canônico.
+          const matrixHelper = chatwootMatrixIaClause(excludeMatrixIA);
+          const matrixClause = matrixHelper ? ` ${matrixHelper}` : "";
 
-          // v0.10: coorte = created_at ∈ período (mesma de Recebidas/Abertas)
-          // garantindo que Recebidas, Resolvidas e Abertas falem da mesma coorte.
           const sqlTotal = `
             SELECT COUNT(*)::bigint AS total
             FROM conversations c
             WHERE c.account_id = $1
-              AND c.created_at >= $2
-              AND c.created_at < $3
-              AND c.status = 1
+              AND c.last_activity_at >= $2
+              AND c.last_activity_at < $3
+              AND c.status = ${STATUS_RESOLVED}
               ${matrixClause}
           `;
           const sqlChart =
             granularity === "hour"
               ? `
               SELECT
-                (date_trunc('hour', c.created_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
+                (date_trunc('hour', c.last_activity_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
                 0::bigint AS received,
                 COUNT(*)::bigint AS resolved
               FROM conversations c
               WHERE c.account_id = $1
-                AND c.created_at >= $2
-                AND c.created_at < $3
-                AND c.status = 1
+                AND c.last_activity_at >= $2
+                AND c.last_activity_at < $3
+                AND c.status = ${STATUS_RESOLVED}
                 ${matrixClause}
               GROUP BY bucket
               ORDER BY bucket ASC
             `
               : `
               SELECT
-                (date_trunc('day', c.created_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
+                (date_trunc('day', c.last_activity_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
                 0::bigint AS received,
                 COUNT(*)::bigint AS resolved
               FROM conversations c
               WHERE c.account_id = $1
-                AND c.created_at >= $2
-                AND c.created_at < $3
-                AND c.status = 1
+                AND c.last_activity_at >= $2
+                AND c.last_activity_at < $3
+                AND c.status = ${STATUS_RESOLVED}
                 ${matrixClause}
               GROUP BY bucket
               ORDER BY bucket ASC
@@ -530,22 +550,22 @@ export async function getResolvedDrillDown(
             FROM conversations c
             JOIN inboxes i ON i.id = c.inbox_id
             WHERE c.account_id = $1
-              AND c.created_at >= $2
-              AND c.created_at < $3
-              AND c.status = 1
+              AND c.last_activity_at >= $2
+              AND c.last_activity_at < $3
+              AND c.status = ${STATUS_RESOLVED}
               ${matrixClause}
             GROUP BY i.id, i.name
             ORDER BY total DESC
             LIMIT 10
           `;
           const sqlByHour = `
-            SELECT EXTRACT(HOUR FROM c.created_at AT TIME ZONE $4)::int AS hour,
+            SELECT EXTRACT(HOUR FROM c.last_activity_at AT TIME ZONE $4)::int AS hour,
                    COUNT(*)::bigint AS total
             FROM conversations c
             WHERE c.account_id = $1
-              AND c.created_at >= $2
-              AND c.created_at < $3
-              AND c.status = 1
+              AND c.last_activity_at >= $2
+              AND c.last_activity_at < $3
+              AND c.status = ${STATUS_RESOLVED}
               ${matrixClause}
             GROUP BY hour
             ORDER BY hour ASC
@@ -565,9 +585,9 @@ export async function getResolvedDrillDown(
             LEFT JOIN teams t ON t.id = c.team_id
             LEFT JOIN users u ON u.id = c.assignee_id
             WHERE c.account_id = $1
-              AND c.created_at >= $2
-              AND c.created_at < $3
-              AND c.status = 1
+              AND c.last_activity_at >= $2
+              AND c.last_activity_at < $3
+              AND c.status = ${STATUS_RESOLVED}
               ${matrixClause}
             ORDER BY c.last_activity_at DESC NULLS LAST
             LIMIT $4 OFFSET $5
@@ -654,7 +674,9 @@ export async function getResolvedDrillDown(
  * Aceita status 0 (Aberta) | 1 (Resolvida) | 2 (Pendente) | 3 (Adiada),
  * com paginação server-side (default 50/pg, cap 200).
  *
- * Coorte: created_at ∈ período + status = N.
+ * v0.42 canonical "active": coorte = last_activity_at ∈ período + status = N.
+ * Alinha com KPIs (Abertas/Resolvidas/Pendentes/Adiadas) que filtram por
+ * last_activity_at.
  *
  * Ordenação:
  *  - status=0 (abertas): `last_activity_at ASC` (mais antigas primeiro =
@@ -689,7 +711,7 @@ export async function getStatusDrillDown(
   };
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-drill-status-v4",
+    name: "dashboard-drill-status-canonical-v0.42",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -700,13 +722,16 @@ export async function getStatusDrillDown(
     fetcher: () =>
       withChatwootResilience<StatusDrillDownData>(
         async () => {
-          const matrixClause = excludeMatrixIA ? " AND c.inbox_id <> 31" : "";
+          // canonical "active" — coorte = last_activity_at ∈ período + status=N.
+          // matrixClause via helper canônico.
+          const matrixHelper = chatwootMatrixIaClause(excludeMatrixIA);
+          const matrixClause = matrixHelper ? ` ${matrixHelper}` : "";
 
           const sqlTotal = `
             SELECT COUNT(*)::bigint AS total
             FROM conversations c
             WHERE c.account_id = $1
-              AND c.created_at >= $2 AND c.created_at < $3
+              AND c.last_activity_at >= $2 AND c.last_activity_at < $3
               AND c.status = $4
               ${matrixClause}
           `;
@@ -715,7 +740,7 @@ export async function getStatusDrillDown(
             FROM conversations c
             JOIN inboxes i ON i.id = c.inbox_id
             WHERE c.account_id = $1
-              AND c.created_at >= $2 AND c.created_at < $3
+              AND c.last_activity_at >= $2 AND c.last_activity_at < $3
               AND c.status = $4
               ${matrixClause}
             GROUP BY i.id, i.name
@@ -723,7 +748,7 @@ export async function getStatusDrillDown(
             LIMIT 10
           `;
           const orderClause =
-            args.status === 0
+            args.status === STATUS_OPEN
               ? "ORDER BY c.last_activity_at ASC NULLS LAST"
               : "ORDER BY c.last_activity_at DESC NULLS LAST";
           const sqlList = `
@@ -741,7 +766,7 @@ export async function getStatusDrillDown(
             LEFT JOIN teams t ON t.id = c.team_id
             LEFT JOIN users u ON u.id = c.assignee_id
             WHERE c.account_id = $1
-              AND c.created_at >= $2 AND c.created_at < $3
+              AND c.last_activity_at >= $2 AND c.last_activity_at < $3
               AND c.status = $4
               ${matrixClause}
             ${orderClause}
@@ -818,7 +843,7 @@ export async function getOpenDrillDown(
   };
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-drill-open-v3",
+    name: "dashboard-drill-open-canonical-v0.42",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -829,7 +854,11 @@ export async function getOpenDrillDown(
     fetcher: () =>
       withChatwootResilience<OpenDrillDownData>(
         async () => {
-          const matrixClause = excludeMatrixIA ? " AND c.inbox_id <> 31" : "";
+          // canonical "active" — KPI Abertas filtra por last_activity_at;
+          // distribuição por status segue mesma coorte. matrixClause via
+          // helper canônico.
+          const matrixHelper = chatwootMatrixIaClause(excludeMatrixIA);
+          const matrixClause = matrixHelper ? ` ${matrixHelper}` : "";
 
           // Distribuição por status no recorte do período (open/pending/snoozed)
           // — só usada pela UI antiga; será removida em T8.
@@ -837,8 +866,8 @@ export async function getOpenDrillDown(
             SELECT c.status, COUNT(*)::bigint AS total
             FROM conversations c
             WHERE c.account_id = $1
-              AND c.created_at >= $2
-              AND c.created_at < $3
+              AND c.last_activity_at >= $2
+              AND c.last_activity_at < $3
               AND c.status IN (0, 2, 3)
               ${matrixClause}
             GROUP BY c.status
@@ -851,7 +880,7 @@ export async function getOpenDrillDown(
               period: args.period,
               excludeMatrixIA,
               ttlSeconds: ttl,
-              status: 0,
+              status: STATUS_OPEN,
               page,
               pageSize,
             }),
@@ -880,6 +909,18 @@ export async function getOpenDrillDown(
 
 /**
  * Drill-down "Taxa de Resolução".
+ *
+ * v0.42 canonical (Apêndice A.2): coorte mista intencional.
+ *  - Recebidas (denominador) filtra `c.created_at` (canonical "created").
+ *  - Resolvidas (numerador) filtra `c.last_activity_at + status=1` (canonical
+ *    "active"), alinhando com KPI Resolvidas.
+ *  - Taxa = Resolvidas / Recebidas pode passar de 100% (equipe trabalhando
+ *    backlog: resolveu mais conversas no período do que entraram). A UI
+ *    clampa em 100%; o tooltip explica o caso.
+ *
+ * Histórico bucketed e topAgents seguem a mesma regra (received=created,
+ * resolved=last_activity_at+status=1) — agora calculados via duas queries
+ * paralelas e combinados em memória pelo bucket/agente.
  */
 export async function getResolutionRateDrillDown(
   connectionId: string,
@@ -906,7 +947,7 @@ export async function getResolutionRateDrillDown(
   };
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-drill-resolution-v3",
+    name: "dashboard-drill-resolution-canonical-v0.42",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -917,57 +958,66 @@ export async function getResolutionRateDrillDown(
     fetcher: () =>
       withChatwootResilience<ResolutionRateDrillDownData>(
         async () => {
-          const matrixClause = excludeMatrixIA ? " AND c.inbox_id <> 31" : "";
+          const matrixHelper = chatwootMatrixIaClause(excludeMatrixIA);
+          const matrixClause = matrixHelper ? ` ${matrixHelper}` : "";
 
-          // Histórico bucketed: recebidas vs resolvidas no mesmo bucket de
-          // `created_at` (proxy comum de "taxa por janela").
-          const sqlHistory =
-            granularity === "hour"
-              ? `
-              SELECT
-                (date_trunc('hour', c.created_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
-                COUNT(*)::bigint AS received,
-                COUNT(*) FILTER (WHERE c.status = 1)::bigint AS resolved
-              FROM conversations c
-              WHERE c.account_id = $1
-                AND c.created_at >= $2
-                AND c.created_at < $3
-                ${matrixClause}
-              GROUP BY bucket
-              ORDER BY bucket ASC
-            `
-              : `
-              SELECT
-                (date_trunc('day', c.created_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
-                COUNT(*)::bigint AS received,
-                COUNT(*) FILTER (WHERE c.status = 1)::bigint AS resolved
-              FROM conversations c
-              WHERE c.account_id = $1
-                AND c.created_at >= $2
-                AND c.created_at < $3
-                ${matrixClause}
-              GROUP BY bucket
-              ORDER BY bucket ASC
-            `;
+          const truncExpr = granularity === "hour" ? "hour" : "day";
 
-          const sqlAggCurrent = `
+          // Histórico bucketed — Recebidas (canonical "created").
+          const sqlHistoryReceived = `
             SELECT
-              COUNT(*)::bigint AS received,
-              COUNT(*) FILTER (WHERE c.status = 1)::bigint AS resolved
+              (date_trunc('${truncExpr}', c.created_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
+              COUNT(*)::bigint AS received
+            FROM conversations c
+            WHERE c.account_id = $1
+              AND c.created_at >= $2
+              AND c.created_at < $3
+              ${matrixClause}
+            GROUP BY bucket
+            ORDER BY bucket ASC
+          `;
+          // Histórico bucketed — Resolvidas (canonical "active" + status=1).
+          const sqlHistoryResolved = `
+            SELECT
+              (date_trunc('${truncExpr}', c.last_activity_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
+              COUNT(*)::bigint AS resolved
+            FROM conversations c
+            WHERE c.account_id = $1
+              AND c.last_activity_at >= $2
+              AND c.last_activity_at < $3
+              AND c.status = ${STATUS_RESOLVED}
+              ${matrixClause}
+            GROUP BY bucket
+            ORDER BY bucket ASC
+          `;
+
+          // Agregado atual — duas queries (coorte mista).
+          const sqlAggReceivedCreated = `
+            SELECT COUNT(*)::bigint AS received
             FROM conversations c
             WHERE c.account_id = $1
               AND c.created_at >= $2
               AND c.created_at < $3
               ${matrixClause}
           `;
+          const sqlAggResolvedActive = `
+            SELECT COUNT(*)::bigint AS resolved
+            FROM conversations c
+            WHERE c.account_id = $1
+              AND c.last_activity_at >= $2
+              AND c.last_activity_at < $3
+              AND c.status = ${STATUS_RESOLVED}
+              ${matrixClause}
+          `;
 
-          // Top atendentes por taxa: precisamos volume mínimo (HAVING) para
-          // ranking ser estatisticamente útil.
-          const sqlTopAgents = `
+          // Top atendentes — coorte mista por agente:
+          //  - received: assignee_id + created_at ∈ período.
+          //  - resolved: assignee_id + last_activity_at ∈ período + status=1.
+          // HAVING received >= 5 garante volume mínimo para ranking estatístico.
+          const sqlTopAgentsReceived = `
             SELECT
               u.id, u.name,
-              COUNT(c.id)::bigint AS received,
-              COUNT(*) FILTER (WHERE c.status = 1)::bigint AS resolved
+              COUNT(c.id)::bigint AS received
             FROM conversations c
             JOIN users u ON u.id = c.assignee_id
             WHERE c.account_id = $1
@@ -975,65 +1025,104 @@ export async function getResolutionRateDrillDown(
               AND c.created_at < $3
               ${matrixClause}
             GROUP BY u.id, u.name
-            HAVING COUNT(c.id) >= 5
-            ORDER BY (
-              COUNT(*) FILTER (WHERE c.status = 1)::float
-              / NULLIF(COUNT(c.id), 0)
-            ) DESC NULLS LAST
-            LIMIT 10
+          `;
+          const sqlTopAgentsResolved = `
+            SELECT
+              u.id, u.name,
+              COUNT(c.id)::bigint AS resolved
+            FROM conversations c
+            JOIN users u ON u.id = c.assignee_id
+            WHERE c.account_id = $1
+              AND c.last_activity_at >= $2
+              AND c.last_activity_at < $3
+              AND c.status = ${STATUS_RESOLVED}
+              ${matrixClause}
+            GROUP BY u.id, u.name
           `;
 
-          const [historyRes, aggCurrentRes, topAgentsRes, aggPrevRes] =
-            await Promise.all([
-              queryNexusChat<RowChart>(connectionId, sqlHistory, [
-                args.accountId,
-                args.period.start,
-                args.period.end,
-                tz,
-              ]),
-              queryNexusChat<{ received: string; resolved: string }>(
-                connectionId,
-                sqlAggCurrent,
-                [
-                  args.accountId,
-                  args.period.start,
-                  args.period.end,
-                ],
-              ),
-              queryNexusChat<RowAgentRate>(connectionId, sqlTopAgents, [
-                args.accountId,
-                args.period.start,
-                args.period.end,
-              ]),
-              args.prevPeriod
-                ? queryNexusChat<{ received: string; resolved: string }>(
-                    connectionId,
-                    sqlAggCurrent,
-                    [
-                      args.accountId,
-                      args.prevPeriod.start,
-                      args.prevPeriod.end,
-                    ],
-                  )
-                : Promise.resolve({ rows: [] }),
-            ]);
+          const [
+            historyReceivedRes,
+            historyResolvedRes,
+            aggReceivedRes,
+            aggResolvedRes,
+            topAgentsReceivedRes,
+            topAgentsResolvedRes,
+            aggPrevReceivedRes,
+            aggPrevResolvedRes,
+          ] = await Promise.all([
+            queryNexusChat<{ bucket: Date; received: string }>(
+              connectionId,
+              sqlHistoryReceived,
+              [args.accountId, args.period.start, args.period.end, tz],
+            ),
+            queryNexusChat<{ bucket: Date; resolved: string }>(
+              connectionId,
+              sqlHistoryResolved,
+              [args.accountId, args.period.start, args.period.end, tz],
+            ),
+            queryNexusChat<{ received: string }>(
+              connectionId,
+              sqlAggReceivedCreated,
+              [args.accountId, args.period.start, args.period.end],
+            ),
+            queryNexusChat<{ resolved: string }>(
+              connectionId,
+              sqlAggResolvedActive,
+              [args.accountId, args.period.start, args.period.end],
+            ),
+            queryNexusChat<{ id: number; name: string | null; received: string }>(
+              connectionId,
+              sqlTopAgentsReceived,
+              [args.accountId, args.period.start, args.period.end],
+            ),
+            queryNexusChat<{ id: number; name: string | null; resolved: string }>(
+              connectionId,
+              sqlTopAgentsResolved,
+              [args.accountId, args.period.start, args.period.end],
+            ),
+            args.prevPeriod
+              ? queryNexusChat<{ received: string }>(
+                  connectionId,
+                  sqlAggReceivedCreated,
+                  [
+                    args.accountId,
+                    args.prevPeriod.start,
+                    args.prevPeriod.end,
+                  ],
+                )
+              : Promise.resolve({ rows: [] }),
+            args.prevPeriod
+              ? queryNexusChat<{ resolved: string }>(
+                  connectionId,
+                  sqlAggResolvedActive,
+                  [
+                    args.accountId,
+                    args.prevPeriod.start,
+                    args.prevPeriod.end,
+                  ],
+                )
+              : Promise.resolve({ rows: [] }),
+          ]);
 
           const currentReceived = Number(
-            aggCurrentRes.rows[0]?.received ?? 0,
+            aggReceivedRes.rows[0]?.received ?? 0,
           );
           const currentResolved = Number(
-            aggCurrentRes.rows[0]?.resolved ?? 0,
+            aggResolvedRes.rows[0]?.resolved ?? 0,
           );
           const current =
             currentReceived > 0
               ? (currentResolved / currentReceived) * 100
               : null;
 
-          const prevRow = aggPrevRes.rows[0];
+          const prevReceived = Number(
+            aggPrevReceivedRes.rows[0]?.received ?? 0,
+          );
+          const prevResolved = Number(
+            aggPrevResolvedRes.rows[0]?.resolved ?? 0,
+          );
           const previous =
-            prevRow && Number(prevRow.received) > 0
-              ? (Number(prevRow.resolved) / Number(prevRow.received)) * 100
-              : null;
+            prevReceived > 0 ? (prevResolved / prevReceived) * 100 : null;
 
           const diffPp =
             current !== null && previous !== null ? current - previous : null;
@@ -1049,35 +1138,81 @@ export async function getResolutionRateDrillDown(
                 : ((current - previous) / previous) * 100
               : null;
 
+          // Combina history Recebidas + Resolvidas em memória pelo bucket ISO.
+          // Coortes diferentes → cada bucket pode ter só received, só resolved,
+          // ou ambos. Buckets sem received têm rate=null.
+          const historyMap = new Map<
+            string,
+            { received: number; resolved: number }
+          >();
+          for (const r of historyReceivedRes.rows) {
+            const k = new Date(r.bucket).toISOString();
+            const cur = historyMap.get(k) ?? { received: 0, resolved: 0 };
+            cur.received = Number(r.received ?? 0);
+            historyMap.set(k, cur);
+          }
+          for (const r of historyResolvedRes.rows) {
+            const k = new Date(r.bucket).toISOString();
+            const cur = historyMap.get(k) ?? { received: 0, resolved: 0 };
+            cur.resolved = Number(r.resolved ?? 0);
+            historyMap.set(k, cur);
+          }
+          const history = Array.from(historyMap.entries())
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([bucket, { received, resolved }]) => ({
+              bucket,
+              received,
+              resolved,
+              rate: received > 0 ? (resolved / received) * 100 : null,
+            }));
+
+          // Combina topAgents Recebidas + Resolvidas em memória pelo agente.
+          // HAVING received >= 5 (filtro estatístico) aplicado em JS após merge.
+          const agentMap = new Map<
+            number,
+            { name: string | null; received: number; resolved: number }
+          >();
+          for (const r of topAgentsReceivedRes.rows) {
+            agentMap.set(r.id, {
+              name: r.name,
+              received: Number(r.received ?? 0),
+              resolved: agentMap.get(r.id)?.resolved ?? 0,
+            });
+          }
+          for (const r of topAgentsResolvedRes.rows) {
+            const cur = agentMap.get(r.id);
+            if (cur) {
+              cur.resolved = Number(r.resolved ?? 0);
+            } else {
+              // agente que aparece só em Resolvidas (sem Recebidas no período)
+              // é incluído com received=0; será filtrado pelo HAVING.
+              agentMap.set(r.id, {
+                name: r.name,
+                received: 0,
+                resolved: Number(r.resolved ?? 0),
+              });
+            }
+          }
+          const topAgents = Array.from(agentMap.entries())
+            .filter(([, v]) => v.name && v.received >= 5)
+            .map(([id, v]) => ({
+              id,
+              name: v.name ?? "(sem nome)",
+              received: v.received,
+              resolved: v.resolved,
+              resolutionRate:
+                v.received > 0 ? (v.resolved / v.received) * 100 : 0,
+            }))
+            .sort((a, b) => b.resolutionRate - a.resolutionRate)
+            .slice(0, 10);
+
           return {
             current,
             previous,
             diffPp,
             diffPct,
-            history: historyRes.rows.map((r) => {
-              const received = Number(r.received ?? 0);
-              const resolved = Number(r.resolved ?? 0);
-              return {
-                bucket: new Date(r.bucket).toISOString(),
-                received,
-                resolved,
-                rate: received > 0 ? (resolved / received) * 100 : null,
-              };
-            }),
-            topAgents: topAgentsRes.rows
-              .filter((r) => r.name)
-              .map((r) => {
-                const received = Number(r.received ?? 0);
-                const resolved = Number(r.resolved ?? 0);
-                return {
-                  id: r.id,
-                  name: r.name ?? "(sem nome)",
-                  received,
-                  resolved,
-                  resolutionRate:
-                    received > 0 ? (resolved / received) * 100 : 0,
-                };
-              }),
+            history,
+            topAgents,
           };
         },
         { fallbackKey: key },
@@ -1111,8 +1246,15 @@ type RowNoResponseGroup = {
 /**
  * Drill-down "Conversas sem resposta no período".
  *
- * Definição: status=0 + última mensagem da conversa é do contato (message_type=0).
- * Coorte: created_at ∈ período.
+ * v0.42 canonical:
+ *  - Coorte: `c.last_activity_at ∈ período + status=0` (canonical "active").
+ *  - Classificação "última mensagem é do cliente" via CTE canônica
+ *    `last_classification_msg` (filtro `lcm.message_type = 0`).
+ *  - matrixClause via helper canônico.
+ *
+ * A CTE canônica considera incoming pública e outgoing qualquer privacidade,
+ * fechando o gap em que uma nota privada do agente era ignorada (cliente
+ * aparecia como "última msg" indevidamente).
  */
 export async function getNoResponseDrillDown(
   connectionId: string,
@@ -1130,7 +1272,7 @@ export async function getNoResponseDrillDown(
   };
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-drill-no-response-v2",
+    name: "dashboard-drill-no-response-canonical-v0.42",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -1141,43 +1283,33 @@ export async function getNoResponseDrillDown(
     fetcher: () =>
       withChatwootResilience<NoResponseDrillDownData>(
         async () => {
-          const matrixClause = excludeMatrixIA ? " AND c.inbox_id <> 31" : "";
+          const matrixHelper = chatwootMatrixIaClause(excludeMatrixIA);
+          const matrixClause = matrixHelper ? ` ${matrixHelper}` : "";
+
+          // CTE canônica `last_classification_msg`. Para sqlList precisamos
+          // também do snippet da mensagem; carregamos via subquery escalar
+          // (LATERAL não vale a pena num caller único). Para os agregados
+          // (sqlAgg/sqlByInbox/sqlByAssignee), a CTE basta — só precisamos do
+          // created_at (já em msg_created_at) e do filtro message_type.
 
           const sqlAgg = `
-            WITH last_msg AS (
-              SELECT DISTINCT ON (m.conversation_id)
-                m.conversation_id,
-                m.created_at,
-                m.message_type
-              FROM messages m
-              WHERE m.message_type IN (0, 1)
-              ORDER BY m.conversation_id, m.created_at DESC
-            )
+            ${buildLastClassificationMsgCte()}
             SELECT
               COUNT(*)::int AS total,
-              COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - lm.created_at))), 0)::int AS oldest_seconds
+              COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - lcm.msg_created_at))), 0)::int AS oldest_seconds
             FROM conversations c
-            JOIN last_msg lm
-              ON lm.conversation_id = c.id
-             AND lm.message_type = 0
+            JOIN last_classification_msg lcm
+              ON lcm.conversation_id = c.id
+             AND lcm.message_type = ${MSG_INCOMING}
             WHERE c.account_id = $1
               AND c.last_activity_at >= $2
               AND c.last_activity_at < $3
-              AND c.status = 0
+              AND c.status = ${STATUS_OPEN}
               ${matrixClause}
           `;
 
           const sqlList = `
-            WITH last_msg AS (
-              SELECT DISTINCT ON (m.conversation_id)
-                m.conversation_id,
-                m.created_at,
-                m.message_type,
-                m.content
-              FROM messages m
-              WHERE m.message_type IN (0, 1)
-              ORDER BY m.conversation_id, m.created_at DESC
-            )
+            ${buildLastClassificationMsgCte()}
             SELECT
               c.id,
               c.display_id,
@@ -1185,13 +1317,20 @@ export async function getNoResponseDrillDown(
               ix.name AS inbox_name,
               t.name AS team_name,
               u.name AS assignee_name,
-              EXTRACT(EPOCH FROM (NOW() - lm.created_at))::int AS waiting_seconds,
-              lm.created_at AS last_incoming_at,
-              lm.content AS snippet
+              EXTRACT(EPOCH FROM (NOW() - lcm.msg_created_at))::int AS waiting_seconds,
+              lcm.msg_created_at AS last_incoming_at,
+              (
+                SELECT m.content
+                FROM messages m
+                WHERE m.conversation_id = c.id
+                  AND m.created_at = lcm.msg_created_at
+                  AND m.message_type = ${MSG_INCOMING}
+                LIMIT 1
+              ) AS snippet
             FROM conversations c
-            JOIN last_msg lm
-              ON lm.conversation_id = c.id
-             AND lm.message_type = 0
+            JOIN last_classification_msg lcm
+              ON lcm.conversation_id = c.id
+             AND lcm.message_type = ${MSG_INCOMING}
             LEFT JOIN contacts ct ON ct.id = c.contact_id
             LEFT JOIN inboxes ix ON ix.id = c.inbox_id
             LEFT JOIN teams t ON t.id = c.team_id
@@ -1199,61 +1338,47 @@ export async function getNoResponseDrillDown(
             WHERE c.account_id = $1
               AND c.last_activity_at >= $2
               AND c.last_activity_at < $3
-              AND c.status = 0
+              AND c.status = ${STATUS_OPEN}
               ${matrixClause}
             ORDER BY waiting_seconds DESC
             LIMIT 100
           `;
 
           const sqlByInbox = `
-            WITH last_msg AS (
-              SELECT DISTINCT ON (m.conversation_id)
-                m.conversation_id,
-                m.message_type
-              FROM messages m
-              WHERE m.message_type IN (0, 1)
-              ORDER BY m.conversation_id, m.created_at DESC
-            )
+            ${buildLastClassificationMsgCte()}
             SELECT
               ix.id,
               COALESCE(NULLIF(TRIM(ix.name), ''), '(sem inbox)') AS name,
               COUNT(c.id)::bigint AS total
             FROM conversations c
-            JOIN last_msg lm
-              ON lm.conversation_id = c.id
-             AND lm.message_type = 0
+            JOIN last_classification_msg lcm
+              ON lcm.conversation_id = c.id
+             AND lcm.message_type = ${MSG_INCOMING}
             LEFT JOIN inboxes ix ON ix.id = c.inbox_id
             WHERE c.account_id = $1
               AND c.last_activity_at >= $2
               AND c.last_activity_at < $3
-              AND c.status = 0
+              AND c.status = ${STATUS_OPEN}
               ${matrixClause}
             GROUP BY ix.id, ix.name
             ORDER BY total DESC
           `;
 
           const sqlByAssignee = `
-            WITH last_msg AS (
-              SELECT DISTINCT ON (m.conversation_id)
-                m.conversation_id,
-                m.message_type
-              FROM messages m
-              WHERE m.message_type IN (0, 1)
-              ORDER BY m.conversation_id, m.created_at DESC
-            )
+            ${buildLastClassificationMsgCte()}
             SELECT
               u.id,
               COALESCE(NULLIF(TRIM(u.name), ''), 'Sem atendente') AS name,
               COUNT(c.id)::bigint AS total
             FROM conversations c
-            JOIN last_msg lm
-              ON lm.conversation_id = c.id
-             AND lm.message_type = 0
+            JOIN last_classification_msg lcm
+              ON lcm.conversation_id = c.id
+             AND lcm.message_type = ${MSG_INCOMING}
             LEFT JOIN users u ON u.id = c.assignee_id
             WHERE c.account_id = $1
               AND c.last_activity_at >= $2
               AND c.last_activity_at < $3
-              AND c.status = 0
+              AND c.status = ${STATUS_OPEN}
               ${matrixClause}
             GROUP BY u.id, u.name
             ORDER BY total DESC
@@ -1340,7 +1465,9 @@ type RowByTeamItem = {
 /**
  * Drill-down de departamento (incluindo bucket "Sem departamento" quando teamId=null).
  *
- * Coorte: created_at ∈ período + status IN (0, 2, 3) (mesmo recorte do card).
+ * v0.42 canonical "active": coorte = `c.last_activity_at ∈ período + status
+ * IN (0, 2, 3)` (alinhada com o card "Por departamento" que filtra por
+ * conversas com movimento no período).
  */
 export async function getByTeamDrillDown(
   connectionId: string,
@@ -1366,7 +1493,7 @@ export async function getByTeamDrillDown(
   };
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-drill-by-team-v2",
+    name: "dashboard-drill-by-team-canonical-v0.42",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -1377,7 +1504,10 @@ export async function getByTeamDrillDown(
     fetcher: () =>
       withChatwootResilience<ByTeamDrillDownData>(
         async () => {
-          const matrixClause = excludeMatrixIA ? " AND c.inbox_id <> 31" : "";
+          // canonical "active" — coorte = last_activity_at ∈ período +
+          // status IN (open, pending, snoozed). matrixClause via helper canônico.
+          const matrixHelper = chatwootMatrixIaClause(excludeMatrixIA);
+          const matrixClause = matrixHelper ? ` ${matrixHelper}` : "";
           const teamClause =
             args.teamId === null
               ? " AND c.team_id IS NULL"
@@ -1398,8 +1528,8 @@ export async function getByTeamDrillDown(
             FROM conversations c
             LEFT JOIN teams t ON t.id = c.team_id
             WHERE c.account_id = $1
-              AND c.created_at >= $2
-              AND c.created_at < $3
+              AND c.last_activity_at >= $2
+              AND c.last_activity_at < $3
               AND c.status IN (0, 2, 3)
               ${teamClause}
               ${matrixClause}
@@ -1409,8 +1539,8 @@ export async function getByTeamDrillDown(
             SELECT c.status, COUNT(*)::bigint AS total
             FROM conversations c
             WHERE c.account_id = $1
-              AND c.created_at >= $2
-              AND c.created_at < $3
+              AND c.last_activity_at >= $2
+              AND c.last_activity_at < $3
               AND c.status IN (0, 2, 3)
               ${teamClause}
               ${matrixClause}
@@ -1434,8 +1564,8 @@ export async function getByTeamDrillDown(
             LEFT JOIN teams t ON t.id = c.team_id
             LEFT JOIN users u ON u.id = c.assignee_id
             WHERE c.account_id = $1
-              AND c.created_at >= $2
-              AND c.created_at < $3
+              AND c.last_activity_at >= $2
+              AND c.last_activity_at < $3
               AND c.status IN (0, 2, 3)
               ${teamClause}
               ${matrixClause}
