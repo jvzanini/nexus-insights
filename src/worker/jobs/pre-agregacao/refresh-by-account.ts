@@ -1,16 +1,17 @@
 /**
- * Job: refresh-by-account (T3).
+ * Job: refresh-by-account (T3 + L6 multi-tenant).
  *
- * Para cada Chatwoot account ativa (descoberta via `user_account_access`),
- * agrega os últimos 7 dias rolling (TZ da plataforma) em:
+ * Para cada binding (connection × account) ativo (descoberto via
+ * `getBindingsToRefresh()` em `shared.ts`), agrega os últimos 7 dias rolling
+ * (TZ da plataforma) em:
  *   - chatwoot_facts_daily_by_account (1 linha por dia)
  *   - chatwoot_facts_hourly_by_account (24 linhas por dia)
  *
  * Concorrência:
- *   - Accounts processadas SEQUENCIALMENTE (uma por vez). O pool do Chatwoot
- *     já serializa queries globalmente, então paralelizar accounts não
- *     traz benefício e aumenta risco de timeout.
- *   - Falha em uma account NÃO interrompe as outras: cada account é tentada
+ *   - Bindings processadas SEQUENCIALMENTE (uma por vez). O pool dinâmico
+ *     `getNexusChatPool(connectionId)` já serializa por connection, então
+ *     paralelizar bindings não traz benefício e aumenta risco de timeout.
+ *   - Falha em um binding NÃO interrompe os outros: cada um é tentado
  *     dentro de um try/catch independente. O erro é persistido em
  *     `chatwoot_facts_meta.last_error` (via `withMetaUpdate`).
  *
@@ -21,18 +22,22 @@
  * Snapshot de estado (open/pending) é capturado APENAS para o dia atual.
  * Para dias passados, gravamos 0 — o snapshot real do "fim do dia X" não é
  * recuperável retroativamente do estado atual do Chatwoot.
+ *
+ * Multi-tenant:
+ *   - Lê do banco da connection via `queryNexusChat(connectionId, sql, params)`.
+ *   - Grava `connection_id` em todas as linhas de `chatwoot_facts_*`.
  */
 
 import type { Job } from "bullmq";
-import { chatwootQuery } from "@/lib/chatwoot/pool";
+import { queryNexusChat } from "@/lib/nexus-chat/pool";
 import { pgPool } from "@/lib/pg-pool";
 import {
-  getAccountsToRefresh,
+  getBindingsToRefresh,
   rollingDates,
   withMetaUpdate,
 } from "./shared";
 
-interface DailyMetricsRow {
+type DailyMetricsRow = {
   received: number;
   resolved: number;
   unique_contacts: number;
@@ -41,25 +46,25 @@ interface DailyMetricsRow {
   frt_p50_seconds: number | null;
   frt_p90_seconds: number | null;
   rt_p50_seconds: number | null;
-}
+} & Record<string, unknown>;
 
-interface SnapshotRow {
+type SnapshotRow = {
   open_at_eod: number;
   pending_at_eod: number;
-}
+} & Record<string, unknown>;
 
-interface HourlyConvRow {
+type HourlyConvRow = {
   bucket_hour: number;
   received: number;
   resolved: number;
   unique_contacts: number;
-}
+} & Record<string, unknown>;
 
-interface HourlyMsgRow {
+type HourlyMsgRow = {
   bucket_hour: number;
   messages_in: number;
   messages_out: number;
-}
+} & Record<string, unknown>;
 
 const DAILY_METRICS_SQL = `
 WITH day_window AS (
@@ -179,19 +184,20 @@ ORDER BY h.h ASC;
 
 const DAILY_UPSERT_SQL = `
 INSERT INTO chatwoot_facts_daily_by_account (
-  account_id, bucket_date,
+  account_id, bucket_date, connection_id,
   received, resolved, open_at_eod, pending_at_eod,
   messages_in, messages_out, unique_contacts,
   frt_p50_seconds, frt_p90_seconds, rt_p50_seconds,
   created_at, updated_at
 ) VALUES (
-  $1, $2,
-  $3, $4, $5, $6,
-  $7, $8, $9,
-  $10, $11, $12,
+  $1, $2, $3,
+  $4, $5, $6, $7,
+  $8, $9, $10,
+  $11, $12, $13,
   NOW(), NOW()
 )
 ON CONFLICT (account_id, bucket_date) DO UPDATE SET
+  connection_id = EXCLUDED.connection_id,
   received = EXCLUDED.received,
   resolved = EXCLUDED.resolved,
   open_at_eod = EXCLUDED.open_at_eod,
@@ -207,15 +213,16 @@ ON CONFLICT (account_id, bucket_date) DO UPDATE SET
 
 const HOURLY_UPSERT_SQL = `
 INSERT INTO chatwoot_facts_hourly_by_account (
-  account_id, bucket_date, bucket_hour,
+  account_id, bucket_date, bucket_hour, connection_id,
   received, resolved, messages_in, messages_out, unique_contacts,
   created_at, updated_at
 ) VALUES (
-  $1, $2, $3,
-  $4, $5, $6, $7, $8,
+  $1, $2, $3, $4,
+  $5, $6, $7, $8, $9,
   NOW(), NOW()
 )
 ON CONFLICT (account_id, bucket_date, bucket_hour) DO UPDATE SET
+  connection_id = EXCLUDED.connection_id,
   received = EXCLUDED.received,
   resolved = EXCLUDED.resolved,
   messages_in = EXCLUDED.messages_in,
@@ -225,19 +232,22 @@ ON CONFLICT (account_id, bucket_date, bucket_hour) DO UPDATE SET
 `;
 
 /**
- * Processa um único par (account, date): roda 4 SQL no Chatwoot e faz 25
- * UPSERTs no banco interno (1 daily + 24 hourly).
+ * Processa um único par (connection, account, date): roda 4 SQL no banco da
+ * connection e faz 25 UPSERTs no banco interno (1 daily + 24 hourly).
  */
 async function refreshAccountDay(
+  connectionId: string,
   accountId: number,
   date: string,
   isToday: boolean,
 ): Promise<void> {
-  // 1) Daily metrics agregadas (1 query no Chatwoot).
-  const dailyRows = await chatwootQuery<DailyMetricsRow>(DAILY_METRICS_SQL, [
-    date,
-    accountId,
-  ]);
+  // 1) Daily metrics agregadas (1 query no banco da connection).
+  const dailyRows = (
+    await queryNexusChat<DailyMetricsRow>(connectionId, DAILY_METRICS_SQL, [
+      date,
+      accountId,
+    ])
+  ).rows;
   const daily: DailyMetricsRow = dailyRows[0] ?? {
     received: 0,
     resolved: 0,
@@ -253,9 +263,9 @@ async function refreshAccountDay(
   let openAtEod = 0;
   let pendingAtEod = 0;
   if (isToday) {
-    const snapshotRows = await chatwootQuery<SnapshotRow>(SNAPSHOT_SQL, [
-      accountId,
-    ]);
+    const snapshotRows = (
+      await queryNexusChat<SnapshotRow>(connectionId, SNAPSHOT_SQL, [accountId])
+    ).rows;
     const snap = snapshotRows[0];
     if (snap) {
       openAtEod = Number(snap.open_at_eod) || 0;
@@ -267,6 +277,7 @@ async function refreshAccountDay(
   await pgPool.query(DAILY_UPSERT_SQL, [
     accountId,
     date,
+    connectionId,
     Number(daily.received) || 0,
     Number(daily.resolved) || 0,
     openAtEod,
@@ -279,11 +290,19 @@ async function refreshAccountDay(
     daily.rt_p50_seconds,
   ]);
 
-  // 4) Hourly: 2 queries no Chatwoot (conv + msg) — pool serializa.
-  const [convHourly, msgHourly] = await Promise.all([
-    chatwootQuery<HourlyConvRow>(HOURLY_CONV_SQL, [date, accountId]),
-    chatwootQuery<HourlyMsgRow>(HOURLY_MSG_SQL, [date, accountId]),
+  // 4) Hourly: 2 queries no banco da connection (conv + msg) — pool serializa.
+  const [convHourlyResult, msgHourlyResult] = await Promise.all([
+    queryNexusChat<HourlyConvRow>(connectionId, HOURLY_CONV_SQL, [
+      date,
+      accountId,
+    ]),
+    queryNexusChat<HourlyMsgRow>(connectionId, HOURLY_MSG_SQL, [
+      date,
+      accountId,
+    ]),
   ]);
+  const convHourly = convHourlyResult.rows;
+  const msgHourly = msgHourlyResult.rows;
 
   const msgByHour = new Map<number, HourlyMsgRow>();
   for (const r of msgHourly) {
@@ -298,6 +317,7 @@ async function refreshAccountDay(
       accountId,
       date,
       hour,
+      connectionId,
       Number(conv.received) || 0,
       Number(conv.resolved) || 0,
       msg ? Number(msg.messages_in) || 0 : 0,
@@ -313,45 +333,55 @@ async function refreshAccountDay(
 export async function processRefreshByAccount(
   job: Job,
 ): Promise<{ accounts: number; days: number; errors: number }> {
-  const accounts = await getAccountsToRefresh();
+  const targets = await getBindingsToRefresh();
   const dates = await rollingDates(7);
   const today = dates[0];
 
   let errors = 0;
 
-  for (const accountId of accounts) {
+  for (const { connectionId, accountId } of targets) {
     try {
-      await withMetaUpdate("by_account", accountId, async () => {
+      await withMetaUpdate("by_account", connectionId, accountId, async () => {
         for (const date of dates) {
-          await refreshAccountDay(accountId, date, date === today);
+          await refreshAccountDay(
+            connectionId,
+            accountId,
+            date,
+            date === today,
+          );
         }
       });
 
-      await withMetaUpdate("hourly_by_account", accountId, async () => {
-        // O work do hourly já aconteceu em refreshAccountDay (cobre as 2
-        // dimensões na mesma passada). Aqui só reflete o sucesso no meta.
-      });
+      await withMetaUpdate(
+        "hourly_by_account",
+        connectionId,
+        accountId,
+        async () => {
+          // O work do hourly já aconteceu em refreshAccountDay (cobre as 2
+          // dimensões na mesma passada). Aqui só reflete o sucesso no meta.
+        },
+      );
     } catch (err) {
       errors += 1;
       const message = err instanceof Error ? err.message : String(err);
       try {
         await job.log(
-          `[refresh-by-account] account ${accountId} falhou: ${message}`,
+          `[refresh-by-account] connection=${connectionId} account=${accountId} falhou: ${message}`,
         );
       } catch {
         // job.log pode não existir em todos os contextos (ex.: tests).
       }
       // eslint-disable-next-line no-console
       console.error(
-        `[refresh-by-account] account=${accountId} error:`,
+        `[refresh-by-account] connection=${connectionId} account=${accountId} error:`,
         message,
       );
     }
   }
 
   return {
-    accounts: accounts.length,
-    days: accounts.length * dates.length,
+    accounts: targets.length,
+    days: targets.length * dates.length,
     errors,
   };
 }
