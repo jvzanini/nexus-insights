@@ -13,37 +13,52 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  listRecentWebhookEvents,
-  type WebhookEvent,
-} from "@/lib/actions/nexus-chat/realtime-stream";
+  listRecentSyncRuns,
+  type SyncRunEvent,
+} from "@/lib/actions/nexus-chat/sync-stream";
 
 /**
- * Aba 2 — Tempo real.
+ * Aba 2 — Sincronização (substitui Tempo real / Webhook).
  *
- * Mostra:
- *  1. 4 KPI cards (eventos/h, latência média, erros 24h, última heartbeat).
- *  2. Lista de eventos webhook recentes (até 200).
- *  3. Pause/Play do polling 5s.
+ * v0.41 — polling delta universal. Mostra:
+ *  1. 4 KPI cards polling-aware (Última sync, Runs última 1h estimada,
+ *     Erros 24h, Linhas sync 1h estimadas).
+ *  2. Lista de runs recentes (até 200 audit logs `polling_*`).
+ *  3. Pause/Play do polling 5s da UI (≠ do polling do worker, que roda
+ *     a cada `pollingIntervalSeconds`).
+ *
+ * IMPORTANTE: o worker faz apenas 1/100 audit em runs OK (sample rate em
+ * B16 — `polling_sync_completed` só rola Math.random() < 0.01). Erros são
+ * 100% audited. KPIs corrigem isso multiplicando por 100 (estimativa).
  *
  * Polling: setInterval 5s quando !paused. Cleanup no unmount + ao trocar
  * paused. Sem virtualização nesta versão (200 rows é leve).
  *
  * Paleta semântica (ui-ux-pro-max):
- *  - emerald: success/heartbeat fresh/recebido
- *  - amber: warning/rate limit
- *  - rose: error/HMAC rejeitado
- *  - violet: neutro/eventos
- *  - zinc: ignorado/no_binding
+ *  - emerald: success / sync recente
+ *  - amber:  warning / sync atrasado moderado
+ *  - rose:   error / falha de sync
+ *  - violet: neutro / contadores
+ *  - zinc:   sem dado
  */
 
 const POLL_INTERVAL_MS = 5000;
+const AUDIT_SAMPLE_RATE = 100; // 1/100 sample em runs OK (B16)
 
-export function TempoRealTab(props: {
+interface Props {
   connectionId: string;
-  lastWebhookAt: string | null;
-}) {
-  const { connectionId, lastWebhookAt } = props;
-  const [events, setEvents] = useState<WebhookEvent[]>([]);
+  /** Timestamp ISO do último polling delta com sucesso. `null` = nunca rodou. */
+  lastSyncAt: string | null;
+  /** Intervalo em segundos entre cada tick do worker (default 30, mín 20). */
+  pollingIntervalSeconds: number;
+}
+
+export function SincronizacaoTab({
+  connectionId,
+  lastSyncAt,
+  pollingIntervalSeconds,
+}: Props) {
+  const [events, setEvents] = useState<SyncRunEvent[]>([]);
   const [paused, setPaused] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -53,7 +68,7 @@ export function TempoRealTab(props: {
   const fetchEvents = useCallback(
     async (isInitial: boolean) => {
       if (!isInitial) setRefreshing(true);
-      const result = await listRecentWebhookEvents({
+      const result = await listRecentSyncRuns({
         connectionId,
         limit: 200,
       });
@@ -61,7 +76,7 @@ export function TempoRealTab(props: {
         setEvents(result.data);
         setError(null);
       } else {
-        setError(result.error ?? "Falha ao carregar eventos.");
+        setError(result.error ?? "Falha ao carregar runs.");
       }
       if (isInitial) setInitialLoading(false);
       setRefreshing(false);
@@ -96,17 +111,20 @@ export function TempoRealTab(props: {
     };
   }, [paused, fetchEvents]);
 
-  const kpis = useMemo(() => deriveKpis(events, lastWebhookAt), [
+  const kpis = useMemo(() => deriveKpis(events, lastSyncAt), [
     events,
-    lastWebhookAt,
+    lastSyncAt,
   ]);
 
   return (
     <div className="grid gap-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
+      <header
+        data-tour="sincronizacao-header"
+        className="flex flex-wrap items-center justify-between gap-3"
+      >
         <div className="flex items-center gap-2">
           <Radio className="h-4 w-4 text-violet-500" aria-hidden />
-          <h2 className="text-sm font-medium">Stream em tempo real</h2>
+          <h2 className="text-sm font-medium">Sincronização (polling delta)</h2>
           {refreshing ? (
             <Loader2
               className="h-3 w-3 animate-spin text-muted-foreground"
@@ -134,7 +152,17 @@ export function TempoRealTab(props: {
         </Button>
       </header>
 
-      <KpiGrid kpis={kpis} loading={initialLoading} />
+      <p className="text-xs text-muted-foreground">
+        Esta tela atualiza a cada 5s. O worker faz o sync efetivo a cada{" "}
+        <span className="font-medium tabular-nums text-foreground">
+          {pollingIntervalSeconds}s
+        </span>{" "}
+        (configurável na Aba Conexão).
+      </p>
+
+      <div data-tour="sincronizacao-kpis">
+        <KpiGrid kpis={kpis} loading={initialLoading} />
+      </div>
 
       {paused ? (
         <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
@@ -149,93 +177,102 @@ export function TempoRealTab(props: {
           <AlertCircle className="h-4 w-4 shrink-0 text-rose-500" aria-hidden />
           <div className="grid gap-0.5">
             <p className="text-sm font-medium text-rose-500">
-              Falha ao carregar eventos
+              Falha ao carregar runs
             </p>
             <p className="text-xs text-muted-foreground">{error}</p>
           </div>
         </div>
       ) : null}
 
-      <EventList events={events} loading={initialLoading} />
+      <div data-tour="sincronizacao-runs">
+        <RunList events={events} loading={initialLoading} />
+      </div>
     </div>
   );
 }
 
 interface Kpis {
-  eventsLastHour: number;
-  avgDurationMs: number | null;
+  /** Label formatado da última sync (ex: "há 30s", "agora"). */
+  lastSyncLabel: string;
+  /** Tom semântico do KPI Última sync. */
+  lastSyncTone: "emerald" | "amber" | "rose" | "zinc";
+  /** Estimativa de runs/h (sample × 100 em ok + erros 100%). */
+  runsLastHourEstimate: number;
+  /** Erros nas últimas 24h (counted at 100% no audit). */
   errorsLast24h: number;
-  heartbeatLabel: string;
-  heartbeatTone: "emerald" | "amber" | "rose" | "zinc";
+  /** Estimativa de linhas sincronizadas na última 1h. */
+  rowsLastHourEstimate: number;
 }
 
-function deriveKpis(events: WebhookEvent[], lastWebhookAt: string | null): Kpis {
+function deriveKpis(events: SyncRunEvent[], lastSyncAt: string | null): Kpis {
   const now = Date.now();
   const oneHourAgo = now - 60 * 60_000;
   const oneDayAgo = now - 24 * 60 * 60_000;
 
-  let eventsLastHour = 0;
-  let totalDurationMs = 0;
-  let durationSamples = 0;
+  let runsOkLastHourSample = 0;
+  let runsFailedLastHour = 0;
+  let rowsLastHourSample = 0;
   let errorsLast24h = 0;
 
   for (const ev of events) {
     const ts = Date.parse(ev.createdAt);
     if (Number.isNaN(ts)) continue;
 
-    if (ev.action === "webhook_received" && ts >= oneHourAgo) {
-      eventsLastHour += 1;
-      const d = ev.details?.durationMs;
-      if (typeof d === "number" && d >= 0) {
-        totalDurationMs += d;
-        durationSamples += 1;
+    if (ts >= oneHourAgo && ev.action === "polling_sync_completed") {
+      runsOkLastHourSample += 1;
+      const total = (ev.details?.totalRows as number | undefined) ?? 0;
+      if (typeof total === "number" && Number.isFinite(total) && total >= 0) {
+        rowsLastHourSample += total;
       }
     }
-
-    if (
-      ts >= oneDayAgo &&
-      (ev.action === "webhook_rejected_hmac" ||
-        ev.action === "webhook_rejected_rate_limit")
-    ) {
+    if (ts >= oneHourAgo && ev.action === "polling_sync_failed") {
+      runsFailedLastHour += 1;
+    }
+    if (ts >= oneDayAgo && ev.action === "polling_sync_failed") {
       errorsLast24h += 1;
     }
   }
 
-  const avgDurationMs =
-    durationSamples > 0
-      ? Math.round(totalDurationMs / durationSamples)
-      : null;
+  // Sample correction: `polling_sync_completed` só audita 1/100 (B16).
+  // `polling_sync_failed` é 100% audited.
+  const runsLastHourEstimate =
+    runsOkLastHourSample * AUDIT_SAMPLE_RATE + runsFailedLastHour;
+  const rowsLastHourEstimate = rowsLastHourSample * AUDIT_SAMPLE_RATE;
 
-  const { label, tone } = formatHeartbeat(lastWebhookAt);
+  const { label, tone } = formatLastSync(lastSyncAt);
 
   return {
-    eventsLastHour,
-    avgDurationMs,
+    lastSyncLabel: label,
+    lastSyncTone: tone,
+    runsLastHourEstimate,
     errorsLast24h,
-    heartbeatLabel: label,
-    heartbeatTone: tone,
+    rowsLastHourEstimate,
   };
 }
 
-function formatHeartbeat(lastWebhookAt: string | null): {
+function formatLastSync(lastSyncAt: string | null): {
   label: string;
   tone: "emerald" | "amber" | "rose" | "zinc";
 } {
-  if (!lastWebhookAt) {
+  if (!lastSyncAt) {
     return { label: "Sem registro", tone: "zinc" };
   }
-  const ts = Date.parse(lastWebhookAt);
+  const ts = Date.parse(lastSyncAt);
   if (Number.isNaN(ts)) return { label: "Inválido", tone: "zinc" };
-  const lagMin = Math.max(0, Math.floor((Date.now() - ts) / 60_000));
+  const lagSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  // Tom emerald até 2× pollingInterval default (60s); amber até 5min;
+  // rose acima.
   let tone: "emerald" | "amber" | "rose" = "emerald";
-  if (lagMin > 360) tone = "rose";
-  else if (lagMin >= 60) tone = "amber";
+  if (lagSec > 300) tone = "rose";
+  else if (lagSec >= 90) tone = "amber";
 
-  return { label: formatLag(lagMin), tone };
+  return { label: formatLag(lagSec), tone };
 }
 
-function formatLag(lagMin: number): string {
-  if (lagMin < 1) return "agora";
+function formatLag(lagSec: number): string {
+  if (lagSec < 1) return "agora";
+  if (lagSec < 60) return `há ${lagSec}s`;
+  const lagMin = Math.floor(lagSec / 60);
   if (lagMin < 60) return `há ${lagMin} min`;
   const hours = Math.floor(lagMin / 60);
   if (hours < 24) return `há ${hours}h`;
@@ -257,16 +294,14 @@ function KpiGrid({ kpis, loading }: { kpis: Kpis; loading: boolean }) {
   return (
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
       <KpiCard
-        label="Eventos última 1h"
-        value={kpis.eventsLastHour.toString()}
-        tone="violet"
+        label="Última sync"
+        value={kpis.lastSyncLabel}
+        tone={kpis.lastSyncTone}
       />
       <KpiCard
-        label="Latência média (1h)"
-        value={
-          kpis.avgDurationMs !== null ? `${kpis.avgDurationMs} ms` : "—"
-        }
-        tone={kpis.avgDurationMs === null ? "zinc" : "violet"}
+        label="Runs última 1h (est.)"
+        value={kpis.runsLastHourEstimate.toString()}
+        tone={kpis.runsLastHourEstimate > 0 ? "violet" : "zinc"}
       />
       <KpiCard
         label="Erros 24h"
@@ -274,12 +309,22 @@ function KpiGrid({ kpis, loading }: { kpis: Kpis; loading: boolean }) {
         tone={kpis.errorsLast24h > 0 ? "rose" : "emerald"}
       />
       <KpiCard
-        label="Última heartbeat"
-        value={kpis.heartbeatLabel}
-        tone={kpis.heartbeatTone}
+        label="Linhas sync 1h (est.)"
+        value={
+          kpis.rowsLastHourEstimate > 0
+            ? compactNumber(kpis.rowsLastHourEstimate)
+            : "0"
+        }
+        tone={kpis.rowsLastHourEstimate > 0 ? "violet" : "zinc"}
       />
     </div>
   );
+}
+
+function compactNumber(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}k`;
+  return `${(n / 1_000_000).toFixed(1)}M`;
 }
 
 const TONE_CLASSES: Record<
@@ -340,29 +385,25 @@ const ACTION_BADGE: Record<
   string,
   { label: string; classes: string }
 > = {
-  webhook_received: {
-    label: "Recebido",
+  polling_sync_completed: {
+    label: "Sync OK",
     classes: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
   },
-  webhook_rejected_hmac: {
-    label: "HMAC inválido",
+  polling_sync_failed: {
+    label: "Sync falhou",
     classes: "bg-rose-500/10 text-rose-500 border-rose-500/20",
   },
-  webhook_rejected_rate_limit: {
-    label: "Rate limit",
+  polling_full_sweep_started: {
+    label: "Sweep iniciado",
+    classes: "bg-violet-500/10 text-violet-500 border-violet-500/20",
+  },
+  polling_full_sweep_completed: {
+    label: "Sweep OK",
+    classes: "bg-violet-500/10 text-violet-500 border-violet-500/20",
+  },
+  polling_interval_updated: {
+    label: "Intervalo alterado",
     classes: "bg-amber-500/10 text-amber-500 border-amber-500/20",
-  },
-  webhook_no_binding: {
-    label: "Sem binding",
-    classes: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
-  },
-  webhook_token_regenerated: {
-    label: "Token regenerado",
-    classes: "bg-violet-500/10 text-violet-500 border-violet-500/20",
-  },
-  webhook_secret_regenerated: {
-    label: "Secret regenerado",
-    classes: "bg-violet-500/10 text-violet-500 border-violet-500/20",
   },
 };
 
@@ -386,11 +427,31 @@ function formatTimestamp(iso: string): string {
   }).format(d);
 }
 
-function EventList({
+function describeRun(ev: SyncRunEvent): string | null {
+  const d = ev.details ?? {};
+  if (
+    ev.action === "polling_sync_completed" ||
+    ev.action === "polling_sync_failed"
+  ) {
+    const dur = (d.durationMs as number | undefined) ?? null;
+    const total = (d.totalRows as number | undefined) ?? null;
+    const parts: string[] = [];
+    if (typeof dur === "number") parts.push(`${dur}ms`);
+    if (typeof total === "number") parts.push(`${total} linhas`);
+    return parts.length > 0 ? parts.join(" · ") : null;
+  }
+  if (ev.action === "polling_interval_updated") {
+    const next = (d.next as number | undefined) ?? null;
+    if (typeof next === "number") return `→ ${next}s`;
+  }
+  return null;
+}
+
+function RunList({
   events,
   loading,
 }: {
-  events: WebhookEvent[];
+  events: SyncRunEvent[];
   loading: boolean;
 }) {
   if (loading) {
@@ -407,10 +468,11 @@ function EventList({
     return (
       <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-muted/20 px-6 py-16 text-center">
         <Inbox className="h-8 w-8 text-muted-foreground/50" aria-hidden />
-        <h3 className="text-sm font-medium">Sem eventos webhook</h3>
+        <h3 className="text-sm font-medium">Sem runs registrados ainda</h3>
         <p className="max-w-md text-xs text-muted-foreground">
-          Sem eventos webhook nas últimas 24h. Cadastre o webhook no Chatwoot
-          (Configurações → Integrações → Webhooks) usando a URL desta conexão.
+          O worker registra os primeiros runs assim que detectar mudanças no
+          banco do Nexus Chat. Runs OK são amostrados (1/100) — falhas são
+          100% registradas.
         </p>
       </div>
     );
@@ -421,8 +483,7 @@ function EventList({
       <ul className="divide-y divide-border">
         {events.map((ev) => {
           const badge = getActionBadge(ev.action);
-          const accountId = ev.details?.accountId;
-          const event = ev.details?.event;
+          const summary = describeRun(ev);
           return (
             <li
               key={ev.id}
@@ -437,14 +498,9 @@ function EventList({
               >
                 {badge.label}
               </Badge>
-              {typeof accountId === "number" || typeof accountId === "string" ? (
-                <span className="font-mono text-muted-foreground">
-                  acc#{String(accountId)}
-                </span>
-              ) : null}
-              {typeof event === "string" && event.length > 0 ? (
-                <span className="min-w-0 flex-1 truncate text-foreground/80">
-                  {event}
+              {summary ? (
+                <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">
+                  {summary}
                 </span>
               ) : null}
             </li>
