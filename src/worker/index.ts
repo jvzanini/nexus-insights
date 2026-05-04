@@ -183,7 +183,9 @@ async function scheduleRepeatables() {
     await refreshByTeamQueue.removeJobScheduler(id).catch(() => {});
   }
 
-  // Schedulers novos: cron 30 min como fallback (webhook é primário).
+  // FALLBACK: pré-agregação roda a cada 30 min como rede de segurança.
+  // O gatilho real é runDeltaSync (que enfileira refresh-by-* on-demand).
+  // Reduzido de 5min → 30min em v0.41 para evitar overhead duplicado com polling delta.
   await refreshByAccountQueue.upsertJobScheduler(
     "facts-refresh-by-account-fallback",
     { pattern: "*/30 * * * *" },
@@ -220,7 +222,7 @@ async function scheduleRepeatables() {
     { name: "integrations.reconcile" },
   );
   console.log(
-    "[worker] Schedules registered: refresh-by-* every 30min (fallback; webhook é primário), housekeeping daily 03:00, integrations.refresh-dim every 30min, integrations.reconcile every 6h",
+    "[worker] Schedules registered: refresh-by-* every 30min (fallback; gatilho real é runDeltaSync), housekeeping daily 03:00, integrations.refresh-dim every 30min, integrations.reconcile every 6h",
   );
 }
 
