@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/page-header";
 import { CachedBadge } from "@/components/reports/cached-badge";
 import { StaleBanner } from "@/components/reports/stale-banner";
 import { ConversasPageClient } from "@/components/reports/conversas-page-client";
+import { RealtimeMount } from "@/components/reports/realtime-mount";
 import { RefreshButton } from "@/components/reports/refresh-button";
 import { FilterTransitionProvider } from "@/components/reports/filter-transition";
 import { PageShell } from "@/components/layout/page-shell";
@@ -115,6 +116,7 @@ export default async function ConversasPage({ searchParams }: PageProps) {
         Pular para a tabela de conversas
       </a>
       <PageShell variant="wide">
+        <RealtimeMount connectionId={connectionId} accountId={accountId} />
         <PageHeader
         icon={MessageSquare}
         title="Conversas"

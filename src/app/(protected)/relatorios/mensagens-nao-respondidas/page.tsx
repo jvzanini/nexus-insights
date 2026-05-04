@@ -9,6 +9,7 @@ import {
   type MensagensFiltersValue,
 } from "@/components/reports/mensagens-nao-respondidas-filters";
 import { MensagensNaoRespondidasTable } from "@/components/reports/mensagens-nao-respondidas-table";
+import { RealtimeMount } from "@/components/reports/realtime-mount";
 import { RefreshButton } from "@/components/reports/refresh-button";
 import { FilterTransitionProvider } from "@/components/reports/filter-transition";
 import { ContentLoadingWrapper } from "@/components/reports/content-loading-wrapper";
@@ -107,6 +108,7 @@ export default async function MensagensNaoRespondidasPage({
 
   return (
     <PageShell variant="wide">
+      <RealtimeMount connectionId={connectionId} accountId={accountId} />
       <PageHeader
         icon={MailWarning}
         title="Mensagens não respondidas"
