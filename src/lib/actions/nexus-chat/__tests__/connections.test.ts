@@ -36,6 +36,7 @@ import {
   updateNexusChatConnection,
   softDeleteNexusChatConnection,
   testNexusChatConnection,
+  regenerateConnectionWebhookSecret,
 } from "../connections";
 
 const userMock = getCurrentUser as jest.MockedFunction<typeof getCurrentUser>;
@@ -102,6 +103,27 @@ describe("createNexusChatConnection", () => {
         action: "nexus_chat_connection_created",
         targetType: "nexus_chat_connection",
         targetId: "conn-1",
+      }),
+    );
+  });
+
+  it("Fase 2: gera webhookToken + webhookSecretEnc + retorna secretPlain UMA VEZ", async () => {
+    userMock.mockResolvedValue({
+      id: "u1",
+      platformRole: "super_admin",
+    } as never);
+    createMock.mockResolvedValue({ id: "conn-1" });
+
+    const result = await createNexusChatConnection(validInput);
+
+    expect(result.success).toBe(true);
+    expect(result.data?.webhookSecretPlain).toMatch(/^[0-9a-f]{64}$/);
+    expect(createMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          webhookToken: expect.stringMatching(/^[0-9a-f]{64}$/),
+          webhookSecretEnc: expect.any(String),
+        }),
       }),
     );
   });
@@ -315,5 +337,59 @@ describe("testNexusChatConnection", () => {
         }),
       }),
     );
+  });
+});
+
+describe("regenerateConnectionWebhookSecret", () => {
+  it("super_admin regenera secret + audit log + retorna novo secretPlain", async () => {
+    userMock.mockResolvedValue({
+      id: "u1",
+      platformRole: "super_admin",
+    } as never);
+    findUniqueMock.mockResolvedValue({ id: "c1", name: "Padrão (legado)" });
+    updateMock.mockResolvedValue({ id: "c1" });
+
+    const result = await regenerateConnectionWebhookSecret("c1");
+
+    expect(result.success).toBe(true);
+    expect(result.data?.webhookSecretPlain).toMatch(/^[0-9a-f]{64}$/);
+    expect(updateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "c1" },
+        data: expect.objectContaining({
+          webhookSecretEnc: expect.any(String),
+        }),
+      }),
+    );
+    expect(auditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "webhook_secret_regenerated",
+        targetType: "nexus_chat_connection",
+        targetId: "c1",
+      }),
+    );
+  });
+
+  it("admin (não super_admin) é rejeitado", async () => {
+    userMock.mockResolvedValue({ id: "u1", platformRole: "admin" } as never);
+
+    const result = await regenerateConnectionWebhookSecret("c1");
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/super_admin/i);
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it("retorna erro se conexão não existe ou foi deletada", async () => {
+    userMock.mockResolvedValue({
+      id: "u1",
+      platformRole: "super_admin",
+    } as never);
+    findUniqueMock.mockResolvedValue(null);
+
+    const result = await regenerateConnectionWebhookSecret("c-nonexistent");
+
+    expect(result.success).toBe(false);
+    expect(updateMock).not.toHaveBeenCalled();
   });
 });

@@ -26,6 +26,7 @@ import {
   invalidateNexusChatPool,
   queryNexusChat,
 } from "@/lib/nexus-chat/pool";
+import { generateWebhookCredentials } from "@/lib/nexus-chat/webhook-credentials";
 
 type ActionResult<T = unknown> = {
   success: boolean;
@@ -62,7 +63,7 @@ async function requireSuperAdmin(): Promise<
 
 export async function createNexusChatConnection(
   input: NexusChatConnectionInput,
-): Promise<ActionResult<{ id: string }>> {
+): Promise<ActionResult<{ id: string; webhookSecretPlain: string }>> {
   const auth = await requireSuperAdmin();
   if (!auth.ok) return { success: false, error: auth.error };
 
@@ -74,6 +75,10 @@ export async function createNexusChatConnection(
   if (!parsed.data.password) {
     return { success: false, error: "Senha obrigatória ao criar conexão." };
   }
+
+  // Fase 2: toda conexão nova nasce com webhook (token + secret cifrado).
+  // O secret em plain só vive nesta variável e é retornado UMA VEZ pra UI.
+  const credentials = generateWebhookCredentials();
 
   const conn = await prisma.nexusChatConnection.create({
     data: {
@@ -87,6 +92,8 @@ export async function createNexusChatConnection(
       applicationName: parsed.data.applicationName,
       status: "active",
       createdById: auth.userId,
+      webhookToken: credentials.token,
+      webhookSecretEnc: credentials.secretEnc,
     },
   });
 
@@ -103,10 +110,48 @@ export async function createNexusChatConnection(
       username: parsed.data.username,
       sslMode: parsed.data.sslMode,
       applicationName: parsed.data.applicationName,
+      webhookGenerated: true,
     },
   });
 
-  return { success: true, data: { id: conn.id } };
+  return {
+    success: true,
+    data: { id: conn.id, webhookSecretPlain: credentials.secretPlain },
+  };
+}
+
+export async function regenerateConnectionWebhookSecret(
+  id: string,
+): Promise<ActionResult<{ webhookSecretPlain: string }>> {
+  const auth = await requireSuperAdmin();
+  if (!auth.ok) return { success: false, error: auth.error };
+
+  const before = await prisma.nexusChatConnection.findUnique({
+    where: { id, deletedAt: null },
+  });
+  if (!before) {
+    return { success: false, error: "Conexão não encontrada." };
+  }
+
+  const credentials = generateWebhookCredentials();
+
+  await prisma.nexusChatConnection.update({
+    where: { id },
+    data: { webhookSecretEnc: credentials.secretEnc },
+  });
+
+  await logAudit({
+    userId: auth.userId,
+    action: "webhook_secret_regenerated",
+    targetType: "nexus_chat_connection",
+    targetId: id,
+    details: { name: before.name },
+  });
+
+  return {
+    success: true,
+    data: { webhookSecretPlain: credentials.secretPlain },
+  };
 }
 
 export async function updateNexusChatConnection(
