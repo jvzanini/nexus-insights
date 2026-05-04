@@ -1,4 +1,9 @@
-import { Worker, type Job } from "bullmq";
+// TZ explícito ANTES dos imports — garante que JobScheduler com `tz` use o
+// fuso correto e que `Date` instanciado por bibliotecas respeite BRT por
+// padrão. Em containers, TZ pode vir do compose; respeitamos se já setado.
+process.env.TZ = process.env.TZ ?? "America/Sao_Paulo";
+
+import { Worker, Queue, type Job } from "bullmq";
 import IORedis from "ioredis";
 import { redis } from "../lib/redis";
 import {
@@ -20,12 +25,17 @@ import { processRefreshByTeam } from "./jobs/pre-agregacao/refresh-by-team";
 import { processHousekeeping } from "./jobs/pre-agregacao/housekeeping";
 import { processRefreshDimSnapshots } from "./jobs/integrations/refresh-dim-snapshots";
 import { processReconcileIntegrations } from "./jobs/integrations/reconcile-integrations";
+import { processDeltaSyncJob } from "./jobs/chatwoot-sync/delta-sync";
+import { processFullSweepJob } from "./jobs/chatwoot-sync/full-sweep";
+import { tickDeltaSyncScheduler } from "./jobs/chatwoot-sync/scheduler";
+import { getFullSweepQueue } from "./jobs/chatwoot-sync/queues";
 import { runConnectionsSeedIfNeeded } from "../lib/nexus-chat/seed";
 import { invalidateNexusChatPool } from "../lib/nexus-chat/pool";
+import { prisma } from "../lib/prisma";
 import { CHANNEL as REALTIME_CHANNEL } from "../lib/realtime";
 
 console.log("[worker] Starting Nexus Insights worker…");
-console.log(`[worker] Node.js ${process.version}, PID: ${process.pid}`);
+console.log(`[worker] Node.js ${process.version}, PID: ${process.pid}, TZ=${process.env.TZ}`);
 
 // ─── Multi-tenant: seed inicial + listener Pub/Sub ────────────────────────
 
@@ -164,6 +174,99 @@ const integrationsReconcileWorker = new Worker(
   { connection: redis, concurrency: 1 },
 );
 
+// ─── Chatwoot polling delta (v0.41) ───────────────────────────────────────
+//
+// Arquitetura:
+//   1. Worker `chatwoot-sync-delta` (concurrency 4) executa runDeltaSync
+//      por connection. Idempotência via jobId determinístico do scheduler.
+//   2. Queue separada `chatwoot-sync-delta-tick` recebe um repeat-job a
+//      cada 5s; um Worker concurrency 1 chama tickDeltaSyncScheduler() →
+//      enfileira jobs delta-sync para conns devidas.
+//   3. Queue separada `chatwoot-sync-sweep-cron` recebe cron diário
+//      03:00 BRT; Worker concurrency 1 dispatcha 1 job filho por
+//      connection ativa pra queue `chatwoot-sync-sweep`.
+//   4. Worker `chatwoot-sync-sweep` (concurrency 1) executa runFullSweep
+//      no job filho.
+//
+// Por que 2 queues separadas (tick + sweep-cron) em vez de schedulers nas
+// próprias queues delta/sweep? JobScheduler precisa enfileirar jobs com
+// `data` fixo, mas precisamos de dispatch dinâmico (1 job por connection).
+// Separar a queue do scheduler da queue dos workers resolve isso de forma
+// limpa e mantém metrics granulares por queue.
+
+const deltaSyncWorker = new Worker(
+  "chatwoot-sync-delta",
+  processDeltaSyncJob,
+  { connection: redis, concurrency: 4 },
+);
+deltaSyncWorker.on("failed", (job, err) =>
+  console.error("[worker.chatwoot-sync-delta] failed:", job?.id, err.message),
+);
+
+const deltaTickQueue = new Queue("chatwoot-sync-delta-tick", {
+  connection: redis,
+  defaultJobOptions: {
+    removeOnComplete: { count: 50 },
+    removeOnFail: { count: 50 },
+  },
+});
+
+const deltaTickWorker = new Worker(
+  "chatwoot-sync-delta-tick",
+  async () => {
+    await tickDeltaSyncScheduler();
+  },
+  { connection: redis, concurrency: 1 },
+);
+deltaTickWorker.on("failed", (job, err) =>
+  console.error("[worker.chatwoot-sync-delta-tick] failed:", job?.id, err.message),
+);
+
+const sweepCronQueue = new Queue("chatwoot-sync-sweep-cron", {
+  connection: redis,
+  defaultJobOptions: {
+    removeOnComplete: { count: 30 },
+    removeOnFail: { count: 30 },
+  },
+});
+
+const sweepCronWorker = new Worker(
+  "chatwoot-sync-sweep-cron",
+  async () => {
+    // Dispatcher: enfileira 1 sweep job por connection ativa.
+    const conns = await prisma.nexusChatConnection.findMany({
+      where: { deletedAt: null, status: "active" },
+      select: { id: true },
+    });
+    const sweepQueue = getFullSweepQueue();
+    for (const c of conns) {
+      await sweepQueue.add("sweep-conn", { connectionId: c.id }).catch((err) =>
+        console.warn(
+          "[worker.chatwoot-sync-sweep-cron] failed to enqueue:",
+          c.id,
+          err.message,
+        ),
+      );
+    }
+    console.log(
+      `[worker.chatwoot-sync-sweep-cron] dispatched ${conns.length} sweep jobs`,
+    );
+  },
+  { connection: redis, concurrency: 1 },
+);
+sweepCronWorker.on("failed", (job, err) =>
+  console.error("[worker.chatwoot-sync-sweep-cron] failed:", job?.id, err.message),
+);
+
+const fullSweepWorker = new Worker(
+  "chatwoot-sync-sweep",
+  processFullSweepJob,
+  { connection: redis, concurrency: 1 },
+);
+fullSweepWorker.on("failed", (job, err) =>
+  console.error("[worker.chatwoot-sync-sweep] failed:", job?.id, err.message),
+);
+
 // ─── Schedules (repeatable jobs) ──────────────────────────────────────────
 
 async function scheduleRepeatables() {
@@ -221,8 +324,26 @@ async function scheduleRepeatables() {
     { pattern: "0 */6 * * *" },
     { name: "integrations.reconcile" },
   );
+
+  // Chatwoot polling delta — tick 5s (idempotente via jobId determinístico
+  // no próprio tickDeltaSyncScheduler).
+  await deltaTickQueue.upsertJobScheduler(
+    "chatwoot-sync-delta-tick",
+    { every: 5_000 },
+    { name: "tick" },
+  );
+
+  // Chatwoot full sweep — cron diário 03:00 BRT. tz explícito garante que
+  // o crontab é interpretado em America/Sao_Paulo independente do TZ do
+  // container.
+  await sweepCronQueue.upsertJobScheduler(
+    "chatwoot-sync-sweep-cron-daily",
+    { pattern: "0 3 * * *", tz: "America/Sao_Paulo" },
+    { name: "dispatch" },
+  );
+
   console.log(
-    "[worker] Schedules registered: refresh-by-* every 30min (fallback; gatilho real é runDeltaSync), housekeeping daily 03:00, integrations.refresh-dim every 30min, integrations.reconcile every 6h",
+    "[worker] Schedules registered: refresh-by-* every 30min (fallback; gatilho real é runDeltaSync), housekeeping daily 03:00, integrations.refresh-dim every 30min, integrations.reconcile every 6h, chatwoot-sync-delta-tick every 5s, chatwoot-sync-sweep-cron daily 03:00 BRT",
   );
 }
 
@@ -239,6 +360,10 @@ console.log("[worker] Workers iniciados:", [
   housekeepingWorker.name,
   integrationsRefreshDimWorker.name,
   integrationsReconcileWorker.name,
+  deltaSyncWorker.name,
+  deltaTickWorker.name,
+  sweepCronWorker.name,
+  fullSweepWorker.name,
 ]);
 
 // ─── Graceful shutdown ────────────────────────────────────────────────────
@@ -254,6 +379,10 @@ async function shutdown(signal: string) {
     housekeepingWorker.close(),
     integrationsRefreshDimWorker.close(),
     integrationsReconcileWorker.close(),
+    deltaSyncWorker.close(),
+    deltaTickWorker.close(),
+    sweepCronWorker.close(),
+    fullSweepWorker.close(),
   ]);
   await redis.quit();
   process.exit(0);
