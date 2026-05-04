@@ -58,12 +58,11 @@ enum AuditAction {
   company_chat_binding_created
   company_chat_binding_updated
   company_chat_binding_deleted
-  webhook_received
-  webhook_rejected_hmac
-  webhook_rejected_rate_limit
-  webhook_no_binding
-  webhook_token_regenerated
-  webhook_secret_regenerated
+  polling_sync_completed
+  polling_sync_failed
+  polling_full_sweep_started
+  polling_full_sweep_completed
+  polling_interval_updated
 }
 
 model User {
@@ -483,11 +482,12 @@ model IntegrationAuditLog {
   @@map("integration_audit_logs")
 }
 
-// ─── Multi-tenant: Nexus Chat connections + bindings (Fase 1) ──────────────
+// ─── Multi-tenant: Nexus Chat connections + bindings (Fase 1; v0.41 polling delta) ──
 
 /// Representa uma instalação física do Nexus Chat (1 banco Postgres).
-/// Webhook (token+secret) é compartilhado por toda a instalação — a
-/// roteamento por empresa acontece via `account_id` do payload + binding.
+/// Multi-tenancy: 1 connection × N bindings (account_id por empresa).
+/// v0.41: webhook removido; substituído por polling delta universal
+/// (worker BullMQ executa a cada `pollingIntervalSeconds` segundos).
 model NexusChatConnection {
   id               String    @id @default(uuid()) @db.Uuid
   name             String
@@ -498,21 +498,24 @@ model NexusChatConnection {
   passwordEnc      String    @map("password_enc")
   sslMode          String    @default("prefer") @map("ssl_mode")
   applicationName  String    @default("nexus-insights") @map("application_name")
-  // Webhook é por instalação. Fase 1 deixa null; Fase 2 popula.
-  webhookToken     String?   @unique @map("webhook_token")
-  webhookSecretEnc String?   @map("webhook_secret_enc")
   status           String    @default("active") @map("status")
   lastTestAt       DateTime? @map("last_test_at")
   lastTestError    String?   @map("last_test_error") @db.Text
-  // Fase 2: timestamp do último webhook recebido (populado pelo endpoint
-  // /api/webhooks/nexus-chat/[token]). Usado para detectar webhook quieto.
-  lastWebhookAt    DateTime? @map("last_webhook_at")
+  /// Intervalo (segundos) entre cada execução do polling delta para esta
+  /// conexão. Default 30s; mínimo 20s validado em Server Action (Zod) e
+  /// CHECK constraint no Postgres (defesa em profundidade).
+  pollingIntervalSeconds Int @default(30) @map("polling_interval_seconds")
+  /// Timestamp da última execução bem-sucedida do polling delta.
+  /// Atualizado pelo worker `chatwoot-sync-delta` ao final de cada run
+  /// (mesmo com erros parciais — sucesso parcial vale como heartbeat).
+  lastSyncAt       DateTime? @map("last_sync_at")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
   deletedAt        DateTime? @map("deleted_at")
   createdById      String?   @map("created_by_id") @db.Uuid
 
   bindings CompanyChatBinding[]
+  cursors  ChatwootSyncCursor[]
 
   @@index([status, deletedAt])
   @@map("nexus_chat_connections")
@@ -536,4 +539,34 @@ model CompanyChatBinding {
   @@index([chatwootAccountId])
   @@index([enabled, deletedAt])
   @@map("company_chat_bindings")
+}
+
+/// Cursor de polling delta por (connection × account × tabela do Chatwoot).
+/// Worker `chatwoot-sync-delta` (v0.41+) lê o cursor, busca rows com
+/// `updated_at > lastSyncedAt` (ou `id > lastSyncedId` quando a tabela alvo
+/// não tem `updated_at`), enfileira jobs `refresh-by-*` da pré-agregação
+/// quando há mudança, e avança o cursor.
+///
+/// Por que `lastSyncedId` em vez de só timestamp? Algumas tabelas do
+/// Chatwoot (ex: taggings) não têm `updated_at`; usamos `id > X` como
+/// cursor. Para tabelas com updated_at, lastSyncedId fica null.
+model ChatwootSyncCursor {
+  id            String              @id @default(uuid()) @db.Uuid
+  connectionId  String              @map("connection_id") @db.Uuid
+  connection    NexusChatConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  accountId     Int                 @map("account_id")
+  tableName     String              @map("table_name")
+  lastSyncedAt  DateTime?           @map("last_synced_at")
+  lastSyncedId  BigInt?             @map("last_synced_id")
+  rowsSynced    BigInt              @default(0) @map("rows_synced")
+  lastRunMs     Int?                @map("last_run_ms")
+  lastError     String?             @map("last_error") @db.Text
+  lastErrorAt   DateTime?           @map("last_error_at")
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+
+  @@unique([connectionId, accountId, tableName])
+  @@index([connectionId])
+  @@index([connectionId, accountId])
+  @@map("chatwoot_sync_cursors")
 }
