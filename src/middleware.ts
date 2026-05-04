@@ -46,7 +46,11 @@ export default auth(async (req) => {
     nextUrl.pathname === "/reset-password" ||
     nextUrl.pathname === "/verify-email" ||
     nextUrl.pathname.startsWith("/api/auth/") ||
-    nextUrl.pathname.startsWith("/api/health");
+    nextUrl.pathname.startsWith("/api/health") ||
+    // Webhook do Nexus Chat (Fase 2): autenticado via HMAC, não via session.
+    // Endpoint precisa estar fora do middleware de auth pra receber POSTs
+    // do Chatwoot externamente sem redirect 302 → /login.
+    nextUrl.pathname.startsWith("/api/webhooks/nexus-chat/");
 
   if (isPublic) return;
 
