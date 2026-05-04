@@ -1,4 +1,6 @@
-import "server-only";
+// NÃO usar `import "server-only"` aqui: este módulo é importado pelo
+// worker BullMQ (Node puro, fora do Next.js), onde o pacote `server-only`
+// quebra com "Cannot find module".
 
 import { Pool, type QueryResult } from "pg";
 import { decrypt } from "@/lib/encryption";
