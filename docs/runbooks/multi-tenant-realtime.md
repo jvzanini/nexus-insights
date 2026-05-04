@@ -1,15 +1,18 @@
-# Runbook — Multi-tenant Realtime (Fase 1)
+# Runbook — Multi-tenant Realtime (base)
 
-Operação básica das `nexus_chat_connections` e `company_chat_bindings` introduzidas pela Fase 1 do épico Multi-tenant Realtime. Procedimentos voltados a **super_admin**.
+Operação das `nexus_chat_connections` e `company_chat_bindings` (Fase 1, ainda viva). Procedimentos voltados a **super_admin**.
 
-> Spec: `docs/superpowers/specs/2026-05-03-multi-tenant-realtime-fase1-fundacao-design.md`.
-> Plan: `docs/superpowers/plans/2026-05-03-multi-tenant-realtime-fase1.md`.
+> Para a camada de **polling delta** (substituiu webhook na v0.41), ver `docs/runbooks/polling-delta-sync.md`.
+> Spec base: `docs/superpowers/specs/2026-05-03-multi-tenant-realtime-fase1-fundacao-design.md`.
+> Plan base: `docs/superpowers/plans/2026-05-03-multi-tenant-realtime-fase1.md`.
+
+> **Atualizado em v0.41:** rota `/configuracoes/conexoes` foi movida para `/bancos-de-dados`. URLs antigas redirecionam (308). UI completa em 4 abas (Conexão / Sincronização / Jobs / Saúde) introduzida na v0.40 (Fase 3).
 
 ---
 
 ## 1. Cadastrar nova conexão (`nexus_chat_connection`)
 
-1. Acessar `/configuracoes/conexoes` (super_admin only — outros papéis veem redirect para `/dashboard`).
+1. Acessar `/bancos-de-dados` (super_admin only — outros papéis veem redirect para `/dashboard`).
 2. Botão **"Nova conexão"** abre Dialog.
 3. Preencher: nome, host, porta (default 5432), banco, usuário, senha (cifrada AES-256-GCM), SSL mode (default `prefer`).
 4. Salvar — a conexão é criada com `status='active'`. `passwordEnc` nunca aparece na UI; após salvar a senha não é mais visível.
@@ -21,7 +24,7 @@ A operação é auditada em `audit_logs.action='nexus_chat_connection_created'` 
 
 ## 2. Cadastrar nova empresa (`company_chat_binding`)
 
-1. Em `/configuracoes/conexoes`, clicar no ícone **Database** ("Ver bindings") da connection desejada.
+1. Em `/bancos-de-dados`, clicar no ícone **Database** ("Ver bindings") da connection desejada.
 2. Sheet lateral abre listando bindings dessa connection.
 3. Botão **"Nova empresa"** abre Dialog.
 4. Preencher: `chatwoot_account_id` (integer, account_id dentro daquela instalação), `display_name` (nome amigável), `enabled` (default true).
@@ -35,7 +38,7 @@ A operação é auditada em `audit_logs.action='nexus_chat_connection_created'` 
 # 1. /api/health responde 200 com connections[]
 curl -s https://nexus-insights.example.com/api/health | jq .connections
 
-# 2. Login super_admin → /configuracoes/conexoes → conexão "Padrão (legado)" listada.
+# 2. Login super_admin → /bancos-de-dados → conexão "Padrão (legado)" listada.
 # 3. Click Test na connection → Toast verde "Conectado em X ms".
 # 4. Open binding sheet → 1+ binding (Matrix etc).
 # 5. Open /relatorios/visao-geral → dados carregam normalmente (mesma UX, agora via pool dinâmico).
@@ -136,7 +139,7 @@ ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = NOW();
 Lançado por `getNexusChatPool` quando a connection foi soft-deletada ou está com `status != 'active'`.
 
 - Causa típica: super_admin pausou a connection ou apagou.
-- Resolução: ir em `/configuracoes/conexoes`, ativar (atualizar status para 'active' via update direto se a UI ainda não permitir).
+- Resolução: ir em `/bancos-de-dados`, ativar (atualizar status para 'active' via update direto se a UI ainda não permitir).
 
 ### `NoActiveBindingError`
 
@@ -174,4 +177,4 @@ Se o **banco do Chatwoot** atingir CONNECTION LIMIT 5 (limite atual do user `cha
 - Pool dinâmico: `src/lib/nexus-chat/pool.ts`.
 - Resolver: `src/lib/reports/active-connection.ts`.
 - Server Actions: `src/lib/actions/nexus-chat/{connections,bindings}.ts`.
-- UI: `src/app/(protected)/configuracoes/conexoes/page.tsx` + `src/components/settings/nexus-chat/*`.
+- UI: `src/app/(protected)/bancos-de-dados/page.tsx` + `src/components/settings/nexus-chat/*`.
