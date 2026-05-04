@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.41.1] 2026-05-04 — Hotfix usersSync (column u.role does not exist)
+
+> Pós-deploy v0.41.0: aba Saúde mostrou `column u.role does not exist` em todas as runs de `users`. No Chatwoot OSS atual, `role` está em `account_users.role` (não em `users.role`) — um user pode ter roles diferentes em accounts distintas.
+
+- **`src/lib/chatwoot/sync/table-syncs/users.ts`**: SQL trocado de `u.role` → `au.role` (JOIN com `account_users` já existia). Type também ajustado (`role: string | number | null` em vez de `number`).
+
 ## [v0.41.0] 2026-05-04 — Polling Delta + UX Overhaul
 
 > **Pivot arquitetural.** Substitui webhook event-driven (v0.38-v0.40) por **polling delta universal** direto no banco Postgres do Chatwoot. Latência ≤45s p99 (default 30s), zero dependência de cadastro externo de webhook, cobre TODAS as mudanças (não só os ~8 eventos do Chatwoot — pega `inboxes`, `teams`, `users`, `account_users`, `contacts`, `reporting_events`, `taggings` etc). UX inteira de `/bancos-de-dados` reformulada: lista clicável, dialog limpo, wizard sem webhook, abas Conexão/Sincronização/Jobs/Saúde com dados úteis, **tour interativo** em todas as 6 telas.

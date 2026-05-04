@@ -10,6 +10,10 @@ const EPOCH = new Date(0);
  *
  * Cursor: `users.updated_at`. Como `users` é global (sem account_id), fazemos
  * JOIN com `account_users` para filtrar apenas usuários membros da account.
+ *
+ * Hotfix v0.41.1: `role` NÃO existe em `users` no Chatwoot OSS atual — está em
+ * `account_users.role` (faz sentido: um user pode ter roles diferentes em
+ * accounts distintas). Corrigido SQL pra puxar de `au.role`.
  */
 async function run({
   connectionId,
@@ -21,7 +25,7 @@ async function run({
   const since = cursor.lastSyncedAt ?? EPOCH;
 
   const sql = `
-    SELECT u.id, u.name, u.email, u.role, u.created_at, u.updated_at, au.account_id
+    SELECT u.id, u.name, u.email, au.role, u.created_at, u.updated_at, au.account_id
     FROM users u
     JOIN account_users au ON au.user_id = u.id
     WHERE au.account_id = $1
@@ -34,7 +38,7 @@ async function run({
     id: number;
     name: string;
     email: string;
-    role: number;
+    role: string | number | null;
     created_at: Date;
     updated_at: Date;
     account_id: number;
