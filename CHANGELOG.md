@@ -1,5 +1,95 @@
 # Changelog
 
+## [v0.38.0] 2026-05-04 — Multi-tenant Realtime Fase 2 (Webhook event-driven)
+
+> **Épico 2 de 3.** Substitui cron de 5 min por **webhook event-driven**: Nexus Chat (Chatwoot) dispara `POST /api/webhooks/nexus-chat/[token]` a cada evento (`conversation_created`, `message_created`, etc), o app valida HMAC SHA-256 timing-safe, faz rate limit Redis (100/min/token), enfileira 4 jobs `refresh-by-*` com debounce 2s (coalescência de bursts via `jobId` único por bucket) e publica `facts:refreshed` no Pub/Sub. Latência: ~ms (vs 5 min cron). Cron rebaixado para 30 min como fallback.
+
+### Endpoint webhook (`src/app/api/webhooks/nexus-chat/[token]/route.ts`)
+- POST com body cru (HMAC sobre raw bytes — `req.text()`, NÃO `req.json()`).
+- Limite de payload 1 MB (anti-DoS: validação dupla via `content-length` + `rawBody.length`).
+- Lookup connection por `webhookToken` + status='active' + secret presente. **404 silencioso** se inválido (não revela existência).
+- Rate limit Redis (`incr` + `expire 60s`) com try/catch — degrade graceful sem rate limit se Redis cair.
+- HMAC SHA-256 timing-safe (`crypto.timingSafeEqual`) sobre header `x-chatwoot-hmac-sha256`. **401** com audit `webhook_rejected_hmac` se inválido.
+- Resolve binding `(connectionId, accountId)`. Sem binding → **200 OK ignored** (Chatwoot trata 4xx como retry forever; jamais devolver 4xx para casos esperados).
+- Enfileira 4 jobs com `jobId: refresh:${dim}:${conn.id}:${accountId}:${bucket}` (bucket = `floor(now / 2000)`) + `delay: 2000ms`. Bursts dentro do mesmo bucket são deduplicados pelo BullMQ.
+- Publica 4 eventos `facts:refreshed` no Pub/Sub (1 por dimensão).
+- Update `lastWebhookAt` fire-and-forget.
+- Audit log sample 1/100 (anti-flood) + log JSON estruturado em stdout SEMPRE (diagnóstico Portainer).
+- 10/10 tests verde cobrindo 9 cenários da spec + 1 GET 405.
+
+### Geração de credenciais (`webhook-credentials.ts`)
+- `generateWebhookCredentials()` cria token (32 bytes hex = 64 chars) + secret (32 bytes hex) + secret cifrado (AES-256-GCM).
+- `secretPlain` retornado UMA VEZ pelo Server Action — caller (UI) exibe em Alert verde com botão Copy.
+- `createNexusChatConnection` agora gera webhook automaticamente em toda nova conexão.
+- `regenerateConnectionWebhookSecret(id)` super_admin only — rotação de secret com audit log.
+
+### Backfill seed (Fase 2)
+- `backfillWebhookCredentialsIfNeeded()` em `src/lib/nexus-chat/seed.ts`.
+- Lock advisory `8472939` (distinto da Fase 1 `8472938`).
+- Idempotente via `app_settings.webhooks_seeded_at`.
+- Para cada connection sem `webhookToken`, gera token+secret cifrado.
+
+### Listener Pub/Sub no App (`src/instrumentation.ts`)
+- Hook `register()` rodado uma vez no boot do servidor Next.js.
+- Subscribe no canal `nexus-insights:realtime`.
+- Ao receber `connection:updated` ou `connection:deleted`, chama `invalidateNexusChatPool(connectionId)`.
+- Sem o listener, pool do App ficaria stale até 30 min (janitor).
+- Hot reload safe via `globalThis.__nexusAppPubsubSubscriber` guard.
+
+### `<RealtimeMount>` em todas as 7 pages de relatório
+- Wrapper client invisível (`src/components/reports/realtime-mount.tsx`) que monta `useFactsRealtime` com `(connectionId, accountId)`.
+- Adicionado em **Conversas** e **Mensagens não respondidas** (as 2 pages que não têm `<FactsFreshness>`).
+- 5 outras pages (Visão Geral, Distribuição, Equipe, Origem & IA, Performance, Dashboard) já recebem `<FactsFreshness>` via Fase 1.
+- Total: 7/7 pages reagem a webhook em ~1s (debounce do hook).
+
+### Cron rebaixado para 30 min fallback
+- Schedulers antigos `facts-refresh-by-{account,inbox,agent,team}` removidos via `removeJobScheduler`.
+- Schedulers novos com sufixo `-fallback` em pattern `*/30 * * * *`.
+- Webhook é gatilho primário; cron pega bordas (webhook quieto, replay, rede).
+
+### UI super_admin estendida (`/configuracoes/conexoes`)
+- Bloco **Webhook** no `<ConnectionFormDialog>`:
+  - Alert success com `secretPlain` (mostrado UMA VEZ ao criar/regenerar) + botão Copy + warning "Você não verá esta chave novamente".
+  - URL completa do webhook copiable (`window.location.origin/api/webhooks/nexus-chat/{token}`).
+  - Botão **Regenerar secret** com `<AlertDialog>` confirmação destrutiva.
+  - Lista de eventos canônicos a marcar no Chatwoot (`conversation_created`, `_updated`, `_resolved`, `message_created`, `conversation_status_changed`).
+- Coluna **Webhook** no `<ConnectionList>`: badge "Configurado" (emerald) ou "Sem webhook" (amber) baseado em `webhookToken IS NOT NULL`.
+- `ui-ux-pro-max` invocado obrigatoriamente — paleta semântica (emerald success, amber informativo, rose destrutivo), aria-live="polite" no Alert, motion-safe, dark/light pareados.
+
+### `AuditAction` enum +6 valores
+- `webhook_received`, `webhook_rejected_hmac`, `webhook_rejected_rate_limit`, `webhook_no_binding`, `webhook_token_regenerated`, `webhook_secret_regenerated`.
+- `audits-table.tsx` `Record<AuditAction>` atualizado com 6 entries novas (evita CI break).
+
+### Schema additivo
+- Coluna `last_webhook_at` em `nexus_chat_connections` (nullable). Populada pelo endpoint a cada webhook recebido. Usado para detectar quietude (cron fallback + diagnóstico).
+
+### Workflow rigoroso
+- Spec v3 (1245 linhas, 46 achados) já estava pronta da sessão anterior.
+- **Plan v3** novo (~750 linhas, 54 achados em 2 pentes-finos REAIS) com 9 lotes L0-L9.
+- **5 subagents paralelos** (L4 endpoint, L5 instrumentation, L6 RealtimeMount, L7 cron, L8 UI) em coordenação multi-agente sem conflito.
+- `ui-ux-pro-max` invocado em L8.
+- Runbook canônico em `docs/runbooks/webhook-nexus-chat.md` (11 itens — cadastro Chatwoot, validação curl, regeneração, troubleshooting, smoke test).
+
+### Métricas
+- ~22 commits granulares.
+- Tests: 1715/1735 verde (20 falhas pré-existentes em integrations-power-bi.test.ts, escopo distinto).
+- Typecheck zero erros.
+- ~6 hotfix tests (advanced-filters-sort-options.test mock atualizado).
+
+### Não-objetivos (Fase 3)
+- UI rica em 4 abas (Conexões, Tempo real, Jobs, Saúde).
+- Wizard de onboarding nova empresa.
+- Sidebar reorg (remover "Jobs de pré-agregação").
+- Constraint NOT NULL + nova PK em `chatwoot_facts_*`.
+- Refator dos 4 sites legados ainda usando `chatwootQuery` (sla-content, csat-content, llm/tools/executor, power-bi/dim-sync).
+
+### Migrations em produção
+1. Deploy v0.38.0 → ensureNexusChatTables roda no boot do worker (idempotente DDL: ADD VALUE enum + ADD COLUMN last_webhook_at).
+2. Seed Fase 2 (backfill webhook na connection seed) roda automaticamente via advisory lock 8472939.
+3. Validar em `/configuracoes/conexoes` (super_admin): connection "Padrão (legado)" tem webhook gerado.
+4. Cadastrar webhook no painel admin do Chatwoot Matrix (1x para cada account: id=2 e id=9).
+5. Smoke test: abrir uma conversa no Chatwoot e ver UI Nexus Insights atualizar em ~1s.
+
 ## [v0.37.0] 2026-05-04 — Multi-tenant Realtime Fase 1 (Fundação invisível)
 
 > **Épico 1 de 3.** Fundação multi-tenant para Nexus Insights virar hub conectado a múltiplas instalações Nexus Chat (cada uma com várias accounts/empresas). Sem mudança visível para admin/manager/viewer das empresas — super_admin ganha rota administrativa nova `/configuracoes/conexoes`. Webhook em tempo real e UI completa em 4 abas ficam para Fases 2 e 3.

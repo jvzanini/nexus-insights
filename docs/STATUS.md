@@ -1,10 +1,20 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-05-04
-**Versão atual em produção:** v0.37.0
+**Versão atual em produção:** v0.38.0
 **URL:** https://insights.nexusai360.com
 
 ---
+
+## Em produção (v0.38.0)
+
+### Release v0.38.0 (2026-05-04) — Multi-tenant Realtime Fase 2 (Webhook event-driven)
+
+**Épico 2 de 3.** Substitui cron de 5 min por **webhook event-driven**: Nexus Chat dispara POST `/api/webhooks/nexus-chat/[token]` → app valida HMAC SHA-256 + rate limit + debounce 2s → enfileira 4 jobs `refresh-by-*` + publica `facts:refreshed`. Latência ~1s (vs 5 min cron). Cron rebaixado para 30 min fallback.
+
+Workflow: spec v3 (1245L+46 achados) já existente + plan v3 novo (54 achados) + 5 subagents paralelos (endpoint/instrumentation/RealtimeMount/cron/UI) + `ui-ux-pro-max` em L8. ~22 commits, 1715/1735 tests verde, typecheck zero, runbook em `docs/runbooks/webhook-nexus-chat.md`.
+
+Pós-deploy: cadastrar webhook no painel admin do Chatwoot (1x por account: id=2 + id=9 da Matrix). Smoke test: abrir conversa no Chatwoot → UI Nexus Insights atualiza em ~1s.
 
 ## Em produção (v0.37.0)
 
