@@ -46,6 +46,13 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   integration_password_revealed: "Integração: senha revelada",
   integration_password_rotated: "Integração: senha rotacionada",
   integration_provisioning_failed: "Integração: provisionamento falhou",
+  nexus_chat_connection_created: "Conexão Nexus Chat criada",
+  nexus_chat_connection_updated: "Conexão Nexus Chat atualizada",
+  nexus_chat_connection_deleted: "Conexão Nexus Chat removida",
+  nexus_chat_connection_tested: "Conexão Nexus Chat testada",
+  company_chat_binding_created: "Binding empresa↔conexão criado",
+  company_chat_binding_updated: "Binding empresa↔conexão atualizado",
+  company_chat_binding_deleted: "Binding empresa↔conexão removido",
 };
 
 function getActionBadgeClasses(action: AuditAction): string {
