@@ -68,6 +68,7 @@ export default async function Page() {
     lastTestAt: c.lastTestAt ? c.lastTestAt.toISOString() : null,
     lastTestError: c.lastTestError,
     bindingsCount: enabledCountByConnection.get(c.id) ?? 0,
+    webhookToken: c.webhookToken,
   }));
 
   return (

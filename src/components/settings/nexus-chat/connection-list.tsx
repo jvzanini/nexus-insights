@@ -12,6 +12,7 @@ import {
   Plus,
   TestTube,
   Trash2,
+  Webhook,
   XCircle,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -55,6 +56,13 @@ export interface ConnectionListItem {
   lastTestAt: string | null;
   lastTestError: string | null;
   bindingsCount: number;
+  /**
+   * Token público usado no path do webhook
+   * (`/api/webhooks/nexus-chat/{token}`). `null` para conexões legadas
+   * ainda não migradas pela seed Fase 2 — UI mostra badge "Não" e o
+   * super_admin precisa editar+regenerar.
+   */
+  webhookToken: string | null;
 }
 
 interface Props {
@@ -245,7 +253,7 @@ export function ConnectionList({
                 >
                   {/* Coluna identidade: nome + host masked + banco */}
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <p className="truncate text-sm font-medium text-foreground">
                         {c.name}
                       </p>
@@ -259,6 +267,10 @@ export function ConnectionList({
                         <StatusIcon className="h-3 w-3" aria-hidden />
                         {meta.label}
                       </span>
+                      <WebhookBadge
+                        connectionId={c.id}
+                        configured={c.webhookToken !== null}
+                      />
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
                       <span
@@ -409,5 +421,34 @@ export function ConnectionList({
         </AlertDialogContent>
       </AlertDialog>
     </section>
+  );
+}
+
+/**
+ * Badge "Configurado" / "Não" para sinalizar se a conexão tem webhook
+ * (token + secret) ativo. Mesma altura/estilo dos demais badges da linha:
+ * pílula com ring, ícone Webhook 12px e label curto. "Não" em âmbar
+ * convida à ação (editar+regenerar) sem soar como erro.
+ */
+function WebhookBadge({
+  connectionId,
+  configured,
+}: {
+  connectionId: string;
+  configured: boolean;
+}) {
+  return (
+    <span
+      data-testid={`conn-webhook-${connectionId}`}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset",
+        configured
+          ? "bg-emerald-500/10 text-emerald-600 ring-emerald-500/20 dark:text-emerald-400"
+          : "bg-amber-500/10 text-amber-600 ring-amber-500/20 dark:text-amber-300",
+      )}
+    >
+      <Webhook className="h-3 w-3" aria-hidden />
+      {configured ? "Webhook configurado" : "Sem webhook"}
+    </span>
   );
 }
