@@ -68,10 +68,19 @@ export async function getNexusChatPool(connectionId: string): Promise<Pool> {
     database: conn.database,
     user: conn.username,
     password,
+    // Mapping SSL modes:
+    //   disable   → ssl: false (no-SSL, igual libpq sslmode=disable)
+    //   prefer    → ssl: false (Node pg não tem fallback sslmode=prefer; banco
+    //                         do Chatwoot atual não suporta SSL — usar false
+    //                         como default conservador)
+    //   require   → ssl: { rejectUnauthorized: false }
+    //   verify-full → ssl: { rejectUnauthorized: true }
     ssl:
-      conn.sslMode === "disable"
-        ? false
-        : { rejectUnauthorized: conn.sslMode === "verify-full" },
+      conn.sslMode === "require"
+        ? { rejectUnauthorized: false }
+        : conn.sslMode === "verify-full"
+          ? { rejectUnauthorized: true }
+          : false,
     min: 0,
     max: 2,
     idleTimeoutMillis: 1_000,
