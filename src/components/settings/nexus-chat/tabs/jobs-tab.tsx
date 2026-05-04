@@ -1,35 +1,51 @@
 "use client";
 
 import { Settings2 } from "lucide-react";
-import Link from "next/link";
+
+import { JobsPanel } from "@/components/settings/jobs-panel";
+import type { JobsStatusRow } from "@/lib/actions/jobs";
+
+interface Props {
+  connectionId: string;
+  /**
+   * Snapshot SSR de `getJobsStatus({ connectionId })` — passado por
+   * `<ConnectionDetailTabs>` que recebe da page detalhe. Hidrata o
+   * `<JobsPanel>` sem fetch initial no client. Polling 5s do JobsPanel
+   * permanece ativo.
+   */
+  initialStatus: { rows: JobsStatusRow[] } | null;
+}
 
 /**
- * Aba 3 — Jobs (placeholder Fase 3 v1).
+ * Aba 3 — Jobs (v0.41 SSR-first).
  *
- * Estrutura final (spec §9): reutiliza `<JobsPanel>` com prop
- * `connectionId` filtrando os 4 jobs (refresh-by-account/inbox/agent/team)
- * dessa connection + housekeeping. Disparo manual + backfill mantidos.
+ * Embute `<JobsPanel>` filtrado pela connectionId. O painel mostra o
+ * status de freshness de cada (account × dimension) e oferece botões
+ * para disparar refresh manual e backfill.
  *
- * Esta versão linka pra page legada `/configuracoes/jobs` enquanto
- * adaptação do `<JobsPanel>` (recebendo connectionId) é entregue em
- * hotfix subsequente.
+ * SSR-first: a page detalhe chama `getJobsStatus({ connectionId })` no
+ * server side e injeta o resultado em `initialStatus`. Isto evita o
+ * flash de skeleton inicial.
  */
-export function JobsTab({ connectionId: _connectionId }: { connectionId: string }) {
+export function JobsTab({ connectionId, initialStatus }: Props) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-muted/20 px-6 py-16 text-center">
-      <Settings2 className="h-8 w-8 text-muted-foreground/50" aria-hidden />
-      <h3 className="text-sm font-medium">Painel de jobs</h3>
-      <p className="max-w-md text-xs text-muted-foreground">
-        Status dos jobs de pré-agregação, disparo manual e backfill ficam
-        temporariamente em página dedicada enquanto a integração nesta aba
-        é finalizada.
-      </p>
-      <Link
-        href="/configuracoes/jobs"
-        className="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-background px-3 text-xs font-medium hover:bg-muted"
+    <div className="grid gap-4" data-tour="jobs-tab">
+      <header className="flex items-center gap-2">
+        <Settings2 className="h-4 w-4 text-violet-500" aria-hidden />
+        <h2 className="text-sm font-medium">Jobs de pré-agregação</h2>
+      </header>
+      <p
+        className="text-xs text-muted-foreground"
+        data-tour="jobs-tab-explainer"
       >
-        Abrir painel de jobs
-      </Link>
+        Os jobs de pré-agregação atualizam tabelas internas
+        (chatwoot_facts_*) que alimentam os relatórios. Eles rodam
+        automaticamente — você só precisa intervir se algum ficar com erro.
+      </p>
+      <JobsPanel
+        initialStatus={initialStatus}
+        connectionId={connectionId}
+      />
     </div>
   );
 }
