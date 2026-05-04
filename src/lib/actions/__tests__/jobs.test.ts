@@ -2,6 +2,16 @@ jest.mock("@/lib/auth", () => ({
   getCurrentUser: jest.fn(),
 }));
 
+// E4 v0.41: jobs.ts agora importa prisma para mapear connectionId → accountIds.
+// Mock evita carregar src/generated/prisma/client.ts (ESM import.meta) em jest.
+jest.mock("@/lib/prisma", () => ({
+  prisma: {
+    companyChatBinding: {
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+  },
+}));
+
 jest.mock("@/lib/queue", () => ({
   refreshByAccountQueue: { add: jest.fn() },
   refreshByInboxQueue: { add: jest.fn() },

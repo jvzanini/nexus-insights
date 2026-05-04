@@ -3,7 +3,25 @@
  */
 import "@testing-library/jest-dom";
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render as rtlRender,
+  screen,
+  waitFor,
+  type RenderOptions,
+} from "@testing-library/react";
+import type { ReactElement } from "react";
+import { TourProvider } from "@/components/tour/tour-provider";
+
+// Wrapper: F9 v0.41 adiciona <TourTriggerButton> no DialogHeader,
+// que requer <TourProvider> ancestor. Tests rodam sem layout protegido,
+// então embrulhamos manualmente.
+function render(ui: ReactElement, options?: RenderOptions) {
+  return rtlRender(ui, {
+    wrapper: ({ children }) => <TourProvider>{children}</TourProvider>,
+    ...options,
+  });
+}
 
 const createNexusChatConnection = jest.fn();
 const updateNexusChatConnection = jest.fn();
