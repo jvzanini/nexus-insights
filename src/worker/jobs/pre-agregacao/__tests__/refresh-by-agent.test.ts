@@ -1,13 +1,14 @@
 /**
- * Testes do job `refresh-by-agent` (T5).
+ * Testes do job `refresh-by-agent` (T5 + L6 multi-tenant).
  *
- * Mocka pgPool (banco interno) + chatwootQuery (banco Chatwoot) + datetime.
+ * Mocka pgPool (banco interno) + queryNexusChat (banco da connection) + datetime.
  *
  * Cenários:
- * 1. happy path — 2 accounts × 7 dias × 2 agents por account.
+ * 1. happy path — 2 bindings × 7 dias × 2 agents por binding.
  * 2. idempotente.
  * 3. falha isolada.
  * 4. snapshot só p/ hoje.
+ * 5. UPSERTs gravam connection_id na SQL e nos params.
  *
  * NOTA: orphans (assignee_id IS NULL) NÃO entram nesta tabela — só no by_account.
  * O SQL JÁ filtra `WHERE c.assignee_id IS NOT NULL`. Verificamos no teste.
@@ -17,8 +18,8 @@ jest.mock("@/lib/pg-pool", () => ({
   pgPool: { query: jest.fn() },
 }));
 
-jest.mock("@/lib/chatwoot/pool", () => ({
-  chatwootQuery: jest.fn(),
+jest.mock("@/lib/nexus-chat/pool", () => ({
+  queryNexusChat: jest.fn(),
 }));
 
 jest.mock("@/lib/datetime", () => ({
@@ -30,13 +31,15 @@ jest.mock("@/lib/realtime", () => ({
 }));
 
 import { pgPool } from "@/lib/pg-pool";
-import { chatwootQuery } from "@/lib/chatwoot/pool";
+import { queryNexusChat } from "@/lib/nexus-chat/pool";
 import type { Job } from "bullmq";
 import { processRefreshByAgent } from "../refresh-by-agent";
 
+const FAKE_CONN = "5e6a4eef-2a23-4f33-8d4e-1a2b3c4d5e6f";
+
 const mockedPgQuery = pgPool.query as jest.MockedFunction<typeof pgPool.query>;
-const mockedChatwootQuery = chatwootQuery as jest.MockedFunction<
-  typeof chatwootQuery
+const mockedQueryNexus = queryNexusChat as jest.MockedFunction<
+  typeof queryNexusChat
 >;
 
 function fakeJob(): Job {
@@ -51,7 +54,7 @@ function fakeJob(): Job {
 
 beforeEach(() => {
   mockedPgQuery.mockReset();
-  mockedChatwootQuery.mockReset();
+  mockedQueryNexus.mockReset();
   jest.useFakeTimers();
   jest.setSystemTime(new Date("2026-04-30T18:00:00Z"));
 });
@@ -75,68 +78,83 @@ function setupPgPoolHappy() {
   mockedPgQuery.mockResolvedValueOnce({
     rowCount: 2,
     rows: [
-      { chatwoot_account_id: 9 },
-      { chatwoot_account_id: 2 },
+      { connection_id: FAKE_CONN, chatwoot_account_id: 9 },
+      { connection_id: FAKE_CONN, chatwoot_account_id: 2 },
     ],
   } as never);
 }
 
-function setupChatwootHappy() {
-  mockedChatwootQuery.mockImplementation(async (sql: unknown) => {
+function setupNexusHappy() {
+  mockedQueryNexus.mockImplementation(async (_connId: unknown, sql: unknown) => {
     const text = String(sql);
     if (
       text.includes("c.assignee_id") &&
       text.includes("AS received") &&
       text.includes("GROUP BY c.assignee_id")
     ) {
-      return [
-        { assignee_id: 100, received: 50, resolved: 40, unique_contacts: 25 },
-        { assignee_id: 200, received: 30, resolved: 20, unique_contacts: 15 },
-      ] as never;
+      return {
+        rowCount: 2,
+        rows: [
+          { assignee_id: 100, received: 50, resolved: 40, unique_contacts: 25 },
+          { assignee_id: 200, received: 30, resolved: 20, unique_contacts: 15 },
+        ],
+      } as never;
     }
     if (
       text.includes("c.assignee_id") &&
       text.includes("messages_in") &&
       text.includes("FROM messages m")
     ) {
-      return [
-        { assignee_id: 100, messages_in: 100, messages_out: 90 },
-        { assignee_id: 200, messages_in: 60, messages_out: 50 },
-      ] as never;
+      return {
+        rowCount: 2,
+        rows: [
+          { assignee_id: 100, messages_in: 100, messages_out: 90 },
+          { assignee_id: 200, messages_in: 60, messages_out: 50 },
+        ],
+      } as never;
     }
     if (text.includes("c.assignee_id") && text.includes("first_response")) {
-      return [
-        { assignee_id: 100, frt_p50: 60, frt_p90: 300 },
-        { assignee_id: 200, frt_p50: 90, frt_p90: 400 },
-      ] as never;
+      return {
+        rowCount: 2,
+        rows: [
+          { assignee_id: 100, frt_p50: 60, frt_p90: 300 },
+          { assignee_id: 200, frt_p50: 90, frt_p90: 400 },
+        ],
+      } as never;
     }
     if (
       text.includes("c.assignee_id") &&
       text.includes("conversation_resolved")
     ) {
-      return [
-        { assignee_id: 100, rt_p50: 1800 },
-        { assignee_id: 200, rt_p50: 2400 },
-      ] as never;
+      return {
+        rowCount: 2,
+        rows: [
+          { assignee_id: 100, rt_p50: 1800 },
+          { assignee_id: 200, rt_p50: 2400 },
+        ],
+      } as never;
     }
     if (
       text.includes("c.assignee_id") &&
       text.includes("status = 0") &&
       text.includes("status = 2")
     ) {
-      return [
-        { assignee_id: 100, open_at_eod: 5, pending_at_eod: 3 },
-        { assignee_id: 200, open_at_eod: 2, pending_at_eod: 1 },
-      ] as never;
+      return {
+        rowCount: 2,
+        rows: [
+          { assignee_id: 100, open_at_eod: 5, pending_at_eod: 3 },
+          { assignee_id: 200, open_at_eod: 2, pending_at_eod: 1 },
+        ],
+      } as never;
     }
-    return [] as never;
+    return { rowCount: 0, rows: [] } as never;
   });
 }
 
 describe("processRefreshByAgent — happy path", () => {
-  it("processa 2 accounts × 7 dias × 2 agents e atualiza meta", async () => {
+  it("processa 2 bindings × 7 dias × 2 agents e atualiza meta", async () => {
     setupPgPoolHappy();
-    setupChatwootHappy();
+    setupNexusHappy();
 
     const result = await processRefreshByAgent(fakeJob());
 
@@ -153,32 +171,64 @@ describe("processRefreshByAgent — happy path", () => {
     expect(metaUpserts.length).toBe(4);
   });
 
+  it("UPSERTs em facts_daily_by_agent incluem connection_id", async () => {
+    setupPgPoolHappy();
+    setupNexusHappy();
+
+    await processRefreshByAgent(fakeJob());
+
+    const dailyUpserts = mockedPgQuery.mock.calls.filter((c) =>
+      String(c[0]).includes("INSERT INTO chatwoot_facts_daily_by_agent"),
+    );
+    expect(dailyUpserts.length).toBeGreaterThan(0);
+
+    dailyUpserts.forEach((c) => {
+      const sql = String(c[0]);
+      const params = c[1] as unknown[];
+      expect(sql).toMatch(/connection_id/);
+      expect(sql).toMatch(/EXCLUDED\.connection_id/);
+      expect(params).toContain(FAKE_CONN);
+    });
+  });
+
+  it("queryNexusChat é chamado com connectionId como 1º param", async () => {
+    setupPgPoolHappy();
+    setupNexusHappy();
+
+    await processRefreshByAgent(fakeJob());
+
+    expect(mockedQueryNexus.mock.calls.length).toBeGreaterThan(0);
+    mockedQueryNexus.mock.calls.forEach((c) => {
+      expect(c[0]).toBe(FAKE_CONN);
+    });
+  });
+
   it("filtra orphans (assignee_id IS NOT NULL) nos SQL agregados", async () => {
     setupPgPoolHappy();
-    setupChatwootHappy();
+    setupNexusHappy();
 
     await processRefreshByAgent(fakeJob());
 
     // Todas as queries que usam assignee_id devem ter o filtro IS NOT NULL.
-    const aggregateSqls = mockedChatwootQuery.mock.calls.filter((c) => {
-      const text = String(c[0]);
+    const aggregateSqls = mockedQueryNexus.mock.calls.filter((c) => {
+      const text = String(c[1]);
       return text.includes("c.assignee_id");
     });
     expect(aggregateSqls.length).toBeGreaterThan(0);
     aggregateSqls.forEach((c) => {
-      const text = String(c[0]);
+      const text = String(c[1]);
       expect(text).toMatch(/c\.assignee_id\s+IS\s+NOT\s+NULL/i);
     });
   });
 
   it("snapshot apenas para o dia atual; passados ficam zerados", async () => {
     setupPgPoolHappy();
-    setupChatwootHappy();
+    setupNexusHappy();
 
     await processRefreshByAgent(fakeJob());
 
-    const snapshotCalls = mockedChatwootQuery.mock.calls.filter((c) => {
-      const text = String(c[0]);
+    const snapshotCalls = mockedQueryNexus.mock.calls.filter((c) => {
+      const text = String(c[1]);
       return (
         text.includes("c.assignee_id") &&
         text.includes("status = 0") &&
@@ -204,21 +254,24 @@ describe("processRefreshByAgent — happy path", () => {
     expect(todays.length).toBe(4);
     expect(yesterdays.length).toBe(4);
 
+    // Order de params do UPSERT agent:
+    // (account, date, agent, connection_id, received, resolved, open, pending, ..., is_active_at_eod)
+    // Índices: 0=acct 1=date 2=agent 3=conn 4=received 5=resolved 6=open 7=pending
     todays.forEach((c) => {
       const params = c[1] as unknown[];
-      expect([5, 2]).toContain(params[5]);
-      expect([3, 1]).toContain(params[6]);
+      expect([5, 2]).toContain(params[6]);
+      expect([3, 1]).toContain(params[7]);
     });
     yesterdays.forEach((c) => {
       const params = c[1] as unknown[];
-      expect(params[5]).toBe(0);
       expect(params[6]).toBe(0);
+      expect(params[7]).toBe(0);
     });
   });
 
   it("seta is_active_at_eod = true em todos os UPSERTs", async () => {
     setupPgPoolHappy();
-    setupChatwootHappy();
+    setupNexusHappy();
 
     await processRefreshByAgent(fakeJob());
 
@@ -242,7 +295,7 @@ describe("processRefreshByAgent — happy path", () => {
 describe("processRefreshByAgent — idempotente", () => {
   it("rodar 2 vezes não lança e produz mesmas chamadas", async () => {
     setupPgPoolHappy();
-    setupChatwootHappy();
+    setupNexusHappy();
 
     const r1 = await processRefreshByAgent(fakeJob());
     const callsAfterFirst = mockedPgQuery.mock.calls.length;
@@ -250,8 +303,8 @@ describe("processRefreshByAgent — idempotente", () => {
     mockedPgQuery.mockResolvedValueOnce({
       rowCount: 2,
       rows: [
-        { chatwoot_account_id: 9 },
-        { chatwoot_account_id: 2 },
+        { connection_id: FAKE_CONN, chatwoot_account_id: 9 },
+        { connection_id: FAKE_CONN, chatwoot_account_id: 2 },
       ],
     } as never);
 
@@ -263,16 +316,16 @@ describe("processRefreshByAgent — idempotente", () => {
 });
 
 describe("processRefreshByAgent — falha isolada", () => {
-  it("erro em 1 account não bloqueia processamento da outra", async () => {
+  it("erro em 1 binding não bloqueia processamento do outro", async () => {
     setupPgPoolHappy();
 
-    mockedChatwootQuery.mockImplementation(
-      async (sql: unknown, params: unknown[] = []) => {
+    mockedQueryNexus.mockImplementation(
+      async (_connId: unknown, sql: unknown, params: unknown[] = []) => {
         const text = String(sql);
         const accountIdInParams = params.find((p) => p === 9 || p === 2);
 
         if (accountIdInParams === 9) {
-          throw new Error("chatwoot down for 9");
+          throw new Error("nexus-chat down for 9");
         }
 
         if (
@@ -280,38 +333,54 @@ describe("processRefreshByAgent — falha isolada", () => {
           text.includes("AS received") &&
           text.includes("GROUP BY c.assignee_id")
         ) {
-          return [
-            { assignee_id: 100, received: 1, resolved: 1, unique_contacts: 1 },
-          ] as never;
+          return {
+            rowCount: 1,
+            rows: [
+              {
+                assignee_id: 100,
+                received: 1,
+                resolved: 1,
+                unique_contacts: 1,
+              },
+            ],
+          } as never;
         }
         if (
           text.includes("c.assignee_id") &&
           text.includes("messages_in") &&
           text.includes("FROM messages m")
         ) {
-          return [
-            { assignee_id: 100, messages_in: 1, messages_out: 1 },
-          ] as never;
+          return {
+            rowCount: 1,
+            rows: [{ assignee_id: 100, messages_in: 1, messages_out: 1 }],
+          } as never;
         }
         if (text.includes("c.assignee_id") && text.includes("first_response")) {
-          return [{ assignee_id: 100, frt_p50: 1, frt_p90: 1 }] as never;
+          return {
+            rowCount: 1,
+            rows: [{ assignee_id: 100, frt_p50: 1, frt_p90: 1 }],
+          } as never;
         }
         if (
           text.includes("c.assignee_id") &&
           text.includes("conversation_resolved")
         ) {
-          return [{ assignee_id: 100, rt_p50: 1 }] as never;
+          return {
+            rowCount: 1,
+            rows: [{ assignee_id: 100, rt_p50: 1 }],
+          } as never;
         }
         if (
           text.includes("c.assignee_id") &&
           text.includes("status = 0") &&
           text.includes("status = 2")
         ) {
-          return [
-            { assignee_id: 100, open_at_eod: 0, pending_at_eod: 0 },
-          ] as never;
+          return {
+            rowCount: 1,
+            rows: [{ assignee_id: 100, open_at_eod: 0, pending_at_eod: 0 }],
+          } as never;
         }
-        return [] as never;
+        return { rowCount: 0, rows: [] } as never;
       },
     );
 
