@@ -7,9 +7,13 @@
  * em uma agregação separada para refletir todo o universo elegível.
  *
  * TTL curto (30s) — atualiza próximo do tempo real.
+ *
+ * Multi-tenant: recebe `connectionId` (UUID da `nexus_chat_connection`) como
+ * primeiro parâmetro e roteia via `queryNexusChat` para o pool dinâmico
+ * correspondente. Caller (Server Action) resolve via `getActiveConnectionId`.
  */
 
-import { getChatwootPool } from "../pool";
+import { queryNexusChat } from "@/lib/nexus-chat/pool";
 import { withChatwootResilience } from "../resilience";
 import { withCache } from "@/lib/cache/pull-through";
 import { cacheKey, hashFilters } from "@/lib/cache/keys";
@@ -35,7 +39,7 @@ export interface MensagensNaoRespondidasResult {
   oldestWaitingSeconds: number;
 }
 
-interface RawListRow {
+type RawListRow = {
   id: number;
   display_id: number;
   contact_name: string | null;
@@ -46,24 +50,27 @@ interface RawListRow {
   last_incoming_at: Date | string;
   waiting_seconds: number;
   snippet: string | null;
-}
+} & Record<string, unknown>;
 
-interface RawAggRow {
+type RawAggRow = {
   total: number | string;
   avg_waiting_seconds: number | string;
   oldest_waiting_seconds: number | string;
-}
+} & Record<string, unknown>;
 
 const DEFAULT_LIMIT = 200;
 const MAX_LIMIT = 500;
 const TTL_SECONDS = 30;
 
-export async function mensagensNaoRespondidas(args: {
-  accountId: number;
-  /** `period` é ignorado — esta tela é "estado atual". */
-  filters: ReportFilters;
-  limit?: number;
-}) {
+export async function mensagensNaoRespondidas(
+  connectionId: string,
+  args: {
+    accountId: number;
+    /** `period` é ignorado — esta tela é "estado atual". */
+    filters: ReportFilters;
+    limit?: number;
+  },
+) {
   const limit = Math.min(args.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
   // Período é descartado: estado atual.
   const filtersNoPeriod: ReportFilters = { ...args.filters, period: undefined };
@@ -81,7 +88,6 @@ export async function mensagensNaoRespondidas(args: {
     fetcher: () =>
       withChatwootResilience<MensagensNaoRespondidasResult>(
         async () => {
-          const pool = getChatwootPool();
           const base = buildBaseFilter(filtersNoPeriod, args.accountId);
           const params = [...base.params];
           const limitIdx = params.length + 1;
@@ -142,8 +148,12 @@ export async function mensagensNaoRespondidas(args: {
           `;
 
           const [listRes, aggRes] = await Promise.all([
-            pool.query<RawListRow>(sqlList, params),
-            pool.query<RawAggRow>(sqlAgg, base.params as unknown[]),
+            queryNexusChat<RawListRow>(connectionId, sqlList, params),
+            queryNexusChat<RawAggRow>(
+              connectionId,
+              sqlAgg,
+              base.params as unknown[],
+            ),
           ]);
 
           const rows: MensagemNaoRespondidaRow[] = listRes.rows.map((r) => ({

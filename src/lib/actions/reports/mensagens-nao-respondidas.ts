@@ -7,6 +7,7 @@ import {
 } from "@/lib/chatwoot/queries/mensagens-nao-respondidas";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
 import { getAccessibleTeamIds } from "@/lib/tenant";
+import { getActiveConnectionId } from "@/lib/reports/active-connection";
 import type { AuthUser } from "@/lib/auth-helpers";
 
 const DEFAULT_ACCOUNT_ID = 9;
@@ -94,7 +95,20 @@ export async function fetchMensagensNaoRespondidas(
   }
 
   try {
-    const result = await mensagensNaoRespondidas({
+    const connectionId = await getActiveConnectionId({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      platformRole: user.platformRole,
+      isOwner: user.isOwner,
+      mustChangePassword: user.mustChangePassword,
+      avatarUrl: user.avatarUrl,
+      theme: user.theme,
+      accountIds: user.accountIds,
+      teamIds: user.teamIds,
+    } satisfies AuthUser);
+
+    const result = await mensagensNaoRespondidas(connectionId, {
       accountId,
       filters: scopedFilters,
       limit: args.limit,
