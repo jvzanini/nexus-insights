@@ -1,4 +1,4 @@
-import "server-only";
+// NÃO usar `import "server-only"` aqui: chamado no boot do worker via seed.ts.
 
 import { pgPool } from "@/lib/pg-pool";
 

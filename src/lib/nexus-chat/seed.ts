@@ -1,4 +1,4 @@
-import "server-only";
+// NÃO usar `import "server-only"` aqui: chamado no boot do worker BullMQ.
 
 import { parse as parseConnString } from "pg-connection-string";
 import { encrypt } from "@/lib/encryption";
