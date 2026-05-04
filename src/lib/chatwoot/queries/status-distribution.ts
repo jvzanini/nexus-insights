@@ -1,6 +1,9 @@
 /**
  * Distribuição de conversas por status (0=open, 1=resolved, 2=pending, 3=snoozed).
  * Live KPI — TTL curto.
+ *
+ * @canonical periodColumn=active (default) — conversas com movimento no período.
+ *   Ver `src/lib/reports/canonical.ts` (`buildActivePeriodClause`).
  */
 
 import { queryNexusChat } from "@/lib/nexus-chat/pool";
@@ -36,7 +39,7 @@ export async function statusDistribution(
   const ttl = args.ttlSeconds ?? DEFAULT_TTL_SECONDS;
   const key = cacheKey({
     scope: "kpi",
-    name: "status-distribution",
+    name: "status-distribution-canonical-v0.42",
     accountId: args.accountId,
     filtersHash: hashFilters(args.filters),
   });
