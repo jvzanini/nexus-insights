@@ -9,6 +9,12 @@
  * Sempre passa pelo `buildBaseFilter` para herdar o tenant guard
  * (`account_id`) e a exclusão default da inbox Matrix IA (id 31).
  *
+ * Padrão canônico v0.42:
+ *  - "Resolvidas no período" usa `buildBaseFilter({ periodColumn: 'active',
+ *    statuses: [STATUS_RESOLVED] })` — uma única passagem pelo builder.
+ *  - "Mensagens não respondidas" usa CTE canônica `last_classification_msg`
+ *    em vez de subquery bruta (que pegava mensagens de sistema/template).
+ *
  * TTL curto (30s) — painel atualiza por polling/refresh.
  */
 
@@ -17,6 +23,13 @@ import { withChatwootResilience } from "../resilience";
 import { withCache } from "@/lib/cache/pull-through";
 import { cacheKey, hashFilters } from "@/lib/cache/keys";
 import { buildBaseFilter, type ReportFilters } from "../filters";
+import {
+  buildLastClassificationMsgCte,
+  MSG_INCOMING,
+  STATUS_OPEN,
+  STATUS_PENDING,
+  STATUS_RESOLVED,
+} from "@/lib/reports/canonical";
 
 export interface AgentRapidoRow {
   name: string;
@@ -75,7 +88,7 @@ export async function dashboardKpis(
   const ttl = args.ttlSeconds ?? DEFAULT_TTL_SECONDS;
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-kpis",
+    name: "dashboard-kpis-canonical-v0.42",
     accountId: args.accountId,
     filtersHash: hashFilters(args.filters),
   });
@@ -94,15 +107,12 @@ export async function dashboardKpis(
           };
           const baseAgora = buildBaseFilter(filtersAgora, args.accountId);
 
-          // Filtro "no período" — usa as datas do filtro recebido.
-          const baseComPeriodo = buildBaseFilter(args.filters, args.accountId);
-
           // ----- Em Aberto (status=0, agora) -----
           const sqlEmAberto = `
             SELECT COUNT(*)::bigint AS total
             FROM conversations c
             WHERE ${baseAgora.whereSql}
-              AND c.status = 0
+              AND c.status = ${STATUS_OPEN}
           `;
 
           // ----- Pendentes (status=2, agora) -----
@@ -110,46 +120,38 @@ export async function dashboardKpis(
             SELECT COUNT(*)::bigint AS total
             FROM conversations c
             WHERE ${baseAgora.whereSql}
-              AND c.status = 2
+              AND c.status = ${STATUS_PENDING}
           `;
 
-          // ----- Resolvidas no período (status=1) -----
-          // Heurística: status=1 e last_activity_at dentro do range.
-          // Para evitar mexer no buildBaseFilter (que opera em created_at),
-          // construímos a cláusula de período manualmente sobre last_activity_at.
-          const params1: unknown[] = [...baseAgora.params];
-          const placeholders: string[] = [];
-          if (args.filters.period?.start) {
-            placeholders.push(`c.last_activity_at >= $${params1.length + 1}`);
-            params1.push(args.filters.period.start);
-          }
-          if (args.filters.period?.end) {
-            placeholders.push(`c.last_activity_at < $${params1.length + 1}`);
-            params1.push(args.filters.period.end);
-          }
-          const periodoClause = placeholders.length
-            ? ` AND ${placeholders.join(" AND ")}`
-            : "";
+          // ----- Resolvidas no período (status=1, last_activity_at no range) -----
+          // Canônico v0.42: delegamos ao buildBaseFilter (periodColumn 'active' default
+          // + statuses=[STATUS_RESOLVED]) — sem cláusula manual.
+          const baseResolvidas = buildBaseFilter(
+            {
+              ...args.filters,
+              periodColumn: "active",
+              statuses: [STATUS_RESOLVED],
+            },
+            args.accountId,
+          );
           const sqlResolvidas = `
             SELECT COUNT(*)::bigint AS total
             FROM conversations c
-            WHERE ${baseAgora.whereSql}
-              AND c.status = 1${periodoClause}
+            WHERE ${baseResolvidas.whereSql}
           `;
 
           // ----- Mensagens não respondidas (status=0 + última msg incoming) -----
+          // Canônico v0.42: usa CTE last_classification_msg (filtra
+          // private/system/template). Antes: subquery bruta pegava qualquer msg.
           const sqlNaoRespondidas = `
+            ${buildLastClassificationMsgCte()}
             SELECT COUNT(*)::bigint AS total
             FROM conversations c
+            JOIN last_classification_msg lcm
+              ON lcm.conversation_id = c.id
+              AND lcm.message_type = ${MSG_INCOMING}
             WHERE ${baseAgora.whereSql}
-              AND c.status = 0
-              AND (
-                SELECT m.message_type
-                FROM messages m
-                WHERE m.conversation_id = c.id
-                ORDER BY m.created_at DESC
-                LIMIT 1
-              ) = 0
+              AND c.status = ${STATUS_OPEN}
           `;
 
           // ----- Top 5 atendentes mais rápidos (avg first_response no período) -----
@@ -203,7 +205,7 @@ export async function dashboardKpis(
             FROM conversations c
             JOIN users u ON u.id = c.assignee_id
             WHERE ${baseAgora.whereSql}
-              AND c.status = 0
+              AND c.status = ${STATUS_OPEN}
             GROUP BY u.id, u.name
             ORDER BY total DESC
             LIMIT 5
@@ -215,7 +217,7 @@ export async function dashboardKpis(
             FROM conversations c
             JOIN inboxes i ON i.id = c.inbox_id
             WHERE ${baseAgora.whereSql}
-              AND c.status = 0
+              AND c.status = ${STATUS_OPEN}
             GROUP BY i.id, i.name
             ORDER BY total DESC
             LIMIT 5
@@ -240,7 +242,11 @@ export async function dashboardKpis(
               sqlPendentes,
               baseAgora.params as unknown[],
             ),
-            queryNexusChat<RowCount>(connectionId, sqlResolvidas, params1),
+            queryNexusChat<RowCount>(
+              connectionId,
+              sqlResolvidas,
+              baseResolvidas.params as unknown[],
+            ),
             queryNexusChat<RowCount>(
               connectionId,
               sqlNaoRespondidas,
@@ -261,12 +267,7 @@ export async function dashboardKpis(
               sqlInboxesEmAberto,
               baseAgora.params as unknown[],
             ),
-            // baseComPeriodo é mantido como referência (caso queiramos
-            // futuramente um KPI "criadas no período"). Hoje resolvidas
-            // usa last_activity_at para refletir quando "concluiu".
           ]);
-          // baseComPeriodo presente para consistência futura — silenciar TS.
-          void baseComPeriodo;
 
           const data: DashboardKpis = {
             emAberto: Number(emAbertoRes.rows[0]?.total ?? 0),
