@@ -20,6 +20,7 @@
 import { z } from "zod";
 import type { Queue } from "bullmq";
 import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import {
   refreshByAccountQueue,
   refreshByInboxQueue,
@@ -50,12 +51,38 @@ export type JobsDimension = z.infer<typeof DimensionSchema>;
 
 const TriggerSchema = z.object({
   dimension: DimensionSchema,
+  /** Filtro opcional por connectionId — atualmente só é registrado em audit. */
+  connectionId: z.string().optional(),
 });
 
 const BackfillSchema = z.object({
   dimension: DimensionSchema,
   days: z.number().int().min(1).max(365).default(90),
+  /** Filtro opcional por connectionId — atualmente só é registrado em audit. */
+  connectionId: z.string().optional(),
 });
+
+/**
+ * Resolve os Chatwoot account IDs de uma connection específica via
+ * `companyChatBinding`. Usado por `getJobsStatus({ connectionId })` pra
+ * filtrar a lista de rows ao mostrar o painel embutido na page detalhe
+ * `/bancos-de-dados/[id]`.
+ */
+async function getAccountIdsByConnection(
+  connectionId: string,
+): Promise<number[]> {
+  const bindings = await prisma.companyChatBinding.findMany({
+    where: {
+      connectionId,
+      enabled: true,
+      deletedAt: null,
+    },
+    select: { chatwootAccountId: true },
+  });
+  return Array.from(
+    new Set(bindings.map((b) => b.chatwootAccountId)),
+  ).sort((a, b) => a - b);
+}
 
 export interface JobsStatusRow {
   accountId: number;
@@ -108,15 +135,22 @@ async function ensureSuperAdmin(): Promise<
 /**
  * Lê o status de freshness de cada (account × dimension) para as accounts
  * ativas (com pelo menos um usuário com acesso não revogado).
+ *
+ * Quando `args.connectionId` é fornecido, filtra os rows pelas accounts
+ * vinculadas àquela connection via `company_chat_bindings`. Sem o filtro
+ * (chamada padrão), retorna todas as accounts ativas (compat com page
+ * `/configuracoes/jobs`).
  */
-export async function getJobsStatus(): Promise<
-  ActionResult<{ rows: JobsStatusRow[] }>
-> {
+export async function getJobsStatus(
+  args: { connectionId?: string } = {},
+): Promise<ActionResult<{ rows: JobsStatusRow[] }>> {
   try {
     const guard = await ensureSuperAdmin();
     if (!guard.ok) return { success: false, error: guard.error };
 
-    const accountIds = await getAccountsToRefresh();
+    const accountIds = args.connectionId
+      ? await getAccountIdsByConnection(args.connectionId)
+      : await getAccountsToRefresh();
 
     const perAccount = await Promise.all(
       accountIds.map(async (accountId) => {

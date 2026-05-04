@@ -27,6 +27,12 @@ import { cn } from "@/lib/utils";
 interface JobsPanelProps {
   initialStatus: { rows: JobsStatusRow[] } | null;
   initialError?: string | null;
+  /**
+   * Quando setado, o painel filtra rows e ações pelas accounts vinculadas
+   * a esta connection via `company_chat_bindings`. Usado pela `<JobsTab>`
+   * dentro de `/bancos-de-dados/[id]`.
+   */
+  connectionId?: string;
 }
 
 const POLL_INTERVAL_MS = 5_000;
@@ -101,7 +107,11 @@ function formatDateTimeShort(iso: string | null): string {
   });
 }
 
-export function JobsPanel({ initialStatus, initialError }: JobsPanelProps) {
+export function JobsPanel({
+  initialStatus,
+  initialError,
+  connectionId,
+}: JobsPanelProps) {
   const [rows, setRows] = useState<JobsStatusRow[]>(
     initialStatus?.rows ?? [],
   );
@@ -110,14 +120,16 @@ export function JobsPanel({ initialStatus, initialError }: JobsPanelProps) {
   const [, startAction] = useTransition();
 
   const fetchStatus = useCallback(async () => {
-    const result = await getJobsStatus();
+    const result = await getJobsStatus(
+      connectionId ? { connectionId } : {},
+    );
     if (!result.success || !result.data) {
       setError(result.error ?? "Erro ao carregar status");
       return;
     }
     setError(null);
     setRows(result.data.rows);
-  }, []);
+  }, [connectionId]);
 
   useEffect(() => {
     const id = window.setInterval(fetchStatus, POLL_INTERVAL_MS);
@@ -138,7 +150,10 @@ export function JobsPanel({ initialStatus, initialError }: JobsPanelProps) {
     const key = rowKey(row, "refresh");
     setPendingKey(key);
     startAction(async () => {
-      const r = await triggerRefresh({ dimension: row.dimension });
+      const r = await triggerRefresh({
+        dimension: row.dimension,
+        ...(connectionId ? { connectionId } : {}),
+      });
       setPendingKey(null);
       if (!r.success) {
         toast.error(r.error ?? "Falha ao enfileirar refresh");
@@ -158,6 +173,7 @@ export function JobsPanel({ initialStatus, initialError }: JobsPanelProps) {
       const r = await triggerBackfill({
         dimension: row.dimension,
         days: BACKFILL_DAYS_DEFAULT,
+        ...(connectionId ? { connectionId } : {}),
       });
       setPendingKey(null);
       if (!r.success) {
@@ -211,10 +227,17 @@ export function JobsPanel({ initialStatus, initialError }: JobsPanelProps) {
             <p className="text-sm font-medium text-foreground">
               Nenhum job registrado ainda
             </p>
-            <p className="text-xs text-muted-foreground">
-              Os jobs rodam em cron de 5 min. Use &ldquo;Rodar agora&rdquo; abaixo se houver
-              accounts ativas mas a tabela de meta ainda não foi populada.
-            </p>
+            {connectionId ? (
+              <p className="max-w-md text-xs text-muted-foreground">
+                Nenhum job registrado ainda para esta conexão. Os jobs aparecem
+                após o primeiro polling delta detectar mudanças.
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Os jobs rodam em cron de 30 min. Use &ldquo;Rodar agora&rdquo; abaixo se houver
+                accounts ativas mas a tabela de meta ainda não foi populada.
+              </p>
+            )}
           </div>
         ) : (
           <div className="space-y-6">
