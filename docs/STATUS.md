@@ -1,10 +1,18 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-05-04
-**Versão atual em produção:** v0.39.0
+**Versão atual em produção:** v0.40.0
 **URL:** https://insights.nexusai360.com
 
 ---
+
+## Em produção (v0.40.0)
+
+### Release v0.40.0 (2026-05-04) — Multi-tenant Realtime Fase 3 (UI completa em 4 abas + Wizard)
+
+**Épico 3 de 3.** `/bancos-de-dados/[id]` agora tem 4 abas (Conexão / Tempo real / Jobs / Saúde) com URL state `?tab=` e code splitting por aba. **Aba 2 (Tempo real)** mostra 4 KPIs (eventos último 1h, latência média, erros 24h, última heartbeat) + lista de eventos webhook com pause/play do polling 5s. **Aba 4 (Saúde)** mostra 4 cards heartbeat (cor semântica verde<60min/âmbar<360min/rose>360min) + lista de 50 audit logs. **Wizard de onboarding empresa** de 4 steps (escolher connection → identidade → webhook → conclusão) com stepper violet/emerald/gray e animação fade motion-safe. Botão "Onboardar empresa" no topo de `/bancos-de-dados`.
+
+Aba 1 (Conexão) e Aba 3 (Jobs) ficam em versão simplificada — entrega completa de ações inline + JobsPanel filtrado em hotfix v0.41+. ~7 commits, 74/74 tests verde no escopo, typecheck zero. ui-ux-pro-max invocado em todos os subagents de UI.
 
 ## Em produção (v0.39.0)
 

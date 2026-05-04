@@ -1,5 +1,72 @@
 # Changelog
 
+## [v0.40.0] 2026-05-04 — Multi-tenant Realtime Fase 3 (UI completa em 4 abas + Wizard onboarding)
+
+> **Épico 3 de 3.** Transforma `/bancos-de-dados/[id]` em UI rica de 4 abas (Conexão / Tempo real / Jobs / Saúde) + wizard de onboarding empresa de 4 steps. Super_admin opera todo o ciclo (criar conn → cadastrar empresa → ver eventos webhook ao vivo → diagnosticar lag → testar conn) num lugar só, sem precisar saber URLs de páginas legadas.
+
+### Mudanças
+
+- **`<ConnectionDetailTabs>`** (`src/components/settings/nexus-chat/connection-detail-tabs.tsx`):
+  - Tabs ARIA via base-ui (`<Tabs>`, `<TabsList>`, `<TabsTrigger>`, `<TabsContent>`).
+  - URL state `?tab=conexao|tempo-real|jobs|saude` (preserva tab em refresh/back).
+  - Code splitting: cada tab via `dynamic()` — bundle inicial só carrega Conexão (~50KB gzip vs 200KB monolítico).
+  - Keyboard nav (ArrowLeft/Right/Home/End) + focus management + Skeleton placeholders.
+- **Aba 1 — Conexão** (`tabs/conexao-tab.tsx`):
+  - Header com nome + host:port + banco + usuário + sslMode tipográficos.
+  - `<BindingsTable>` inline (já existente da v0.39).
+  - Itens deferidos pra hotfix v0.41+: card webhook explícito, card ações operacionais (testar/pausar/apagar) — hoje ações ficam na lista raiz.
+- **Aba 2 — Tempo real** (`tabs/tempo-real-tab.tsx`):
+  - 4 KPI cards (Eventos último 1h, Latência média, Erros 24h, Última heartbeat) com paleta semântica.
+  - Lista de eventos webhook recentes (até 200, sem virtualização, render simples — leve).
+  - Pause/Play do polling 5s (toggle visível, com badge "Pausado" quando idle).
+  - Empty states (Inbox sem CTA) + error banner rose.
+  - Refator do `connection-detail-tabs.tsx` pra passar `lastWebhookAt` da connection.
+- **Aba 3 — Jobs** (`tabs/jobs-tab.tsx`):
+  - Placeholder informativo com link pra page legada `/configuracoes/jobs` (mantém funcional).
+  - Absorção completa via `<JobsPanel connectionId>` fica para hotfix v0.41+.
+- **Aba 4 — Saúde** (`tabs/saude-tab.tsx`):
+  - 4 health cards: Heartbeat (lag desde último webhook com cor semântica), Eventos 24h, Erros 24h, Jobs com erro 24h.
+  - Lista de audit logs últimas 50 ações `webhook_*` (Table com badge action + timestamp + details snippet).
+  - Snapshot único via `getConnectionHealthSnapshot` (sem polling).
+- **Server Actions novas:**
+  - `listRecentWebhookEvents({ connectionId, limit })` — lista audit logs `webhook_*` da connection (cap 500). super_admin only.
+  - `getConnectionHealthSnapshot(connectionId)` — agrega lag, count webhooks 24h, count erros 24h, count job errors 24h.
+- **`<OnboardingWizard>`** (`wizard/onboarding-wizard.tsx`):
+  - Stepper visual 4 steps (violet ativo / emerald concluído / gray pendente, linha de progresso entre indicadores).
+  - Step 1: escolher connection existente (cards-radio até 20, Combobox com search acima de 20) ou link "Criar nova" que abre `<ConnectionFormDialog>`.
+  - Step 2: form `chatwoot_account_id` (number) + `displayName` (text) com validação inline.
+  - Step 3: URL do webhook copiável + lista de eventos canônicos + checkbox obrigatório "Já cadastrei o webhook no painel do Nexus Chat".
+  - Step 4: confirmação + 2 CTAs lado-a-lado ("Ver eventos chegando" → `/bancos-de-dados/<id>?tab=tempo-real`; "Liberar acesso de usuários" → `/usuarios`) + botão "Onboardar outra empresa" (reset state).
+  - Animação fade motion-safe (respeita prefers-reduced-motion).
+  - Touch targets ≥44pt, `useReducer` com state estruturado, validação por step.
+- **`<OnboardingWizardLauncher>`** (client wrapper) — botão "Onboardar empresa" violet com `<Plus>` no topo da page `/bancos-de-dados`.
+
+### Decisões técnicas relevantes
+
+- **Prisma `AuditAction` enum não suporta `startsWith`** — `listRecentWebhookEvents` usa `in` com lista explícita das 6 ações `webhook_*`.
+- **Polling 5s em Tempo real** (sem SSE nesta fase) — 12 req/min/super_admin é negligível. SSE evolução Fase 3.5.
+- **Pause/Play polling** — `setInterval` cleanup em unmount + ao trocar `paused`. Ao retomar, dispara fetch imediato.
+- **Code splitting por aba** via `next/dynamic` — Recharts (futuro) só baixa quando user clicar Tempo real.
+- **Step 3 wizard checkbox** usa `<input type="checkbox">` nativo estilizado (base-ui Checkbox não disparava `onCheckedChange` consistentemente em jsdom).
+
+### Métricas
+
+- ~7 commits granulares.
+- 74/74 tests verde no escopo (`src/components/settings/nexus-chat`, `src/lib/actions/nexus-chat`, `src/app/api/webhooks`).
+- Typecheck zero erros.
+- Suite global: similar à v0.39 (mantém 20 falhas pré-existentes em integrations-power-bi).
+
+### Não-objetivos (deferidos para hotfix v0.41+)
+
+- Card webhook explícito + card ações na Aba 1 (hoje ações ficam na lista raiz).
+- `<JobsPanel connectionId>` filtrado dentro da Aba 3 (hoje a aba linka pra page legada).
+- Stream virtualizado em Tempo real (lista atual >200 rows não virtualiza).
+- Line chart Recharts eventos/min últimas 24h (cards de KPI ficam sem gráfico nesta versão).
+- Redirect `/configuracoes/jobs` → `/bancos-de-dados` (mantida funcional para JobsTab linkar enquanto absorção não acontece).
+- Sidebar reorg adicional (já feito na v0.39).
+- Constraint NOT NULL em `connection_id` + nova PK em `chatwoot_facts_*`.
+- Refator dos 4 sites legados (sla-content/csat-content/llm-tools/power-bi-dim-sync) ainda usando `chatwootQuery`.
+
 ## [v0.39.0] 2026-05-04 — Hotfix Fase 2 (HMAC removido, sidebar reorganizado, page bindings)
 
 > Hotfix da Fase 2 baseado em screenshots e feedback do João pós-deploy v0.38. **Account Webhooks no Chatwoot self-hosted não suportam HMAC** (pesquisa confirmada — apenas API Channel + Agent Bot Webhooks têm desde Chatwoot v4.13.0). HMAC removido completamente; token de 32 bytes random na URL é a única autenticação. UI simplificada drasticamente (sem campo Secret confuso). Menu reorganizado conforme pedido: nova entrada "Bancos de dados" no nível superior do sidebar; "Jobs de pré-agregação" removido (page continua acessível por URL `/configuracoes/jobs` como backup operacional até Fase 3 absorver). Sheet lateral de bindings substituído por **page dedicada** `/bancos-de-dados/[id]`.
