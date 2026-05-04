@@ -1,5 +1,72 @@
 # Changelog
 
+## [v0.37.0] 2026-05-04 — Multi-tenant Realtime Fase 1 (Fundação invisível)
+
+> **Épico 1 de 3.** Fundação multi-tenant para Nexus Insights virar hub conectado a múltiplas instalações Nexus Chat (cada uma com várias accounts/empresas). Sem mudança visível para admin/manager/viewer das empresas — super_admin ganha rota administrativa nova `/configuracoes/conexoes`. Webhook em tempo real e UI completa em 4 abas ficam para Fases 2 e 3.
+
+### Schema
+- **Models novos:** `nexus_chat_connections` (instalação física com host/port/db/user/senha cifrada AES-256-GCM/sslMode/status/webhook_token+secret futuros) e `company_chat_bindings` (vínculo connection × account_id com display_name + enabled, constraint operacional account_id único entre connections enabled).
+- **`connection_id UUID` em `chatwoot_facts_*`** (6 tabelas, opcional na Fase 1, vira PK em fase futura).
+- **`AuditAction` enum +7 valores:** `nexus_chat_connection_*` (created/updated/deleted/tested) + `company_chat_binding_*` (created/updated/deleted).
+
+### Pool dinâmico + isolamento
+- `src/lib/nexus-chat/pool.ts` — `getNexusChatPool(connectionId)` com cache `Map<connectionId, Pool>`, janitor TTL 30 min, hot-reload safe.
+- `src/lib/reports/active-connection.ts` — `getActiveConnectionId(user)` via `cache()` do React, fail-closed em `NoActiveBindingError` e `AmbiguousBindingError`.
+- Defesa em profundidade 5 camadas: middleware → getCurrentUser → assertAccountAccess → getActiveConnectionId → getNexusChatPool.
+
+### Seed automático no boot
+- `src/lib/nexus-chat/seed.ts` — idempotente via `pg_try_advisory_lock(8472938)`. Parseia `CHATWOOT_DATABASE_URL` (pg-connection-string), cria connection "Padrão (legado)" + bindings para cada `chatwoot_account_id` distinto em `user_account_access` + backfill `connection_id` nas 6 tabelas chatwoot_facts_*.
+- `ensureNexusChatTables` (DDL idempotente runtime) — `CREATE TABLE IF NOT EXISTS` + `ALTER TABLE ADD COLUMN IF NOT EXISTS` + `ALTER TYPE ADD VALUE IF NOT EXISTS`.
+
+### 17 queries refatoradas para multi-tenant
+Todas em `src/lib/chatwoot/queries/*` agora recebem `connectionId: string` como primeiro parâmetro e usam `queryNexusChat`:
+- conversas-list, dashboard-data, dashboard-drill-down, dashboard-kpis, home-summary, status-distribution.
+- meta-cache + meta-cache-for-user (cache key `:v2` inclui connectionId — invalidação natural no deploy).
+- leads-recebidos, matrix-ia, mensagens-nao-respondidas, por-departamento, por-estado, ranking-atendentes, tempos-resposta, volumetria-dow, volumetria-heatmap.
+
+### Server Actions atualizadas
+- 8+ Server Actions em `src/lib/actions/reports/*` resolvem `connectionId` via `getActiveConnectionId(user)`.
+- `period.ts` (`getMinReportDate`) — idem.
+
+### Worker BullMQ multi-tenant
+- `getBindingsToRefresh()` (substitui `getAccountsToRefresh()`) em `shared.ts` — JOIN `company_chat_bindings` × `nexus_chat_connections` (enabled + active + not deleted).
+- `withMetaUpdate(dimension, connectionId, accountId, fn)` — UPSERTs em `chatwoot_facts_meta` gravam `connection_id`. PK `(dim, account_id)` mantida nesta fase.
+- 4 jobs `refresh-by-*` (account/inbox/agent/team) usam `queryNexusChat(connectionId, ...)` e gravam `connection_id` nos UPSERTs.
+- `facts.ts` (reads internos) ganham `connectionId` opcional + filtro `WHERE connection_id = $X`.
+
+### Realtime universal
+- `RealtimeEvent.facts:refreshed` ganha `connectionId`. 2 eventos novos: `connection:updated` (invalida pool no app/worker) e `connection:deleted` (toast Sonner + redirect 3s no client).
+- `useFactsRealtime` filtra por `(connectionId, accountId)`.
+- `<FactsFreshness>` exige `connectionId`. Propagado em 6 pages de relatório.
+
+### UI super_admin `/configuracoes/conexoes`
+- Page server (super_admin only — outros redirect /dashboard).
+- Server Actions CRUD em `src/lib/actions/nexus-chat/{connections,bindings}.ts` (Zod, encriptação, audit log, rate limit).
+- `<ConnectionList>` + `<ConnectionFormDialog>` + `<BindingListSheet>` + `<BindingFormDialog>` (base-ui, ui-ux-pro-max consultado em todos).
+- `/api/health` ganha `connections[]` + probe via `queryNexusChat` da primeira connection ativa.
+
+### Workflow
+- **3 specs v3** com double-check: Fase 1 fundação (818 linhas, 58 achados), Fase 2 webhook (1245 linhas, 46 achados), Fase 3 UI completa (964 linhas, 46 achados).
+- **Plan Fase 1 v3** (1491 linhas, 48 achados) com 9 lotes L0-L9.
+- **6 subagents paralelos** em coordenação multi-agente (L2 dashboard, L3 conversas+meta-cache, L4 mensagens, L4 8-queries, L6 jobs, L8 UI super_admin).
+- `ui-ux-pro-max` invocado obrigatoriamente em toda task de UI.
+- Runbook canônico em `docs/runbooks/multi-tenant-realtime.md`.
+
+### Métricas
+- ~50 commits granulares.
+- ~270 tests novos verde.
+- Typecheck zero erros.
+- Suite: 1687/1707 verde (20 falhas pré-existentes em integrations-power-bi.test.ts, escopo distinto).
+
+### Não-objetivos (fases seguintes)
+- Endpoint webhook `/api/webhooks/nexus-chat/[token]` (Fase 2).
+- Substituir cron por trigger event-driven (Fase 2).
+- UI rica em 4 abas (Conexões, Tempo real, Jobs, Saúde) — Fase 3.
+- Wizard de onboarding nova empresa (Fase 3).
+- Sidebar reorg (Fase 3).
+- Constraint `NOT NULL` em `connection_id` + nova PK — fase de cleanup com snapshot pré-rollback.
+- Refator dos 4 sites legados ainda usando `chatwootQuery` (sla-content, csat-content, llm/tools/executor, power-bi/dim-sync).
+
 ## [v0.36.0] 2026-05-04 — Dashboard chart fixes (PeriodNavigator size + cross-period sync)
 
 > 2 bugs do gráfico "Conversas por hora/dia" do menu Dashboard. Workflow rigoroso: plan v1→v2→v3 com 16+ achados em 2 pentes-finos REAIS + subagent-driven-development com TDD em cada task + ui-ux-pro-max em T1. Pula v0.35 (ocupada por bugfix paralelo de Conversas).

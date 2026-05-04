@@ -1,10 +1,18 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-05-04
-**Versão atual em produção:** v0.36.0
+**Versão atual em produção:** v0.37.0
 **URL:** https://insights.nexusai360.com
 
 ---
+
+## Em produção (v0.37.0)
+
+### Release v0.37.0 (2026-05-04) — Multi-tenant Realtime Fase 1 (Fundação invisível)
+
+**Épico 1 de 3.** Fundação multi-tenant: Nexus Insights vira hub conectado a múltiplas instalações Nexus Chat. `nexus_chat_connections` + `company_chat_bindings` + pool dinâmico por connection + seed automático no boot + AES-256-GCM em senhas + defesa em profundidade 5 camadas. 17 queries refatoradas via `queryNexusChat(connectionId, ...)`. Worker BullMQ multi-tenant (`getBindingsToRefresh` + `withMetaUpdate(connectionId)` + 4 jobs). `useFactsRealtime` filtra `(connectionId, accountId)`. CRUD super_admin em `/configuracoes/conexoes` (4 components com ui-ux-pro-max). Sem mudança visível para admin/manager/viewer. Webhook + UI completa em 4 abas → Fases 2 e 3 (specs prontas).
+
+Workflow rigoroso: 3 specs v3 (Fase 1+2+3) com double-check (~150 achados), plan Fase 1 v3 (48 achados), 6 subagents paralelos coordenados, ~50 commits granulares, ~270 tests novos verde, typecheck zero, runbook canônico.
 
 ## Em produção (v0.36.0)
 
