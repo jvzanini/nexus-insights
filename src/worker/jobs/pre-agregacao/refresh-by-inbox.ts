@@ -1,8 +1,8 @@
 /**
- * Job: refresh-by-inbox (T4).
+ * Job: refresh-by-inbox (T4 + L6 multi-tenant).
  *
- * Para cada Chatwoot account ativa (descoberta via `user_account_access`),
- * agrega os últimos 7 dias rolling (TZ da plataforma) em:
+ * Para cada binding (connection × account) ativo, agrega os últimos 7 dias
+ * rolling (TZ da plataforma) em:
  *   - chatwoot_facts_daily_by_inbox (1 linha por (account, date, inbox))
  *
  * Diferenças em relação ao `refresh-by-account`:
@@ -11,46 +11,50 @@
  *   - Pula linhas com `inbox_id IS NULL` (improvável, mas filtramos defensivamente).
  *
  * Concorrência / idempotência / snapshot: ver `refresh-by-account.ts`.
+ *
+ * Multi-tenant:
+ *   - Lê do banco da connection via `queryNexusChat(connectionId, sql, params)`.
+ *   - Grava `connection_id` em todas as linhas de `chatwoot_facts_daily_by_inbox`.
  */
 
 import type { Job } from "bullmq";
-import { chatwootQuery } from "@/lib/chatwoot/pool";
+import { queryNexusChat } from "@/lib/nexus-chat/pool";
 import { pgPool } from "@/lib/pg-pool";
 import {
-  getAccountsToRefresh,
+  getBindingsToRefresh,
   rollingDates,
   withMetaUpdate,
 } from "./shared";
 
-interface DailyConvRow {
+type DailyConvRow = {
   inbox_id: number;
   received: number;
   resolved: number;
   unique_contacts: number;
-}
+} & Record<string, unknown>;
 
-interface DailyMsgRow {
+type DailyMsgRow = {
   inbox_id: number;
   messages_in: number;
   messages_out: number;
-}
+} & Record<string, unknown>;
 
-interface FrtRow {
+type FrtRow = {
   inbox_id: number;
   frt_p50: number | null;
   frt_p90: number | null;
-}
+} & Record<string, unknown>;
 
-interface RtRow {
+type RtRow = {
   inbox_id: number;
   rt_p50: number | null;
-}
+} & Record<string, unknown>;
 
-interface SnapshotRow {
+type SnapshotRow = {
   inbox_id: number;
   open_at_eod: number;
   pending_at_eod: number;
-}
+} & Record<string, unknown>;
 
 const DAILY_CONV_SQL = `
 WITH day_window AS (
@@ -133,19 +137,20 @@ GROUP BY c.inbox_id
 
 const UPSERT_SQL = `
 INSERT INTO chatwoot_facts_daily_by_inbox (
-  account_id, bucket_date, inbox_id,
+  account_id, bucket_date, inbox_id, connection_id,
   received, resolved, open_at_eod, pending_at_eod,
   messages_in, messages_out, unique_contacts,
   frt_p50_seconds, frt_p90_seconds, rt_p50_seconds,
   created_at, updated_at
 ) VALUES (
-  $1, $2, $3,
-  $4, $5, $6, $7,
-  $8, $9, $10,
-  $11, $12, $13,
+  $1, $2, $3, $4,
+  $5, $6, $7, $8,
+  $9, $10, $11,
+  $12, $13, $14,
   NOW(), NOW()
 )
 ON CONFLICT (account_id, bucket_date, inbox_id) DO UPDATE SET
+  connection_id = EXCLUDED.connection_id,
   received = EXCLUDED.received,
   resolved = EXCLUDED.resolved,
   open_at_eod = EXCLUDED.open_at_eod,
@@ -174,23 +179,33 @@ interface AggregatedInbox {
 }
 
 /**
- * Processa um único par (account, date): roda 5 SQL no Chatwoot
- * (4 sempre + 1 só p/ hoje), faz merge em JS por inbox_id e UPSERTa cada inbox.
+ * Processa um único par (connection, account, date): roda 5 SQL no banco da
+ * connection (4 sempre + 1 só p/ hoje), faz merge em JS por inbox_id e
+ * UPSERTa cada inbox.
  */
 async function refreshAccountDay(
+  connectionId: string,
   accountId: number,
   date: string,
   isToday: boolean,
 ): Promise<void> {
-  const [convRows, msgRows, frtRows, rtRows] = await Promise.all([
-    chatwootQuery<DailyConvRow>(DAILY_CONV_SQL, [date, accountId]),
-    chatwootQuery<DailyMsgRow>(DAILY_MSG_SQL, [date, accountId]),
-    chatwootQuery<FrtRow>(FRT_SQL, [date, accountId]),
-    chatwootQuery<RtRow>(RT_SQL, [date, accountId]),
+  const [convResult, msgResult, frtResult, rtResult] = await Promise.all([
+    queryNexusChat<DailyConvRow>(connectionId, DAILY_CONV_SQL, [
+      date,
+      accountId,
+    ]),
+    queryNexusChat<DailyMsgRow>(connectionId, DAILY_MSG_SQL, [date, accountId]),
+    queryNexusChat<FrtRow>(connectionId, FRT_SQL, [date, accountId]),
+    queryNexusChat<RtRow>(connectionId, RT_SQL, [date, accountId]),
   ]);
+  const convRows = convResult.rows;
+  const msgRows = msgResult.rows;
+  const frtRows = frtResult.rows;
+  const rtRows = rtResult.rows;
 
   const snapshotRows: SnapshotRow[] = isToday
-    ? await chatwootQuery<SnapshotRow>(SNAPSHOT_SQL, [accountId])
+    ? (await queryNexusChat<SnapshotRow>(connectionId, SNAPSHOT_SQL, [accountId]))
+        .rows
     : [];
 
   // Merge por inbox_id
@@ -248,6 +263,7 @@ async function refreshAccountDay(
       accountId,
       date,
       entry.inbox_id,
+      connectionId,
       entry.received,
       entry.resolved,
       entry.open_at_eod,
@@ -265,17 +281,22 @@ async function refreshAccountDay(
 export async function processRefreshByInbox(
   job: Job,
 ): Promise<{ accounts: number; days: number; errors: number }> {
-  const accounts = await getAccountsToRefresh();
+  const targets = await getBindingsToRefresh();
   const dates = await rollingDates(7);
   const today = dates[0];
 
   let errors = 0;
 
-  for (const accountId of accounts) {
+  for (const { connectionId, accountId } of targets) {
     try {
-      await withMetaUpdate("by_inbox", accountId, async () => {
+      await withMetaUpdate("by_inbox", connectionId, accountId, async () => {
         for (const date of dates) {
-          await refreshAccountDay(accountId, date, date === today);
+          await refreshAccountDay(
+            connectionId,
+            accountId,
+            date,
+            date === today,
+          );
         }
       });
     } catch (err) {
@@ -283,22 +304,22 @@ export async function processRefreshByInbox(
       const message = err instanceof Error ? err.message : String(err);
       try {
         await job.log(
-          `[refresh-by-inbox] account ${accountId} falhou: ${message}`,
+          `[refresh-by-inbox] connection=${connectionId} account=${accountId} falhou: ${message}`,
         );
       } catch {
         // job.log pode não existir em todos os contextos (ex.: tests).
       }
       // eslint-disable-next-line no-console
       console.error(
-        `[refresh-by-inbox] account=${accountId} error:`,
+        `[refresh-by-inbox] connection=${connectionId} account=${accountId} error:`,
         message,
       );
     }
   }
 
   return {
-    accounts: accounts.length,
-    days: accounts.length * dates.length,
+    accounts: targets.length,
+    days: targets.length * dates.length,
     errors,
   };
 }
