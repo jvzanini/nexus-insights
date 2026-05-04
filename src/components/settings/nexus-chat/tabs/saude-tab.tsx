@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   AlertCircle,
+  CheckCircle2,
   HeartPulse,
   Inbox,
   Loader2,
@@ -22,21 +23,25 @@ import {
   type ConnectionHealthSnapshot,
 } from "@/lib/actions/nexus-chat/health-metrics";
 import {
-  listRecentWebhookEvents,
-  type WebhookEvent,
-} from "@/lib/actions/nexus-chat/realtime-stream";
+  listRecentSyncRuns,
+  type SyncRunEvent,
+} from "@/lib/actions/nexus-chat/sync-stream";
 
 /**
- * Aba 4 — Saúde.
+ * Aba 4 — Saúde (v0.41 polling-aware).
  *
  * Mostra:
- *  1. 4 cards heartbeat (lag, eventos 24h, erros 24h, jobs com erro 24h).
- *  2. Lista de audit logs últimas 50 ações webhook_* da connection.
+ *  1. 4 cards heartbeat (lag last sync, runs 24h estimadas, erros 24h,
+ *     jobs com erro 24h).
+ *  2. **Card "Erros recentes (top 5)"** com tabela de polling_sync_failed
+ *     e mensagem do firstError (truncada). Empty state OK quando 0
+ *     erros — banner emerald "✓ Nenhum erro de sync nas últimas 24h."
+ *  3. Lista de audit logs últimas 50 ações `polling_*` da connection.
  *
- * Diferença vs Aba 2 (Tempo real):
- *  - Aba 2 = polling 5s + KPIs derivados de ~200 eventos in-memory.
+ * Diferença vs Aba 2 (Sincronização):
+ *  - Aba 2 = polling 5s + KPIs derivados de ~200 events in-memory.
  *  - Aba 4 = snapshot único do banco (counters via prisma.count) + lista
- *    de 50 eventos pra inspeção rápida. Sem polling.
+ *    de 50 events pra inspeção rápida + foco em ERROS. Sem polling.
  *
  * Paleta semântica (ui-ux-pro-max):
  *  - emerald: heartbeat fresh (<60min), zero erros
@@ -50,29 +55,25 @@ const ACTION_BADGE: Record<
   string,
   { label: string; classes: string }
 > = {
-  webhook_received: {
-    label: "Recebido",
+  polling_sync_completed: {
+    label: "Sync OK",
     classes: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
   },
-  webhook_rejected_hmac: {
-    label: "HMAC inválido",
+  polling_sync_failed: {
+    label: "Sync falhou",
     classes: "bg-rose-500/10 text-rose-500 border-rose-500/20",
   },
-  webhook_rejected_rate_limit: {
-    label: "Rate limit",
+  polling_full_sweep_started: {
+    label: "Sweep iniciado",
+    classes: "bg-violet-500/10 text-violet-500 border-violet-500/20",
+  },
+  polling_full_sweep_completed: {
+    label: "Sweep OK",
+    classes: "bg-violet-500/10 text-violet-500 border-violet-500/20",
+  },
+  polling_interval_updated: {
+    label: "Intervalo alterado",
     classes: "bg-amber-500/10 text-amber-500 border-amber-500/20",
-  },
-  webhook_no_binding: {
-    label: "Sem binding",
-    classes: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
-  },
-  webhook_token_regenerated: {
-    label: "Token regenerado",
-    classes: "bg-violet-500/10 text-violet-500 border-violet-500/20",
-  },
-  webhook_secret_regenerated: {
-    label: "Secret regenerado",
-    classes: "bg-violet-500/10 text-violet-500 border-violet-500/20",
   },
 };
 
@@ -170,17 +171,17 @@ function HealthCard({
 
 function detailsSnippet(details: Record<string, unknown>): string {
   const keys: string[] = [];
-  if (details.event && typeof details.event === "string") {
-    keys.push(`event=${details.event}`);
-  }
-  if (typeof details.accountId === "number" || typeof details.accountId === "string") {
-    keys.push(`acc#${details.accountId}`);
+  if (typeof details.totalRows === "number") {
+    keys.push(`${details.totalRows} linhas`);
   }
   if (typeof details.durationMs === "number") {
     keys.push(`${details.durationMs}ms`);
   }
-  if (typeof details.kind === "string" && !details.event) {
-    keys.push(details.kind);
+  if (typeof details.hadChanges === "boolean") {
+    keys.push(details.hadChanges ? "com mudanças" : "sem mudanças");
+  }
+  if (typeof details.next === "number") {
+    keys.push(`→ ${details.next}s`);
   }
   return keys.join(" · ");
 }
@@ -189,7 +190,7 @@ export function SaudeTab({ connectionId }: { connectionId: string }) {
   const [snapshot, setSnapshot] = useState<ConnectionHealthSnapshot | null>(
     null,
   );
-  const [events, setEvents] = useState<WebhookEvent[]>([]);
+  const [events, setEvents] = useState<SyncRunEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -198,7 +199,7 @@ export function SaudeTab({ connectionId }: { connectionId: string }) {
     (async () => {
       const [healthResult, eventsResult] = await Promise.all([
         getConnectionHealthSnapshot(connectionId),
-        listRecentWebhookEvents({ connectionId, limit: 50 }),
+        listRecentSyncRuns({ connectionId, limit: 50 }),
       ]);
       if (cancelled) return;
 
@@ -219,9 +220,16 @@ export function SaudeTab({ connectionId }: { connectionId: string }) {
     };
   }, [connectionId]);
 
+  const recentErrors = events
+    .filter((ev) => ev.action === "polling_sync_failed")
+    .slice(0, 5);
+
   return (
     <div className="grid gap-4">
-      <header className="flex items-center gap-2">
+      <header
+        data-tour="saude-header"
+        className="flex items-center gap-2"
+      >
         <HeartPulse className="h-4 w-4 text-violet-500" aria-hidden />
         <h2 className="text-sm font-medium">Saúde da conexão</h2>
         {loading ? (
@@ -245,16 +253,74 @@ export function SaudeTab({ connectionId }: { connectionId: string }) {
       ) : null}
 
       {loading ? (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div
+          data-tour="saude-kpis"
+          className="grid grid-cols-2 gap-4 lg:grid-cols-4"
+        >
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-24 rounded-xl" />
           ))}
         </div>
       ) : snapshot ? (
-        <HealthCardsGrid snapshot={snapshot} />
+        <div data-tour="saude-kpis">
+          <HealthCardsGrid snapshot={snapshot} />
+        </div>
       ) : null}
 
-      <div className="grid gap-2">
+      {/* L-1: Erros recentes (top 5) — mostra rapidamente os polling_sync_failed
+          mais recentes pra triagem. Empty state OK quando 0 erros. */}
+      <div className="grid gap-2" data-tour="saude-erros">
+        <h3 className="text-xs font-medium text-muted-foreground">
+          Erros recentes (top 5)
+        </h3>
+        {loading ? (
+          <Skeleton className="h-32 rounded-xl" />
+        ) : recentErrors.length === 0 ? (
+          <div className="flex items-center gap-2 rounded-lg border border-dashed border-emerald-500/30 bg-emerald-500/5 px-3 py-3 text-xs text-emerald-700 dark:text-emerald-300">
+            <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            Nenhum erro de sync nas últimas 24h.
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-xl border border-rose-500/30 bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="text-xs">Quando</TableHead>
+                  <TableHead className="text-xs">Tabela</TableHead>
+                  <TableHead className="text-xs">Erro</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recentErrors.map((ev) => {
+                  const errors = (ev.details?.errors ?? []) as Array<{
+                    tableName: string;
+                    error: string;
+                  }>;
+                  const firstError = errors[0];
+                  return (
+                    <TableRow
+                      key={ev.id}
+                      className="border-border hover:bg-muted/50"
+                    >
+                      <TableCell className="text-xs tabular-nums text-muted-foreground">
+                        {formatDateTime(ev.createdAt)}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {firstError?.tableName ?? "—"}
+                      </TableCell>
+                      <TableCell className="max-w-md truncate text-xs text-rose-500">
+                        {(firstError?.error ?? "—").slice(0, 200)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </div>
+
+      <div className="grid gap-2" data-tour="saude-audit">
         <h3 className="text-xs font-medium text-muted-foreground">
           Audit logs recentes (50 últimos)
         </h3>
@@ -263,9 +329,10 @@ export function SaudeTab({ connectionId }: { connectionId: string }) {
         ) : events.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-muted/20 px-6 py-12 text-center">
             <Inbox className="h-8 w-8 text-muted-foreground/50" aria-hidden />
-            <p className="text-sm font-medium">Sem audit logs webhook</p>
+            <p className="text-sm font-medium">Sem audit logs de sync</p>
             <p className="max-w-md text-xs text-muted-foreground">
-              Não há registros de webhook recentes para esta conexão.
+              Não há registros de polling delta recentes para esta conexão.
+              Aguarde o próximo tick do worker.
             </p>
           </div>
         ) : (
@@ -319,7 +386,7 @@ function HealthCardsGrid({
 }: {
   snapshot: ConnectionHealthSnapshot;
 }) {
-  const heartbeat = formatLag(snapshot.lastWebhookLagMinutes);
+  const heartbeat = formatLag(snapshot.lastSyncLagMinutes);
 
   return (
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -329,14 +396,14 @@ function HealthCardsGrid({
         tone={heartbeat.tone}
       />
       <HealthCard
-        label="Eventos 24h"
-        value={snapshot.webhooksLast24h.toString()}
-        tone={snapshot.webhooksLast24h > 0 ? "violet" : "zinc"}
+        label="Runs 24h (est.)"
+        value={snapshot.syncRunsLast24h.toString()}
+        tone={snapshot.syncRunsLast24h > 0 ? "violet" : "zinc"}
       />
       <HealthCard
         label="Erros 24h"
-        value={snapshot.errorsLast24h.toString()}
-        tone={snapshot.errorsLast24h > 0 ? "rose" : "emerald"}
+        value={snapshot.syncErrorsLast24h.toString()}
+        tone={snapshot.syncErrorsLast24h > 0 ? "rose" : "emerald"}
       />
       <HealthCard
         label="Jobs com erro 24h"
