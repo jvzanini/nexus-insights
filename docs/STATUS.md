@@ -1,10 +1,14 @@
 # Status — Nexus Insights
 
 **Última atualização:** 2026-05-04
-**Versão atual em produção:** v0.35.0
+**Versão atual em produção:** v0.36.0
 **URL:** https://insights.nexusai360.com
 
 ---
+
+## Em produção (v0.36.0)
+
+- 2026-05-04 — v0.36.0 — Dashboard: PeriodNavigator fit-content via `<CardAction>` (B1) + sqlChart UNION ALL fix da divergência cross-period (B2) + diag log G2 v2.
 
 ## Em produção (v0.35.0)
 

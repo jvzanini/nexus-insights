@@ -1,5 +1,25 @@
 # Changelog
 
+## [v0.36.0] 2026-05-04 — Dashboard chart fixes (PeriodNavigator size + cross-period sync)
+
+> 2 bugs do gráfico "Conversas por hora/dia" do menu Dashboard. Workflow rigoroso: plan v1→v2→v3 com 16+ achados em 2 pentes-finos REAIS + subagent-driven-development com TDD em cada task + ui-ux-pro-max em T1. Pula v0.35 (ocupada por bugfix paralelo de Conversas).
+
+### Fixes
+
+- **B1 — PeriodNavigator esticado:** o `<CardHeader>` do shadcn é grid com regra `has-data-[slot=card-action]:grid-cols-[1fr_auto]`. Sem o slot, filhos viraram linhas full-width — tag de período do gráfico ficava com largura fixa enorme. Solução: envolver `<PeriodNavigator>` em `<CardAction>` (primeiro uso real do componente exportado em `card.tsx`). Fit-content + alinhamento direito do título.
+- **B2 — Contagens divergentes Dia/Semana/Mês:** chart Dia mostrava 1 conversa Aberta no dia 03/05 (correto), mas chart Semana e Mês mostravam 0 no mesmo bucket. Fonte: `sqlChart` usava `WITH created_buckets / activity_buckets ... FULL OUTER JOIN ON cb.bucket = ab.bucket`. Em cenário "1 conversa antiga reaberta hoje sem novas conversas criadas hoje", o bucket "hoje" só existia em uma CTE — embora COALESCE devesse coalescer, observamos divergência empírica. Refator: `UNION ALL + GROUP BY bucket`, equivalente em álgebra relacional, sem dependência de match exato de timestamptz. Cache key v8→v9 para invalidar resultados antigos.
+
+### Tests
+
+- `period-navigator-card-action.test.tsx`: 1 spec garante `data-slot="card-action"` envolvendo o `<PeriodNavigator>` no `<ConversationsLineChart>`.
+- `dashboard-data-chart-invariant.test.ts`: 4 specs cobrindo invariante cross-period (Dia open=1, Semana bucket 03/05 open=1, Mês bucket 03/05 open=1, consistência entre os 3). Mocks robustos detectam a query refatorada via marcador `WITH unioned AS`.
+
+### Diagnostics
+
+- `[dashboardData diag G2 v2]`: log estendido com KPIs (open/resolved) + totais por série + dump por bucket (max 35 entries) — facilita debug de regressão futura.
+
+---
+
 ## [v0.35.0] 2026-05-04 — Conversas Bugfix (XLSX rows fantasma + filtro Documento)
 
 > 2 bugs urgentes da v0.32 reportados pelo João em produção. Workflow: plan v1→v2→v3 (14 achados em 2 pentes-finos REAIS) + subagent-driven com TDD em ambos. 3 commits granulares (T1+T2+release) + tests verde + typecheck clean no escopo.
