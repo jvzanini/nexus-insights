@@ -239,7 +239,7 @@ describe("<OnboardingWizard />", () => {
     });
     // Mensagem inline
     expect(
-      screen.getByRole("alert", { name: /Erro ao onboardar/i }),
+      screen.getByRole("alert", { name: /Erro ao cadastrar empresa/i }),
     ).toHaveTextContent(/Já existe/);
     // Continua no Step 3
     expect(screen.getByRole("heading", { name: /Webhook/i })).toBeInTheDocument();
@@ -323,7 +323,7 @@ describe("<OnboardingWizard />", () => {
     ).toBeInTheDocument();
   });
 
-  it("Step 4 botão 'Onboardar outra empresa' reseta wizard pro Step 1", async () => {
+  it("Step 4 botão 'Cadastrar outra empresa' reseta wizard pro Step 1", async () => {
     createCompanyChatBinding.mockResolvedValue({
       success: true,
       data: { id: "bind-new" },
@@ -352,7 +352,7 @@ describe("<OnboardingWizard />", () => {
       ).toBeInTheDocument();
     });
     fireEvent.click(
-      screen.getByRole("button", { name: /Onboardar outra empresa/i }),
+      screen.getByRole("button", { name: /Cadastrar outra empresa/i }),
     );
     // Volta pro Step 1 com tudo limpo
     expect(

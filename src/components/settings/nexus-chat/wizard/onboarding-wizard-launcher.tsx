@@ -21,7 +21,7 @@ interface Props {
 
 /**
  * Wrapper client que segura o open-state do Dialog do wizard. Usado em
- * `/bancos-de-dados` (page server) — o botão "Onboardar empresa" abre o
+ * `/bancos-de-dados` (page server) — o botão "Cadastrar empresa" abre o
  * Dialog que monta `<OnboardingWizard>`.
  */
 export function OnboardingWizardLauncher({ connections }: Props) {
@@ -36,12 +36,12 @@ export function OnboardingWizardLauncher({ connections }: Props) {
         className="cursor-pointer"
       >
         <Plus className="mr-1 h-4 w-4" aria-hidden />
-        Onboardar empresa
+        Cadastrar empresa
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-2xl">
-          <DialogTitle className="sr-only">Onboardar empresa</DialogTitle>
+          <DialogTitle className="sr-only">Cadastrar empresa</DialogTitle>
           <DialogDescription className="sr-only">
             Wizard de 4 etapas para vincular uma conta do Nexus Chat a uma
             conexão Postgres.

@@ -293,7 +293,7 @@ export function ConnectionList({ connections }: Props) {
                       className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-border bg-background/50 px-2.5 text-[11px] font-medium text-foreground transition-colors hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                     >
                       <Users className="h-3 w-3" aria-hidden />
-                      Empresas
+                      Abrir detalhes
                     </Link>
                   </div>
 

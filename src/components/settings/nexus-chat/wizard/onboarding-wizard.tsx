@@ -154,7 +154,7 @@ function Stepper({ current }: { current: WizardStep }) {
   return (
     <ol
       role="list"
-      aria-label="Etapas do onboarding"
+      aria-label="Etapas do cadastro de empresa"
       className="grid grid-cols-4 gap-2"
     >
       {STEP_LABELS.map((label, idx) => {
@@ -281,7 +281,7 @@ export function OnboardingWizard({ connections, onClose, onSuccess }: Props) {
         enabled: true,
       });
       if (!result.success || !result.data) {
-        const msg = result.error ?? "Falha ao onboardar empresa.";
+        const msg = result.error ?? "Falha ao cadastrar empresa.";
         dispatch({ type: "submit_error", error: msg });
         toast.error(msg);
         return;
@@ -307,7 +307,7 @@ export function OnboardingWizard({ connections, onClose, onSuccess }: Props) {
           </div>
           <div className="grid gap-0.5">
             <h2 className="font-heading text-base font-semibold text-foreground">
-              Onboardar empresa
+              Cadastrar empresa
             </h2>
             <p className="text-xs text-muted-foreground">
               Vincule uma conta do Nexus Chat (account_id) a uma conexão
@@ -475,7 +475,7 @@ function StepConnection({
           </p>
           <p className="max-w-sm text-xs text-muted-foreground">
             Crie uma conexão Postgres ao banco do Nexus Chat antes de
-            onboardar a primeira empresa.
+            cadastrar a primeira empresa.
           </p>
           <Button
             type="button"
@@ -891,7 +891,7 @@ function StepWebhook({
       {error ? (
         <div
           role="alert"
-          aria-label="Erro ao onboardar"
+          aria-label="Erro ao cadastrar empresa"
           className="flex items-start gap-2 rounded-md border border-rose-500/40 bg-rose-500/5 px-3 py-2 text-xs text-rose-700 dark:text-rose-300"
         >
           <AlertCircle
@@ -972,7 +972,7 @@ function StepDone({
           className="cursor-pointer"
         >
           <Building2 className="mr-1.5 h-4 w-4" aria-hidden />
-          Onboardar outra empresa
+          Cadastrar outra empresa
         </Button>
       </div>
     </section>
