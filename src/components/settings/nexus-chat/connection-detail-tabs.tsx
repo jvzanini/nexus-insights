@@ -113,7 +113,10 @@ export function ConnectionDetailTabs({
         <ConexaoTab connection={connection} bindings={bindings} />
       </TabsContent>
       <TabsContent value="tempo-real" className="mt-4">
-        <TempoRealTab connectionId={connection.id} />
+        <TempoRealTab
+          connectionId={connection.id}
+          lastWebhookAt={connection.lastWebhookAt}
+        />
       </TabsContent>
       <TabsContent value="jobs" className="mt-4">
         <JobsTab connectionId={connection.id} />

@@ -4,7 +4,7 @@
  * Server Action — stream de eventos webhook recentes da connection.
  *
  * Uso na Aba 2 "Tempo real" (`/bancos-de-dados/[id]?tab=tempo-real`).
- * Lê audit logs com `action LIKE 'webhook_%'` filtrados por connection
+ * Lê audit logs com `action IN (webhook_*)` filtrados por connection
  * (targetType = "nexus_chat_connection", targetId = connectionId), em ordem
  * desc por createdAt.
  *
@@ -13,13 +13,25 @@
  *    só na UI).
  *  - Limit cap em 500 (proteção contra request manipulada).
  *
- * Não inclui webhook_token_regenerated nem webhook_secret_regenerated do
- * filtro startsWith — esses também atendem a regra "webhook_*" e são
- * relevantes pro stream de tempo real (mostra quando alguém regenerou).
+ * Inclui webhook_token_regenerated e webhook_secret_regenerated (eventos
+ * administrativos relevantes no stream).
+ *
+ * Nota: Prisma enum filter não suporta `startsWith`, então usamos `in`
+ * com a lista explícita das 6 ações webhook_* do AuditAction enum.
  */
 
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import type { AuditAction } from "@/generated/prisma/client";
+
+const WEBHOOK_ACTIONS: AuditAction[] = [
+  "webhook_received",
+  "webhook_rejected_hmac",
+  "webhook_rejected_rate_limit",
+  "webhook_no_binding",
+  "webhook_token_regenerated",
+  "webhook_secret_regenerated",
+];
 
 export interface WebhookEvent {
   id: string;
@@ -55,7 +67,7 @@ export async function listRecentWebhookEvents(args: {
 
   const rows = await prisma.auditLog.findMany({
     where: {
-      action: { startsWith: "webhook_" },
+      action: { in: WEBHOOK_ACTIONS },
       targetType: "nexus_chat_connection",
       targetId: args.connectionId,
     },

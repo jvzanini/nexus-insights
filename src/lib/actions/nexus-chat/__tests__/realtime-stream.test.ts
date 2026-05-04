@@ -44,7 +44,16 @@ describe("listRecentWebhookEvents", () => {
     expect(findManyMock).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          action: { startsWith: "webhook_" },
+          action: {
+            in: expect.arrayContaining([
+              "webhook_received",
+              "webhook_rejected_hmac",
+              "webhook_rejected_rate_limit",
+              "webhook_no_binding",
+              "webhook_token_regenerated",
+              "webhook_secret_regenerated",
+            ]),
+          },
           targetType: "nexus_chat_connection",
           targetId: "conn-1",
         }),
