@@ -1,9 +1,9 @@
 ---
 agent: claude-multitenant-realtime-fase1
 started_at: 2026-05-03T19:45-03:00
-target_version: v0.36.0+
-status: review
-last_update: 2026-05-03T22:30-03:00 — L0 + L1 + L7 + L8 completos + Specs Fase 2 e 3 prontas; L2/L3/L4/L5/L6/L9 stand-by
+target_version: v0.37.0
+status: ready_to_deploy
+last_update: 2026-05-04T22:30-03:00 — TODOS lotes completos (L0 a L9) + Specs Fase 2 e 3 prontas; aguardando push do João
 
 ## Coordenação multi-agente (snapshot 2026-05-03 ~22:00)
 - `claude-agente-nex-polish-v031` ativo → v0.31.0 (escopo: agente-nex, llm/exchange-rate, nex_settings schema). 3 commits locais à frente.
