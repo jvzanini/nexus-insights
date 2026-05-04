@@ -5,6 +5,9 @@
  * Avg de 1ª resposta vem de reporting_events (LEFT JOIN, evento 'first_response').
  *
  * TTL 300s (histórico).
+ *
+ * @canonical periodColumn=active (default) — conversas com movimento no período.
+ *   Ver `src/lib/reports/canonical.ts` (`buildActivePeriodClause`).
  */
 
 import { queryNexusChat } from "@/lib/nexus-chat/pool";
@@ -44,7 +47,7 @@ export async function porDepartamento(args: {
   const ttl = args.ttlSeconds ?? DEFAULT_TTL_SECONDS;
   const key = cacheKey({
     scope: "report",
-    name: "por-departamento",
+    name: "por-departamento-canonical-v0.42",
     accountId: args.accountId,
     filtersHash: hashFilters(args.filters),
   });

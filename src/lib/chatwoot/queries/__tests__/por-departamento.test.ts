@@ -70,4 +70,28 @@ describe("porDepartamento (multi-tenant)", () => {
       },
     ]);
   });
+
+  it("SQL filtra por c.last_activity_at (default canonical 'active')", async () => {
+    (queryNexusChat as jest.Mock).mockResolvedValue({ rows: [] });
+
+    await porDepartamento({
+      connectionId: CONN_ID,
+      accountId: 1,
+      filters: { period: { start: PERIOD_START, end: PERIOD_END } },
+    });
+
+    const sql = (queryNexusChat as jest.Mock).mock.calls[0][1] as string;
+    expect(sql).toContain("c.last_activity_at >= $");
+    expect(sql).not.toMatch(/c\.created_at\s*>=\s*\$/);
+  });
+
+  it("source contém marker de cache key 'canonical-v0.42'", () => {
+    const fs = jest.requireActual("fs") as typeof import("fs");
+    const path = jest.requireActual("path") as typeof import("path");
+    const src = fs.readFileSync(
+      path.join(__dirname, "..", "por-departamento.ts"),
+      "utf8",
+    );
+    expect(src).toContain("canonical-v0.42");
+  });
 });
