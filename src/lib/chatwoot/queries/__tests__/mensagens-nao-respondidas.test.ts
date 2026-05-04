@@ -100,8 +100,21 @@ describe("mensagensNaoRespondidas — multi-tenant via queryNexusChat", () => {
     const listParams = (queryNexusChat as jest.Mock).mock.calls[0][2] as unknown[];
     expect(listParams).toContain(500);
   });
+});
 
-  it("descarta período do filtro (estado atual)", async () => {
+describe("mensagensNaoRespondidas — canonical SQL (CTE last_classification_msg + period active)", () => {
+  beforeEach(() => {
+    (queryNexusChat as jest.Mock).mockReset();
+  });
+
+  function getListSql(): string {
+    return (queryNexusChat as jest.Mock).mock.calls[0][1] as string;
+  }
+  function getAggSql(): string {
+    return (queryNexusChat as jest.Mock).mock.calls[1][1] as string;
+  }
+
+  async function run(filters: any = {}) {
     (queryNexusChat as jest.Mock)
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({
@@ -110,21 +123,74 @@ describe("mensagensNaoRespondidas — multi-tenant via queryNexusChat", () => {
         ],
       });
 
-    const filtersWithPeriod: any = {
-      period: { start: new Date("2026-01-01"), end: new Date("2026-01-31") },
-    };
-
     await mensagensNaoRespondidas(CONNECTION_ID, {
       accountId: 9,
-      filters: filtersWithPeriod,
+      filters,
     });
+  }
 
-    // Como período é descartado, o SQL não deve receber as datas como params.
-    // base.params em buildBaseFilter sem period contém apenas accountId (e flags Matrix IA se aplicável).
+  it("SQL contém a CTE canônica `last_classification_msg` (lista e agregado)", async () => {
+    await run();
+    expect(getListSql()).toMatch(/WITH last_classification_msg AS/);
+    expect(getAggSql()).toMatch(/WITH last_classification_msg AS/);
+  });
+
+  it("SQL NÃO contém a CTE inline antiga `WITH last_msg AS`", async () => {
+    await run();
+    expect(getListSql()).not.toMatch(/WITH last_msg AS/);
+    expect(getAggSql()).not.toMatch(/WITH last_msg AS/);
+  });
+
+  it("filtra última msg classificadora como incoming via `lcm.message_type = 0`", async () => {
+    await run();
+    expect(getListSql()).toMatch(/lcm\.message_type\s*=\s*0/);
+    expect(getAggSql()).toMatch(/lcm\.message_type\s*=\s*0/);
+  });
+
+  it("aplica `c.status = 0` (conversa aberta)", async () => {
+    await run();
+    expect(getListSql()).toMatch(/c\.status\s*=\s*0/);
+    expect(getAggSql()).toMatch(/c\.status\s*=\s*0/);
+  });
+
+  it("quando `filters.period` informado, SQL contém `c.last_activity_at >= $` e `c.last_activity_at < $`", async () => {
+    await run({
+      period: { start: new Date("2026-04-01"), end: new Date("2026-04-30") },
+    });
+    expect(getListSql()).toMatch(/c\.last_activity_at\s*>=\s*\$\d+/);
+    expect(getListSql()).toMatch(/c\.last_activity_at\s*<\s*\$\d+/);
+    expect(getAggSql()).toMatch(/c\.last_activity_at\s*>=\s*\$\d+/);
+    expect(getAggSql()).toMatch(/c\.last_activity_at\s*<\s*\$\d+/);
+  });
+
+  it("quando `filters.period` informado, params incluem as datas de início e fim", async () => {
+    const start = new Date("2026-04-01");
+    const end = new Date("2026-04-30");
+    await run({ period: { start, end } });
+    const listParams = (queryNexusChat as jest.Mock).mock.calls[0][2] as unknown[];
     const aggParams = (queryNexusChat as jest.Mock).mock.calls[1][2] as unknown[];
-    const hasDate = aggParams.some(
-      (p) => p instanceof Date,
-    );
-    expect(hasDate).toBe(false);
+    expect(listParams).toEqual(expect.arrayContaining([start, end]));
+    expect(aggParams).toEqual(expect.arrayContaining([start, end]));
+  });
+
+  it("quando `filters.period` NÃO informado, SQL não filtra por `c.last_activity_at`", async () => {
+    await run();
+    expect(getListSql()).not.toMatch(/c\.last_activity_at\s*>=\s*\$\d+/);
+    expect(getListSql()).not.toMatch(/c\.last_activity_at\s*<\s*\$\d+/);
+    expect(getAggSql()).not.toMatch(/c\.last_activity_at\s*>=\s*\$\d+/);
+    expect(getAggSql()).not.toMatch(/c\.last_activity_at\s*<\s*\$\d+/);
+  });
+
+  it("NÃO usa `c.created_at` no recorte de período (default canonical 'active')", async () => {
+    await run({
+      period: { start: new Date("2026-04-01"), end: new Date("2026-04-30") },
+    });
+    expect(getListSql()).not.toMatch(/c\.created_at\s*>=\s*\$\d+/);
+    expect(getAggSql()).not.toMatch(/c\.created_at\s*>=\s*\$\d+/);
+  });
+
+  it("JOIN da lista usa alias `lcm` da CTE canônica", async () => {
+    await run();
+    expect(getListSql()).toMatch(/JOIN\s+last_classification_msg\s+lcm\s+ON\s+lcm\.conversation_id\s*=\s*c\.id/);
   });
 });

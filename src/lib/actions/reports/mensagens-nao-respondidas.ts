@@ -108,6 +108,10 @@ export async function fetchMensagensNaoRespondidas(
       teamIds: user.teamIds,
     } satisfies AuthUser);
 
+    // Canonical v0.42 (Apêndice A.4): a query agora respeita o filtro de
+    // período via buildBaseFilter({ periodColumn: 'active' }). Não força
+    // mais filtersNoPeriod — page resolve o range via resolvePeriod e
+    // entrega aqui já normalizado.
     const result = await mensagensNaoRespondidas(connectionId, {
       accountId,
       filters: scopedFilters,

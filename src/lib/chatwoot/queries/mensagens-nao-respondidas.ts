@@ -1,10 +1,21 @@
 /**
- * Lista de conversas em aberto cuja última mensagem foi do contato (incoming),
- * ordenadas pelo tempo de espera (mais antigas primeiro).
+ * Lista de conversas em aberto cuja última mensagem classificadora foi do
+ * contato (incoming pública), ordenadas pelo tempo de espera (mais antigas
+ * primeiro).
  *
- * Esta tela é "estado atual" — desconsidera o filtro de período.
- * KPIs derivados (total / tempo médio / mais antigo) são consultados
- * em uma agregação separada para refletir todo o universo elegível.
+ * @canonical periodColumn=active (default em buildBaseFilter — c.last_activity_at)
+ * @canonical CTE last_classification_msg
+ *
+ * Cohort canônica:
+ *  - `c.status = 0` (aberta)
+ *  - última mensagem classificadora é `incoming` (lcm.message_type = 0)
+ *    via CTE `last_classification_msg` — descarta notas privadas do agente
+ *    como "atividade outgoing", então conversas com nota privada do agente
+ *    NÃO entram aqui (são "abertas há", não "sem resposta").
+ *  - `c.last_activity_at` ∈ período (quando filtro de período presente).
+ *
+ * KPIs do topo (total / tempo médio / mais antigo) e tabela usam a MESMA
+ * cohort — derivam exatamente do mesmo SQL com WHERE idêntico.
  *
  * TTL curto (30s) — atualiza próximo do tempo real.
  *
@@ -18,6 +29,11 @@ import { withChatwootResilience } from "../resilience";
 import { withCache } from "@/lib/cache/pull-through";
 import { cacheKey, hashFilters } from "@/lib/cache/keys";
 import { buildBaseFilter, type ReportFilters } from "../filters";
+import {
+  buildLastClassificationMsgCte,
+  STATUS_OPEN,
+  MSG_INCOMING,
+} from "@/lib/reports/canonical";
 
 export interface MensagemNaoRespondidaRow {
   id: number;
@@ -66,20 +82,17 @@ export async function mensagensNaoRespondidas(
   connectionId: string,
   args: {
     accountId: number;
-    /** `period` é ignorado — esta tela é "estado atual". */
     filters: ReportFilters;
     limit?: number;
   },
 ) {
   const limit = Math.min(args.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
-  // Período é descartado: estado atual.
-  const filtersNoPeriod: ReportFilters = { ...args.filters, period: undefined };
 
   const key = cacheKey({
     scope: "report",
-    name: `mensagens-nao-respondidas-${limit}`,
+    name: `mensagens-nao-respondidas-canonical-v0.42-${limit}`,
     accountId: args.accountId,
-    filtersHash: hashFilters(filtersNoPeriod),
+    filtersHash: hashFilters(args.filters),
   });
 
   return withCache<MensagensNaoRespondidasResult>({
@@ -88,21 +101,14 @@ export async function mensagensNaoRespondidas(
     fetcher: () =>
       withChatwootResilience<MensagensNaoRespondidasResult>(
         async () => {
-          const base = buildBaseFilter(filtersNoPeriod, args.accountId);
+          // periodColumn default 'active' (canonical) — c.last_activity_at
+          const base = buildBaseFilter(args.filters, args.accountId);
           const params = [...base.params];
           const limitIdx = params.length + 1;
           params.push(limit);
 
           const sqlList = `
-            WITH last_msg AS (
-              SELECT DISTINCT ON (m.conversation_id)
-                m.conversation_id,
-                m.created_at,
-                m.message_type,
-                m.content
-              FROM messages m
-              ORDER BY m.conversation_id, m.created_at DESC
-            )
+            ${buildLastClassificationMsgCte()}
             SELECT
               c.id,
               c.display_id,
@@ -111,40 +117,41 @@ export async function mensagensNaoRespondidas(
               ix.name AS inbox_name,
               tm.name AS team_name,
               u.name AS assignee_name,
-              lm.created_at AS last_incoming_at,
-              EXTRACT(EPOCH FROM (NOW() - lm.created_at))::int AS waiting_seconds,
-              lm.content AS snippet
+              lcm.msg_created_at AS last_incoming_at,
+              EXTRACT(EPOCH FROM (NOW() - lcm.msg_created_at))::int AS waiting_seconds,
+              (
+                SELECT m2.content
+                FROM messages m2
+                WHERE m2.conversation_id = c.id
+                  AND m2.created_at = lcm.msg_created_at
+                  AND m2.message_type = ${MSG_INCOMING}
+                  AND m2.private = FALSE
+                LIMIT 1
+              ) AS snippet
             FROM conversations c
-            JOIN last_msg lm
-              ON lm.conversation_id = c.id
-             AND lm.message_type = 0
+            JOIN last_classification_msg lcm
+              ON lcm.conversation_id = c.id
+             AND lcm.message_type = ${MSG_INCOMING}
             LEFT JOIN contacts ct ON ct.id = c.contact_id
             LEFT JOIN inboxes ix ON ix.id = c.inbox_id
             LEFT JOIN teams tm ON tm.id = c.team_id
             LEFT JOIN users u ON u.id = c.assignee_id
-            WHERE c.status = 0 AND ${base.whereSql}
+            WHERE c.status = ${STATUS_OPEN} AND ${base.whereSql}
             ORDER BY waiting_seconds DESC
             LIMIT $${limitIdx}
           `;
 
           const sqlAgg = `
-            WITH last_msg AS (
-              SELECT DISTINCT ON (m.conversation_id)
-                m.conversation_id,
-                m.created_at,
-                m.message_type
-              FROM messages m
-              ORDER BY m.conversation_id, m.created_at DESC
-            )
+            ${buildLastClassificationMsgCte()}
             SELECT
               COUNT(*)::int AS total,
-              COALESCE(AVG(EXTRACT(EPOCH FROM (NOW() - lm.created_at))), 0)::int AS avg_waiting_seconds,
-              COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - lm.created_at))), 0)::int AS oldest_waiting_seconds
+              COALESCE(AVG(EXTRACT(EPOCH FROM (NOW() - lcm.msg_created_at))), 0)::int AS avg_waiting_seconds,
+              COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - lcm.msg_created_at))), 0)::int AS oldest_waiting_seconds
             FROM conversations c
-            JOIN last_msg lm
-              ON lm.conversation_id = c.id
-             AND lm.message_type = 0
-            WHERE c.status = 0 AND ${base.whereSql}
+            JOIN last_classification_msg lcm
+              ON lcm.conversation_id = c.id
+             AND lcm.message_type = ${MSG_INCOMING}
+            WHERE c.status = ${STATUS_OPEN} AND ${base.whereSql}
           `;
 
           const [listRes, aggRes] = await Promise.all([

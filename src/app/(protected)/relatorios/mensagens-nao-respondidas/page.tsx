@@ -24,6 +24,7 @@ import { fetchMensagensNaoRespondidas } from "@/lib/actions/reports/mensagens-na
 import { getActiveAccountId } from "@/lib/reports/active-account";
 import { getActiveConnectionId } from "@/lib/reports/active-connection";
 import { assertAccountAccess } from "@/lib/tenant";
+import { resolvePeriod } from "@/lib/reports/resolve-period";
 import { shouldExcludeMatrixIA } from "@/lib/reports/exclude-matrix-ia";
 import { formatDuration } from "@/lib/utils/format-time";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
@@ -70,9 +71,24 @@ export default async function MensagensNaoRespondidasPage({
     assigneeIds: parseIds(assigneeRaw),
   };
 
+  // Canonical v0.42 (Apêndice A.4): este relatório respeita o filtro de
+  // período (default "hoje"). Resolve via resolvePeriod usando os mesmos
+  // params canônicos das demais páginas (?period, ?custom_start, ?custom_end).
+  const periodRaw = typeof sp.period === "string" ? sp.period : undefined;
+  const customStartRaw =
+    typeof sp.custom_start === "string" ? sp.custom_start : null;
+  const customEndRaw =
+    typeof sp.custom_end === "string" ? sp.custom_end : null;
+  const { range: period } = await resolvePeriod({
+    period: periodRaw,
+    customStart: customStartRaw,
+    customEnd: customEndRaw,
+  });
+
   const excludeMatrixIA = await shouldExcludeMatrixIA();
 
   const reportFilters: ReportFilters = {
+    period,
     inboxIds: filterValue.inboxIds.length ? filterValue.inboxIds : undefined,
     teamIds: filterValue.teamIds.length ? filterValue.teamIds : undefined,
     assigneeIds: filterValue.assigneeIds.length
@@ -112,7 +128,7 @@ export default async function MensagensNaoRespondidasPage({
       <PageHeader
         icon={MailWarning}
         title="Mensagens não respondidas"
-        subtitle="Conversas em aberto cuja última mensagem foi do contato"
+        subtitle="Conversas aguardando resposta com movimento no período"
         actions={
           <div className="flex items-center gap-2">
             {dataResult.cachedAt ? (
@@ -135,21 +151,21 @@ export default async function MensagensNaoRespondidasPage({
           label="Total aguardando"
           value={totalLabel}
           tone={dataResult.total > 0 ? "warning" : "default"}
-          hint="Conversas em aberto sem resposta do time"
+          hint="Em aberto, sem resposta no período"
         />
         <KpiCard
           icon={Timer}
           label="Tempo médio de espera"
           value={avgLabel === "-" ? "—" : avgLabel}
           tone="default"
-          hint="Média entre todas em espera"
+          hint="Média entre as conversas do período"
         />
         <KpiCard
           icon={Hourglass}
           label="Mais antigo"
           value={oldestLabel === "-" ? "—" : oldestLabel}
           tone={dataResult.oldestWaitingSeconds >= 86400 ? "danger" : "warning"}
-          hint="Maior tempo aguardando agora"
+          hint="Maior tempo de espera no período"
         />
       </div>
 
