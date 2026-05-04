@@ -9,9 +9,18 @@
  *
  * Os JOINs mais pesados (taggings) usam EXISTS para evitar full-scan em
  * `cached_label_list` em conversations.
+ *
+ * Período: por default usa coluna canônica `last_activity_at` ("active"). Para o
+ * KPI "Recebidas" e seus charts, passar `periodColumn: "created"`. Veja
+ * `src/lib/reports/canonical.ts` para semântica completa.
  */
 
-import { MATRIX_IA_INBOX_ID } from "@/lib/constants/matrix-ia";
+import {
+  buildActivePeriodClause,
+  buildCreatedPeriodClause,
+  chatwootMatrixIaClause,
+  type PeriodColumn,
+} from "@/lib/reports/canonical";
 
 export interface ReportFilters {
   inboxIds?: number[];
@@ -23,6 +32,16 @@ export interface ReportFilters {
   priorities?: number[];
   labelIds?: number[];
   period?: { start: Date; end: Date };
+  /**
+   * Coluna de tempo usada para filtrar período.
+   * - `"active"` (default): `c.last_activity_at` — conversas com movimento no período.
+   *   Use para listas, KPIs "abertas/pendentes/resolvidas no período",
+   *   distribuições, drill-downs.
+   * - `"created"`: `c.created_at` — conversas criadas no período. Use APENAS para
+   *   KPI "Recebidas" e chart da série Recebidas.
+   * @canonical see src/lib/reports/canonical.ts
+   */
+  periodColumn?: PeriodColumn;
   /** Default `true` — exclui Matrix IA (inbox 31). Super admin pode passar `false`. */
   excludeMatrixIA?: boolean;
   /**
@@ -41,6 +60,7 @@ export interface BuiltFilter {
 /**
  * Constrói cláusula WHERE parametrizada para `conversations c`.
  * Sempre inclui `c.account_id = $1` e (por default) `c.inbox_id <> 31`.
+ * @canonical periodColumn default "active"
  */
 export function buildBaseFilter(
   filters: ReportFilters,
@@ -53,8 +73,11 @@ export function buildBaseFilter(
   parts.push(`c.account_id = $${++p}`);
   params.push(accountId);
 
-  if (filters.excludeMatrixIA !== false) {
-    parts.push(`c.inbox_id <> ${MATRIX_IA_INBOX_ID}`);
+  const matrixClause = chatwootMatrixIaClause(filters.excludeMatrixIA !== false);
+  if (matrixClause) {
+    // helper retorna "AND c.inbox_id <> 31"; remover prefixo "AND " porque o
+    // join externo já adiciona AND entre parts.
+    parts.push(matrixClause.replace(/^AND\s+/, ""));
   }
 
   if (filters.inboxIds?.length) {
@@ -78,12 +101,25 @@ export function buildBaseFilter(
     params.push(filters.priorities);
   }
 
-  if (filters.period?.start) {
-    parts.push(`c.created_at >= $${++p}`);
+  if (filters.period?.start && filters.period?.end) {
+    const startIdx = ++p;
+    const endIdx = ++p;
+    params.push(filters.period.start, filters.period.end);
+    const periodColumn: PeriodColumn = filters.periodColumn ?? "active";
+    parts.push(
+      periodColumn === "created"
+        ? buildCreatedPeriodClause({ start: startIdx, end: endIdx })
+        : buildActivePeriodClause({ start: startIdx, end: endIdx }),
+    );
+  } else if (filters.period?.start) {
+    const periodColumn: PeriodColumn = filters.periodColumn ?? "active";
+    const col = periodColumn === "created" ? "c.created_at" : "c.last_activity_at";
+    parts.push(`${col} >= $${++p}`);
     params.push(filters.period.start);
-  }
-  if (filters.period?.end) {
-    parts.push(`c.created_at < $${++p}`);
+  } else if (filters.period?.end) {
+    const periodColumn: PeriodColumn = filters.periodColumn ?? "active";
+    const col = periodColumn === "created" ? "c.created_at" : "c.last_activity_at";
+    parts.push(`${col} < $${++p}`);
     params.push(filters.period.end);
   }
 
