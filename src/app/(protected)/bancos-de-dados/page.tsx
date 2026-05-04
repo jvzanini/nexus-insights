@@ -7,7 +7,6 @@ import {
   ConnectionList,
   type ConnectionListItem,
 } from "@/components/settings/nexus-chat/connection-list";
-import { OnboardingWizardLauncher } from "@/components/settings/nexus-chat/wizard/onboarding-wizard-launcher";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 
@@ -26,6 +25,21 @@ export default async function Page() {
     prisma.nexusChatConnection.findMany({
       where: { deletedAt: null },
       orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        name: true,
+        host: true,
+        port: true,
+        database: true,
+        username: true,
+        sslMode: true,
+        applicationName: true,
+        status: true,
+        lastTestAt: true,
+        lastTestError: true,
+        pollingIntervalSeconds: true,
+        lastSyncAt: true,
+      },
     }),
     prisma.companyChatBinding.findMany({
       where: { deletedAt: null, enabled: true },
@@ -54,14 +68,8 @@ export default async function Page() {
     lastTestAt: c.lastTestAt ? c.lastTestAt.toISOString() : null,
     lastTestError: c.lastTestError,
     bindingsCount: enabledCountByConnection.get(c.id) ?? 0,
-    webhookToken: c.webhookToken,
-  }));
-
-  const wizardConnections = items.map((c) => ({
-    id: c.id,
-    name: c.name,
-    webhookToken: c.webhookToken,
-    status: c.status,
+    pollingIntervalSeconds: c.pollingIntervalSeconds,
+    lastSyncAt: c.lastSyncAt ? c.lastSyncAt.toISOString() : null,
   }));
 
   return (
@@ -70,7 +78,6 @@ export default async function Page() {
         icon={Database}
         title="Bancos de dados"
         subtitle="Gerencie as conexões a bancos Postgres do Nexus Chat e as empresas vinculadas (account_id)."
-        actions={<OnboardingWizardLauncher connections={wizardConnections} />}
       />
 
       <ConnectionList connections={items} />
