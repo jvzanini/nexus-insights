@@ -3,7 +3,7 @@
  * Live KPI — TTL curto.
  */
 
-import { getChatwootPool } from "../pool";
+import { queryNexusChat } from "@/lib/nexus-chat/pool";
 import { withChatwootResilience } from "../resilience";
 import { withCache } from "@/lib/cache/pull-through";
 import { cacheKey, hashFilters } from "@/lib/cache/keys";
@@ -17,16 +17,22 @@ export interface StatusDistributionRow {
 const ALL_STATUSES = [0, 1, 2, 3] as const;
 const DEFAULT_TTL_SECONDS = 30;
 
-interface RawRow {
+// WHY: usamos `type` (não `interface`) porque o helper `queryNexusChat` exige
+// `T extends Record<string, unknown>` — interfaces não casam por falta de
+// index signature; `type` literal casa.
+type RawRow = {
   status: number;
   total: string;
-}
+};
 
-export async function statusDistribution(args: {
-  accountId: number;
-  filters: ReportFilters;
-  ttlSeconds?: number;
-}) {
+export async function statusDistribution(
+  connectionId: string,
+  args: {
+    accountId: number;
+    filters: ReportFilters;
+    ttlSeconds?: number;
+  },
+) {
   const ttl = args.ttlSeconds ?? DEFAULT_TTL_SECONDS;
   const key = cacheKey({
     scope: "kpi",
@@ -41,7 +47,6 @@ export async function statusDistribution(args: {
     fetcher: () =>
       withChatwootResilience<StatusDistributionRow[]>(
         async () => {
-          const pool = getChatwootPool();
           const { whereSql, params } = buildBaseFilter(
             args.filters,
             args.accountId,
@@ -52,7 +57,11 @@ export async function statusDistribution(args: {
             WHERE ${whereSql}
             GROUP BY c.status
           `;
-          const result = await pool.query<RawRow>(sql, params as unknown[]);
+          const result = await queryNexusChat<RawRow>(
+            connectionId,
+            sql,
+            params as unknown[],
+          );
           const map = new Map<number, number>();
           for (const r of result.rows) {
             map.set(r.status, Number(r.total));

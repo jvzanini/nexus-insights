@@ -5,7 +5,7 @@
  * TTL curto (30s) — esse painel atualiza por polling.
  */
 
-import { getChatwootPool } from "../pool";
+import { queryNexusChat } from "@/lib/nexus-chat/pool";
 import { withChatwootResilience } from "../resilience";
 import { withCache } from "@/lib/cache/pull-through";
 import { cacheKey, hashFilters } from "@/lib/cache/keys";
@@ -28,32 +28,38 @@ export interface HomeSummary {
 
 const DEFAULT_TTL_SECONDS = 30;
 
-interface RowConversasHoje {
+// WHY: usamos `type` (não `interface`) porque o helper `queryNexusChat` exige
+// `T extends Record<string, unknown>` — interfaces não casam por falta de
+// index signature; `type` literal casa.
+type RowConversasHoje = {
   total: string;
-}
-interface RowConversasOntem {
+};
+type RowConversasOntem = {
   total: string;
-}
-interface RowBacklog {
+};
+type RowBacklog = {
   total: string;
-}
-interface RowOrfas {
+};
+type RowOrfas = {
   total: string;
-}
-interface RowP50 {
+};
+type RowP50 = {
   p50: string | null;
-}
-interface RowTopAtendente {
+};
+type RowTopAtendente = {
   id: number;
   name: string | null;
   volume: string;
-}
+};
 
-export async function homeSummary(args: {
-  accountId: number;
-  filters: ReportFilters;
-  ttlSeconds?: number;
-}) {
+export async function homeSummary(
+  connectionId: string,
+  args: {
+    accountId: number;
+    filters: ReportFilters;
+    ttlSeconds?: number;
+  },
+) {
   const ttl = args.ttlSeconds ?? DEFAULT_TTL_SECONDS;
   const key = cacheKey({
     scope: "kpi",
@@ -68,7 +74,6 @@ export async function homeSummary(args: {
     fetcher: () =>
       withChatwootResilience<HomeSummary>(
         async () => {
-          const pool = getChatwootPool();
           const base = buildBaseFilter(args.filters, args.accountId);
 
           // 1) Conversas criadas hoje (timezone America/Sao_Paulo).
@@ -132,21 +137,32 @@ export async function homeSummary(args: {
 
           const [hojeRes, ontemRes, backlogRes, orfasRes, p50Res, topRes] =
             await Promise.all([
-              pool.query<RowConversasHoje>(
+              queryNexusChat<RowConversasHoje>(
+                connectionId,
                 sqlHoje,
                 base.params as unknown[],
               ),
-              pool.query<RowConversasOntem>(
+              queryNexusChat<RowConversasOntem>(
+                connectionId,
                 sqlOntem,
                 base.params as unknown[],
               ),
-              pool.query<RowBacklog>(
+              queryNexusChat<RowBacklog>(
+                connectionId,
                 sqlBacklog,
                 base.params as unknown[],
               ),
-              pool.query<RowOrfas>(sqlOrfas, base.params as unknown[]),
-              pool.query<RowP50>(sqlP50, [args.accountId]),
-              pool.query<RowTopAtendente>(sqlTop, base.params as unknown[]),
+              queryNexusChat<RowOrfas>(
+                connectionId,
+                sqlOrfas,
+                base.params as unknown[],
+              ),
+              queryNexusChat<RowP50>(connectionId, sqlP50, [args.accountId]),
+              queryNexusChat<RowTopAtendente>(
+                connectionId,
+                sqlTop,
+                base.params as unknown[],
+              ),
             ]);
 
           const data: HomeSummary = {

@@ -10,6 +10,9 @@ import { shouldExcludeMatrixIA } from "@/lib/reports/exclude-matrix-ia";
 import { statusDistribution } from "@/lib/chatwoot/queries/status-distribution";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
 import { CHART_COLORS } from "@/lib/charts/colors";
+import { getCurrentUser } from "@/lib/auth";
+import { getActiveConnectionId } from "@/lib/reports/active-connection";
+import type { AuthUser } from "@/lib/auth-helpers";
 
 import type { DashboardContentProps } from "./types";
 
@@ -38,7 +41,15 @@ export async function StatusPieContent({
     const { range } = await resolvePeriod({ period, customStart, customEnd });
     const excludeMatrixIA = await shouldExcludeMatrixIA();
     const filters: ReportFilters = { period: range, excludeMatrixIA };
-    result = await statusDistribution({ accountId, filters });
+    // WHY: connectionId resolvido aqui dentro pra não vazar para o
+    // DashboardContentProps compartilhado por outros relatórios. Como o
+    // server component é renderizado dentro de uma Suspense, o cache() do
+    // React em getActiveConnectionId já dedupa a chamada quando a page
+    // (visao-geral) também resolve.
+    const user = await getCurrentUser();
+    if (!user) throw new Error("Não autenticado");
+    const connectionId = await getActiveConnectionId(user as AuthUser);
+    result = await statusDistribution(connectionId, { accountId, filters });
   } catch (err) {
     console.error("[StatusPieContent] erro:", err);
     return (

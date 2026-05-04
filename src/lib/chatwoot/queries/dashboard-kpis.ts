@@ -12,7 +12,7 @@
  * TTL curto (30s) — painel atualiza por polling/refresh.
  */
 
-import { getChatwootPool } from "../pool";
+import { queryNexusChat } from "@/lib/nexus-chat/pool";
 import { withChatwootResilience } from "../resilience";
 import { withCache } from "@/lib/cache/pull-through";
 import { cacheKey, hashFilters } from "@/lib/cache/keys";
@@ -45,27 +45,33 @@ export interface DashboardKpis {
 
 const DEFAULT_TTL_SECONDS = 30;
 
-interface RowCount {
+// WHY: usamos `type` (não `interface`) porque o helper `queryNexusChat` exige
+// `T extends Record<string, unknown>` — interfaces não casam por falta de
+// index signature; `type` literal casa.
+type RowCount = {
   total: string;
-}
-interface RowAgentRapido {
+};
+type RowAgentRapido = {
   name: string | null;
   avg_seconds: string | null;
-}
-interface RowAgentBacklog {
+};
+type RowAgentBacklog = {
   name: string | null;
   total: string;
-}
-interface RowInboxBacklog {
+};
+type RowInboxBacklog = {
   name: string | null;
   total: string;
-}
+};
 
-export async function dashboardKpis(args: {
-  accountId: number;
-  filters: ReportFilters;
-  ttlSeconds?: number;
-}) {
+export async function dashboardKpis(
+  connectionId: string,
+  args: {
+    accountId: number;
+    filters: ReportFilters;
+    ttlSeconds?: number;
+  },
+) {
   const ttl = args.ttlSeconds ?? DEFAULT_TTL_SECONDS;
   const key = cacheKey({
     scope: "report",
@@ -80,8 +86,6 @@ export async function dashboardKpis(args: {
     fetcher: () =>
       withChatwootResilience<DashboardKpis>(
         async () => {
-          const pool = getChatwootPool();
-
           // Filtro "agora" (sem período) — herda exclude Matrix IA + inbox/team filters.
           const filtersAgora: ReportFilters = {
             ...args.filters,
@@ -226,19 +230,34 @@ export async function dashboardKpis(args: {
             atendentesEmAbertoRes,
             inboxesEmAbertoRes,
           ] = await Promise.all([
-            pool.query<RowCount>(sqlEmAberto, baseAgora.params as unknown[]),
-            pool.query<RowCount>(sqlPendentes, baseAgora.params as unknown[]),
-            pool.query<RowCount>(sqlResolvidas, params1),
-            pool.query<RowCount>(
+            queryNexusChat<RowCount>(
+              connectionId,
+              sqlEmAberto,
+              baseAgora.params as unknown[],
+            ),
+            queryNexusChat<RowCount>(
+              connectionId,
+              sqlPendentes,
+              baseAgora.params as unknown[],
+            ),
+            queryNexusChat<RowCount>(connectionId, sqlResolvidas, params1),
+            queryNexusChat<RowCount>(
+              connectionId,
               sqlNaoRespondidas,
               baseAgora.params as unknown[],
             ),
-            pool.query<RowAgentRapido>(sqlAtendentesRapidos, params2),
-            pool.query<RowAgentBacklog>(
+            queryNexusChat<RowAgentRapido>(
+              connectionId,
+              sqlAtendentesRapidos,
+              params2,
+            ),
+            queryNexusChat<RowAgentBacklog>(
+              connectionId,
               sqlAtendentesEmAberto,
               baseAgora.params as unknown[],
             ),
-            pool.query<RowInboxBacklog>(
+            queryNexusChat<RowInboxBacklog>(
+              connectionId,
               sqlInboxesEmAberto,
               baseAgora.params as unknown[],
             ),
