@@ -53,12 +53,11 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   company_chat_binding_created: "Binding empresa↔conexão criado",
   company_chat_binding_updated: "Binding empresa↔conexão atualizado",
   company_chat_binding_deleted: "Binding empresa↔conexão removido",
-  webhook_received: "Webhook Nexus Chat recebido",
-  webhook_rejected_hmac: "Webhook rejeitado (HMAC inválido)",
-  webhook_rejected_rate_limit: "Webhook rejeitado (rate limit)",
-  webhook_no_binding: "Webhook ignorado (sem binding)",
-  webhook_token_regenerated: "Token de webhook regenerado",
-  webhook_secret_regenerated: "Secret de webhook regenerado",
+  polling_sync_completed: "Sync OK",
+  polling_sync_failed: "Sync falhou",
+  polling_full_sweep_started: "Sweep iniciado",
+  polling_full_sweep_completed: "Sweep OK",
+  polling_interval_updated: "Intervalo alterado",
 };
 
 function getActionBadgeClasses(action: AuditAction): string {
@@ -73,6 +72,22 @@ function getActionBadgeClasses(action: AuditAction): string {
   }
   if (action === "opened_chatwoot_link") {
     return "bg-zinc-500/10 text-zinc-400 border-zinc-500/20";
+  }
+  // v0.41 polling delta: cores semânticas por subgrupo
+  if (action === "polling_sync_completed") {
+    return "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+  }
+  if (action === "polling_sync_failed") {
+    return "bg-rose-500/10 text-rose-400 border-rose-500/20";
+  }
+  if (
+    action === "polling_full_sweep_started" ||
+    action === "polling_full_sweep_completed"
+  ) {
+    return "bg-violet-500/10 text-violet-400 border-violet-500/20";
+  }
+  if (action === "polling_interval_updated") {
+    return "bg-amber-500/10 text-amber-400 border-amber-500/20";
   }
   if (action.startsWith("user_") || action.startsWith("profile_") || action.startsWith("email_") || action === "account_switched" || action === "session_revoked") {
     return "bg-violet-500/10 text-violet-400 border-violet-500/20";
