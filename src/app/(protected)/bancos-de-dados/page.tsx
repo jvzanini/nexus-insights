@@ -7,6 +7,7 @@ import {
   ConnectionList,
   type ConnectionListItem,
 } from "@/components/settings/nexus-chat/connection-list";
+import { OnboardingWizardLauncher } from "@/components/settings/nexus-chat/wizard/onboarding-wizard-launcher";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 
@@ -56,12 +57,20 @@ export default async function Page() {
     webhookToken: c.webhookToken,
   }));
 
+  const wizardConnections = items.map((c) => ({
+    id: c.id,
+    name: c.name,
+    webhookToken: c.webhookToken,
+    status: c.status,
+  }));
+
   return (
     <PageShell variant="wide">
       <PageHeader
         icon={Database}
         title="Bancos de dados"
         subtitle="Gerencie as conexões a bancos Postgres do Nexus Chat e as empresas vinculadas (account_id)."
+        actions={<OnboardingWizardLauncher connections={wizardConnections} />}
       />
 
       <ConnectionList connections={items} />
