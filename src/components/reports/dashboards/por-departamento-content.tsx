@@ -59,6 +59,7 @@ function MiniDistributionBar({
 }
 
 export async function PorDepartamentoContent({
+  connectionId,
   accountId,
   period,
   customStart,
@@ -69,7 +70,7 @@ export async function PorDepartamentoContent({
     const { range } = await resolvePeriod({ period, customStart, customEnd });
     const excludeMatrixIA = await shouldExcludeMatrixIA();
     const filters: ReportFilters = { period: range, excludeMatrixIA };
-    result = await porDepartamento({ accountId, filters });
+    result = await porDepartamento({ connectionId, accountId, filters });
   } catch (err) {
     console.error("[PorDepartamentoContent] erro:", err);
     return (

@@ -9,7 +9,7 @@
  * TTL 300s (histórico).
  */
 
-import { getChatwootPool } from "../pool";
+import { queryNexusChat } from "@/lib/nexus-chat/pool";
 import { withChatwootResilience } from "../resilience";
 import { withCache } from "@/lib/cache/pull-through";
 import { cacheKey, hashFilters } from "@/lib/cache/keys";
@@ -27,16 +27,17 @@ export interface RankingAtendentesRow {
 const DEFAULT_TTL_SECONDS = 300;
 const DEFAULT_LIMIT = 50;
 
-interface RawRow {
+type RawRow = {
   user_id: number;
   name: string | null;
   email: string | null;
   volume: string | null;
   resolved: string | null;
   p50: string | null;
-}
+} & Record<string, unknown>;
 
 export async function rankingAtendentes(args: {
+  connectionId: string;
   accountId: number;
   filters: ReportFilters;
   limit?: number;
@@ -57,7 +58,6 @@ export async function rankingAtendentes(args: {
     fetcher: () =>
       withChatwootResilience<RankingAtendentesRow[]>(
         async () => {
-          const pool = getChatwootPool();
           const { whereSql, params } = buildBaseFilter(
             args.filters,
             args.accountId,
@@ -89,7 +89,8 @@ export async function rankingAtendentes(args: {
             LIMIT $${limitParamIndex}
           `;
 
-          const result = await pool.query<RawRow>(
+          const result = await queryNexusChat<RawRow>(
+            args.connectionId,
             sql,
             queryParams as unknown[],
           );

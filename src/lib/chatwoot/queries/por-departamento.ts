@@ -7,7 +7,7 @@
  * TTL 300s (histórico).
  */
 
-import { getChatwootPool } from "../pool";
+import { queryNexusChat } from "@/lib/nexus-chat/pool";
 import { withChatwootResilience } from "../resilience";
 import { withCache } from "@/lib/cache/pull-through";
 import { cacheKey, hashFilters } from "@/lib/cache/keys";
@@ -25,7 +25,7 @@ export interface PorDepartamentoRow {
 
 const DEFAULT_TTL_SECONDS = 300;
 
-interface RawRow {
+type RawRow = {
   team_id: number;
   team_name: string | null;
   volume: string | null;
@@ -33,9 +33,10 @@ interface RawRow {
   resolved: string | null;
   pending: string | null;
   avg_fr: string | null;
-}
+} & Record<string, unknown>;
 
 export async function porDepartamento(args: {
+  connectionId: string;
   accountId: number;
   filters: ReportFilters;
   ttlSeconds?: number;
@@ -54,7 +55,6 @@ export async function porDepartamento(args: {
     fetcher: () =>
       withChatwootResilience<PorDepartamentoRow[]>(
         async () => {
-          const pool = getChatwootPool();
           const { whereSql, params } = buildBaseFilter(
             args.filters,
             args.accountId,
@@ -82,7 +82,11 @@ export async function porDepartamento(args: {
             ORDER BY volume DESC, t.name ASC
           `;
 
-          const result = await pool.query<RawRow>(sql, params as unknown[]);
+          const result = await queryNexusChat<RawRow>(
+            args.connectionId,
+            sql,
+            params as unknown[],
+          );
 
           return result.rows.map((r) => ({
             teamId: r.team_id,

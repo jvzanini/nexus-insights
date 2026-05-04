@@ -8,7 +8,7 @@
  * TTL 300s (histórico).
  */
 
-import { getChatwootPool } from "../pool";
+import { queryNexusChat } from "@/lib/nexus-chat/pool";
 import { withChatwootResilience } from "../resilience";
 import { withCache } from "@/lib/cache/pull-through";
 import { cacheKey, hashFilters } from "@/lib/cache/keys";
@@ -27,7 +27,7 @@ export interface PorEstadoRow {
 
 const DEFAULT_TTL_SECONDS = 300;
 
-interface RawRow {
+type RawRow = {
   inbox_id: number;
   inbox_name: string | null;
   volume: string | null;
@@ -36,9 +36,10 @@ interface RawRow {
   pending: string | null;
   avg_fr: string | null;
   top_agent_name: string | null;
-}
+} & Record<string, unknown>;
 
 export async function porEstado(args: {
+  connectionId: string;
   accountId: number;
   filters: ReportFilters;
   ttlSeconds?: number;
@@ -57,7 +58,6 @@ export async function porEstado(args: {
     fetcher: () =>
       withChatwootResilience<PorEstadoRow[]>(
         async () => {
-          const pool = getChatwootPool();
           const { whereSql, params } = buildBaseFilter(
             args.filters,
             args.accountId,
@@ -137,7 +137,11 @@ export async function porEstado(args: {
             ORDER BY ia.volume DESC, i.name ASC
           `;
 
-          const result = await pool.query<RawRow>(sql, params as unknown[]);
+          const result = await queryNexusChat<RawRow>(
+            args.connectionId,
+            sql,
+            params as unknown[],
+          );
 
           return result.rows.map((r) => ({
             inboxId: r.inbox_id,

@@ -13,6 +13,7 @@ import type { DashboardContentProps } from "./types";
 import { PorEstadoTable } from "./por-estado-table";
 
 export async function PorEstadoContent({
+  connectionId,
   accountId,
   period,
   customStart,
@@ -23,7 +24,7 @@ export async function PorEstadoContent({
     const excludeMatrixIA = await shouldExcludeMatrixIA();
     const filters: ReportFilters = { period: range, excludeMatrixIA };
 
-    const result = await porEstado({ accountId, filters });
+    const result = await porEstado({ connectionId, accountId, filters });
     const rows = result.data;
 
     const top10ChartData = rows.slice(0, 10).map((r) => ({

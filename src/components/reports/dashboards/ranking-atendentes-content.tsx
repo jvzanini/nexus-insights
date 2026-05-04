@@ -15,6 +15,7 @@ import type { DashboardContentProps } from "./types";
 import { RankingAtendentesTable } from "./ranking-atendentes-table";
 
 export async function RankingAtendentesContent({
+  connectionId,
   accountId,
   period,
   customStart,
@@ -25,7 +26,12 @@ export async function RankingAtendentesContent({
     const excludeMatrixIA = await shouldExcludeMatrixIA();
     const filters: ReportFilters = { period: range, excludeMatrixIA };
 
-    const result = await rankingAtendentes({ accountId, filters, limit: 50 });
+    const result = await rankingAtendentes({
+      connectionId,
+      accountId,
+      filters,
+      limit: 50,
+    });
     const rows = result.data;
     const totalAtendentes = rows.length;
     const topAgent = rows[0] ?? null;
