@@ -167,24 +167,41 @@ const integrationsReconcileWorker = new Worker(
 // ─── Schedules (repeatable jobs) ──────────────────────────────────────────
 
 async function scheduleRepeatables() {
-  await refreshByAccountQueue.upsertJobScheduler(
+  // Limpa schedulers antigos da Fase 1 (cron de 5 min) — substituídos por
+  // webhook event-driven da Fase 2 + cron fallback 30 min. Idempotente:
+  // se o scheduler antigo não existe (cluster novo), o catch silencia.
+  const oldSchedulerIds = [
     "facts-refresh-by-account",
-    { pattern: "*/5 * * * *" },
+    "facts-refresh-by-inbox",
+    "facts-refresh-by-agent",
+    "facts-refresh-by-team",
+  ];
+  for (const id of oldSchedulerIds) {
+    await refreshByAccountQueue.removeJobScheduler(id).catch(() => {});
+    await refreshByInboxQueue.removeJobScheduler(id).catch(() => {});
+    await refreshByAgentQueue.removeJobScheduler(id).catch(() => {});
+    await refreshByTeamQueue.removeJobScheduler(id).catch(() => {});
+  }
+
+  // Schedulers novos: cron 30 min como fallback (webhook é primário).
+  await refreshByAccountQueue.upsertJobScheduler(
+    "facts-refresh-by-account-fallback",
+    { pattern: "*/30 * * * *" },
     { name: "facts-refresh-by-account" },
   );
   await refreshByInboxQueue.upsertJobScheduler(
-    "facts-refresh-by-inbox",
-    { pattern: "*/5 * * * *" },
+    "facts-refresh-by-inbox-fallback",
+    { pattern: "*/30 * * * *" },
     { name: "facts-refresh-by-inbox" },
   );
   await refreshByAgentQueue.upsertJobScheduler(
-    "facts-refresh-by-agent",
-    { pattern: "*/5 * * * *" },
+    "facts-refresh-by-agent-fallback",
+    { pattern: "*/30 * * * *" },
     { name: "facts-refresh-by-agent" },
   );
   await refreshByTeamQueue.upsertJobScheduler(
-    "facts-refresh-by-team",
-    { pattern: "*/5 * * * *" },
+    "facts-refresh-by-team-fallback",
+    { pattern: "*/30 * * * *" },
     { name: "facts-refresh-by-team" },
   );
   await housekeepingQueue.upsertJobScheduler(
@@ -203,7 +220,7 @@ async function scheduleRepeatables() {
     { name: "integrations.reconcile" },
   );
   console.log(
-    "[worker] Schedules registered: refresh-by-* every 5min, housekeeping daily 03:00, integrations.refresh-dim every 30min, integrations.reconcile every 6h",
+    "[worker] Schedules registered: refresh-by-* every 30min (fallback; webhook é primário), housekeeping daily 03:00, integrations.refresh-dim every 30min, integrations.reconcile every 6h",
   );
 }
 
