@@ -4,9 +4,14 @@
 import { describe, it, expect, jest } from "@jest/globals";
 
 // AdvancedFilters importa ExportButton → conversas-export action → next-auth.
-// Mockamos a cadeia para isolar a constante SORT_OPTIONS.
+// PeriodPills (transitivamente) importa actions/reports/period que agora puxa
+// @/lib/nexus-chat/pool → @/lib/prisma → @/generated/prisma (com import.meta.url,
+// incompatível com Jest CJS). Mockamos a cadeia.
 jest.mock("@/lib/actions/reports/conversas-export", () => ({
   exportConversasAction: jest.fn(),
+}));
+jest.mock("@/lib/actions/reports/period", () => ({
+  getMinReportDate: jest.fn().mockResolvedValue("2026-01-01"),
 }));
 jest.mock("@/lib/auth", () => ({ auth: jest.fn() }));
 jest.mock("@/auth", () => ({ auth: jest.fn() }));
