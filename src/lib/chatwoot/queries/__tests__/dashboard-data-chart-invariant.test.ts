@@ -12,6 +12,7 @@
  * é o estado RED da TDD.
  */
 import { dashboardData } from "../dashboard-data";
+import type { DashboardChartPoint } from "../dashboard-data";
 import { fromZonedTime } from "date-fns-tz";
 
 const mockQuery = jest.fn();
@@ -22,10 +23,18 @@ jest.mock("../../pool", () => ({
   }),
 }));
 jest.mock("../../resilience", () => ({
-  withChatwootResilience: <T,>(fn: () => Promise<T>) => fn(),
+  withChatwootResilience: <T,>(fn: () => Promise<T>) =>
+    fn().then((data) => ({ data, stale: false })),
 }));
 jest.mock("@/lib/cache/pull-through", () => ({
-  withCache: <T,>(opts: { fetcher: () => Promise<T> }) => opts.fetcher(),
+  withCache: <T,>(opts: {
+    fetcher: () => Promise<{ data: T; stale: boolean }>;
+  }) =>
+    opts.fetcher().then((r) => ({
+      data: r.data,
+      cached: false,
+      stale: r.stale,
+    })),
 }));
 jest.mock("@/lib/cache/keys", () => ({
   cacheKey: () => "test-key",
@@ -117,7 +126,7 @@ describe("dashboardData chart invariant cross-period (v0.36 B2)", () => {
         "hour",
       ),
     );
-    const totalOpen = result.chart.reduce((a, r) => a + r.open, 0);
+    const totalOpen = result.data.chart.reduce((a: number, r: DashboardChartPoint) => a + r.open, 0);
     expect(totalOpen).toBe(1);
   });
 
@@ -136,7 +145,7 @@ describe("dashboardData chart invariant cross-period (v0.36 B2)", () => {
         "day",
       ),
     );
-    const bucket0305 = result.chart.find((r) =>
+    const bucket0305 = result.data.chart.find((r: DashboardChartPoint) =>
       r.bucket.startsWith("2026-05-03"),
     );
     expect(bucket0305).toBeDefined();
@@ -158,7 +167,7 @@ describe("dashboardData chart invariant cross-period (v0.36 B2)", () => {
         "day",
       ),
     );
-    const bucket0305 = result.chart.find((r) =>
+    const bucket0305 = result.data.chart.find((r: DashboardChartPoint) =>
       r.bucket.startsWith("2026-05-03"),
     );
     expect(bucket0305).toBeDefined();
@@ -206,11 +215,11 @@ describe("dashboardData chart invariant cross-period (v0.36 B2)", () => {
         "day",
       ),
     );
-    const totalDia = dia.chart.reduce((a, r) => a + r.open, 0);
-    const bucketSemana = semana.chart.find((r) =>
+    const totalDia = dia.data.chart.reduce((a: number, r: DashboardChartPoint) => a + r.open, 0);
+    const bucketSemana = semana.data.chart.find((r: DashboardChartPoint) =>
       r.bucket.startsWith("2026-05-03"),
     )!.open;
-    const bucketMes = mes.chart.find((r) =>
+    const bucketMes = mes.data.chart.find((r: DashboardChartPoint) =>
       r.bucket.startsWith("2026-05-03"),
     )!.open;
     expect(totalDia).toBe(bucketSemana);
