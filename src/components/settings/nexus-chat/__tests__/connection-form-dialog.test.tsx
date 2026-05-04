@@ -16,13 +16,6 @@ jest.mock("@/lib/actions/nexus-chat/connections", () => ({
     updateNexusChatConnection(...args),
 }));
 
-// Mock clipboard para testes de copy.
-Object.assign(navigator, {
-  clipboard: {
-    writeText: jest.fn().mockResolvedValue(undefined),
-  },
-});
-
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ refresh }),
 }));
@@ -34,6 +27,23 @@ const toastMock = {
 jest.mock("sonner", () => ({ toast: toastMock }));
 
 import { ConnectionFormDialog } from "../connection-form-dialog";
+
+const baseConnection = {
+  id: "conn-1",
+  name: "Padrão",
+  host: "db.example.com",
+  port: 5432,
+  database: "chatwoot",
+  username: "ro_user",
+  sslMode: "prefer",
+  applicationName: "nexus-insights",
+  status: "active",
+  lastTestAt: null,
+  lastTestError: null,
+  bindingsCount: 0,
+  pollingIntervalSeconds: 30,
+  lastSyncAt: null,
+} as const;
 
 describe("<ConnectionFormDialog />", () => {
   beforeEach(() => {
@@ -68,21 +78,7 @@ describe("<ConnectionFormDialog />", () => {
         mode="edit"
         open
         onOpenChange={jest.fn()}
-        connection={{
-          id: "conn-1",
-          name: "Padrão",
-          host: "db.example.com",
-          port: 5432,
-          database: "chatwoot",
-          username: "ro_user",
-          sslMode: "prefer",
-          applicationName: "nexus-insights",
-          status: "active",
-          lastTestAt: null,
-          lastTestError: null,
-          bindingsCount: 0,
-          webhookToken: "a".repeat(64),
-        }}
+        connection={baseConnection}
       />,
     );
     expect(screen.getByLabelText(/^Nome$/i)).toHaveValue("Padrão");
@@ -92,109 +88,94 @@ describe("<ConnectionFormDialog />", () => {
     ).toBeInTheDocument();
   });
 
-  it("modo edit + webhookToken: renderiza bloco Webhook com URL e eventos", () => {
+  it("v0.41: NÃO renderiza bloco Webhook nem lista de eventos", () => {
     render(
       <ConnectionFormDialog
         mode="edit"
         open
         onOpenChange={jest.fn()}
-        connection={{
-          id: "conn-1",
-          name: "Padrão",
-          host: "db.example.com",
-          port: 5432,
-          database: "chatwoot",
-          username: "ro_user",
-          sslMode: "prefer",
-          applicationName: "nexus-insights",
-          status: "active",
-          lastTestAt: null,
-          lastTestError: null,
-          bindingsCount: 0,
-          webhookToken: "f".repeat(64),
-        }}
-      />,
-    );
-    const section = screen.getByTestId("webhook-section");
-    expect(section).toBeInTheDocument();
-    // URL do webhook montada com o token.
-    expect(section.textContent ?? "").toMatch(
-      /\/api\/webhooks\/nexus-chat\/f{64}/,
-    );
-    // Lista de eventos canônicos do Chatwoot.
-    const events = screen.getByTestId("webhook-events-list");
-    expect(events).toHaveTextContent(/conversation_created/);
-    expect(events).toHaveTextContent(/message_created/);
-    expect(events).toHaveTextContent(/conversation_status_changed/);
-    // v0.39: HMAC removido — UI não mostra mais botão Regenerar nem campo Secret.
-    expect(screen.queryByTestId("webhook-regen-btn")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("webhook-secret-alert")).not.toBeInTheDocument();
-    // Texto explicando que autenticação é por token na URL.
-    expect(section.textContent ?? "").toMatch(
-      /token único embutido na URL|painel do Nexus Chat não tem campo de secret/i,
-    );
-  });
-
-  it("modo edit sem webhookToken: bloco Webhook não renderiza", () => {
-    render(
-      <ConnectionFormDialog
-        mode="edit"
-        open
-        onOpenChange={jest.fn()}
-        connection={{
-          id: "conn-legacy",
-          name: "Legado",
-          host: "db.example.com",
-          port: 5432,
-          database: "chatwoot",
-          username: "ro_user",
-          sslMode: "prefer",
-          applicationName: "nexus-insights",
-          status: "active",
-          lastTestAt: null,
-          lastTestError: null,
-          bindingsCount: 0,
-          webhookToken: null,
-        }}
+        connection={baseConnection}
       />,
     );
     expect(screen.queryByTestId("webhook-section")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("webhook-events-list")).not.toBeInTheDocument();
   });
 
-  it("v0.39: create fecha Dialog após sucesso (sem secret revelado)", async () => {
-    createNexusChatConnection.mockResolvedValue({
-      success: true,
-      data: { id: "new-id" },
-    });
-    const onOpenChange = jest.fn();
+  it("renderiza campo Intervalo com default 30 e min 20", () => {
     render(
       <ConnectionFormDialog
         mode="create"
         open
-        onOpenChange={onOpenChange}
+        onOpenChange={jest.fn()}
+        connection={null}
+      />,
+    );
+    const input = screen.getByLabelText(
+      /Intervalo de sincronização \(segundos\)/i,
+    ) as HTMLInputElement;
+    expect(input).toBeInTheDocument();
+    expect(input.type).toBe("number");
+    expect(input.min).toBe("20");
+    expect(input.step).toBe("1");
+    expect(input.value).toBe("30");
+    expect(
+      screen.getByText(/Mínimo 20 segundos\. Padrão 30/i),
+    ).toBeInTheDocument();
+  });
+
+  it("modo edit: campo Intervalo reflete pollingIntervalSeconds da connection", () => {
+    render(
+      <ConnectionFormDialog
+        mode="edit"
+        open
+        onOpenChange={jest.fn()}
+        connection={{ ...baseConnection, pollingIntervalSeconds: 45 }}
+      />,
+    );
+    const input = screen.getByLabelText(
+      /Intervalo de sincronização \(segundos\)/i,
+    ) as HTMLInputElement;
+    expect(input.value).toBe("45");
+  });
+
+  it("submit envia pollingIntervalSeconds 45 no payload", async () => {
+    createNexusChatConnection.mockResolvedValue({
+      success: true,
+      data: { id: "new-id" },
+    });
+    render(
+      <ConnectionFormDialog
+        mode="create"
+        open
+        onOpenChange={jest.fn()}
         connection={null}
       />,
     );
     fireEvent.change(screen.getByLabelText(/^Nome$/i), {
-      target: { value: "Nova" },
+      target: { value: "Cliente A" },
     });
     fireEvent.change(screen.getByLabelText(/^Host$/i), {
-      target: { value: "h" },
+      target: { value: "10.0.0.1" },
     });
     fireEvent.change(screen.getByLabelText(/^Banco$/i), {
-      target: { value: "b" },
+      target: { value: "chatwoot_a" },
     });
     fireEvent.change(screen.getByLabelText(/^Usuário$/i), {
-      target: { value: "u" },
+      target: { value: "user_a" },
     });
     fireEvent.change(screen.getByPlaceholderText(/Senha do banco/i), {
-      target: { value: "p" },
+      target: { value: "supersecret" },
     });
+    fireEvent.change(
+      screen.getByLabelText(/Intervalo de sincronização \(segundos\)/i),
+      { target: { value: "45" } },
+    );
     fireEvent.click(screen.getByRole("button", { name: /^Salvar$/i }));
     await waitFor(() => {
-      expect(onOpenChange).toHaveBeenCalledWith(false);
+      expect(createNexusChatConnection).toHaveBeenCalled();
     });
-    expect(screen.queryByTestId("webhook-secret-alert")).not.toBeInTheDocument();
+    const arg = createNexusChatConnection.mock.calls[0][0];
+    expect(arg.pollingIntervalSeconds).toBe(45);
   });
 
   it("submit em create chama createNexusChatConnection e fecha", async () => {
@@ -234,6 +215,7 @@ describe("<ConnectionFormDialog />", () => {
     expect(arg.name).toBe("Cliente A");
     expect(arg.host).toBe("10.0.0.1");
     expect(arg.password).toBe("supersecret");
+    expect(arg.pollingIntervalSeconds).toBe(30);
     await waitFor(() => {
       expect(toastMock.success).toHaveBeenCalled();
     });

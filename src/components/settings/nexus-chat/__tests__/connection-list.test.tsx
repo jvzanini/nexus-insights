@@ -57,10 +57,8 @@ const sampleConn = (
   lastTestAt: overrides.lastTestAt ?? null,
   lastTestError: overrides.lastTestError ?? null,
   bindingsCount: overrides.bindingsCount ?? 0,
-  webhookToken:
-    "webhookToken" in overrides
-      ? (overrides.webhookToken ?? null)
-      : "a".repeat(64),
+  pollingIntervalSeconds: overrides.pollingIntervalSeconds ?? 30,
+  lastSyncAt: overrides.lastSyncAt ?? null,
 });
 
 describe("<ConnectionList />", () => {
@@ -172,28 +170,11 @@ describe("<ConnectionList />", () => {
     });
   });
 
-  it("badge Webhook configurado quando webhookToken !== null", () => {
-    render(
-      <ConnectionList
-        connections={[
-          sampleConn({ id: "conn-on", webhookToken: "f".repeat(64) }),
-        ]}
-      />,
-    );
-    const badge = screen.getByTestId("conn-webhook-conn-on");
-    expect(badge).toHaveTextContent(/Webhook configurado/i);
-    expect(badge.className).toMatch(/emerald/);
-  });
-
-  it("badge Webhook 'Sem webhook' (âmbar) quando webhookToken null", () => {
-    render(
-      <ConnectionList
-        connections={[sampleConn({ id: "conn-off", webhookToken: null })]}
-      />,
-    );
-    const badge = screen.getByTestId("conn-webhook-conn-off");
-    expect(badge).toHaveTextContent(/Sem webhook/i);
-    expect(badge.className).toMatch(/amber/);
+  it("v0.41: badge Webhook removido — não há indicador webhook na linha", () => {
+    render(<ConnectionList connections={[sampleConn({ id: "conn-x" })]} />);
+    expect(
+      screen.queryByTestId("conn-webhook-conn-x"),
+    ).not.toBeInTheDocument();
   });
 
   it("apagar mostra toast vermelho com mensagem do backend (bindings vinculadas)", async () => {

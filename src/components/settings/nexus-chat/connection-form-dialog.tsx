@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Clipboard, Info, Loader2, Webhook } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -24,7 +24,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
 import {
   createNexusChatConnection,
   updateNexusChatConnection,
@@ -48,14 +47,6 @@ const SSL_OPTIONS: { value: SslMode; label: string }[] = [
   { value: "verify-full", label: "verify-full" },
 ];
 
-const CHATWOOT_WEBHOOK_EVENTS = [
-  "conversation_created",
-  "conversation_updated",
-  "conversation_resolved",
-  "message_created",
-  "conversation_status_changed",
-];
-
 interface FormState {
   name: string;
   host: string;
@@ -65,6 +56,7 @@ interface FormState {
   password: string;
   sslMode: SslMode;
   applicationName: string;
+  pollingIntervalSeconds: number;
 }
 
 const DEFAULT_FORM: FormState = {
@@ -76,6 +68,7 @@ const DEFAULT_FORM: FormState = {
   password: "",
   sslMode: "prefer",
   applicationName: "nexus-insights",
+  pollingIntervalSeconds: 30,
 };
 
 /**
@@ -83,11 +76,10 @@ const DEFAULT_FORM: FormState = {
  *
  * - Em `mode="edit"`, password vazio = manter senha atual.
  * - Submit usa `useTransition` para spinner sem bloquear UI.
- * - Em `mode="edit"` (com `webhookToken` populado), renderiza bloco Webhook
- *   com URL copiável + lista de eventos a marcar no painel do Nexus Chat.
- *   Account Webhooks no Chatwoot self-hosted **não suportam HMAC** — não
- *   há campo de secret para colar lá. Token único na URL é a única
- *   autenticação (32 bytes random).
+ * - v0.41 (polling delta): substitui o bloco Webhook por um campo
+ *   "Intervalo de sincronização (segundos)". Valor mínimo 20s, default 30s.
+ *   O polling delta consulta o banco do Nexus Chat e detecta mudanças
+ *   incrementalmente — não precisa mais de webhook configurado externamente.
  */
 export function ConnectionFormDialog({
   mode,
@@ -112,6 +104,7 @@ export function ConnectionFormDialog({
         password: "",
         sslMode: connection.sslMode as SslMode,
         applicationName: connection.applicationName,
+        pollingIntervalSeconds: connection.pollingIntervalSeconds ?? 30,
       });
     } else {
       setForm(DEFAULT_FORM);
@@ -134,6 +127,7 @@ export function ConnectionFormDialog({
         password: form.password,
         sslMode: form.sslMode,
         applicationName: form.applicationName.trim() || "nexus-insights",
+        pollingIntervalSeconds: Number(form.pollingIntervalSeconds) || 30,
       };
       const result =
         mode === "create"
@@ -146,26 +140,12 @@ export function ConnectionFormDialog({
       }
 
       toast.success(
-        mode === "create"
-          ? "Conexão criada. Edite agora para ver a URL do webhook."
-          : "Conexão atualizada.",
+        mode === "create" ? "Conexão criada." : "Conexão atualizada.",
       );
       onOpenChange(false);
       router.refresh();
     });
   }
-
-  // URL completa do webhook. Computada client-side para refletir o origin
-  // da instância onde o super_admin está logado (dev/staging/prod sem
-  // hardcode). Renderizada apenas em modo edit + com token.
-  const webhookUrl = useMemo(() => {
-    if (mode !== "edit" || !connection?.webhookToken) return null;
-    if (typeof window === "undefined") return null;
-    return `${window.location.origin}/api/webhooks/nexus-chat/${connection.webhookToken}`;
-  }, [mode, connection?.webhookToken]);
-
-  const showWebhookBlock =
-    mode === "edit" && Boolean(connection?.webhookToken);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -293,11 +273,32 @@ export function ConnectionFormDialog({
                 </SelectContent>
               </Select>
             </div>
-          </div>
 
-          {showWebhookBlock && webhookUrl ? (
-            <WebhookSection webhookUrl={webhookUrl} />
-          ) : null}
+            <div className="grid gap-1.5">
+              <Label htmlFor="conn-polling">
+                Intervalo de sincronização (segundos)
+              </Label>
+              <Input
+                id="conn-polling"
+                type="number"
+                inputMode="numeric"
+                min={20}
+                step={1}
+                value={form.pollingIntervalSeconds}
+                onChange={(e) =>
+                  update(
+                    "pollingIntervalSeconds",
+                    Number(e.target.value) || 30,
+                  )
+                }
+                disabled={pending}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Frequência com que o Nexus Insights consulta o banco do Nexus
+                Chat para detectar mudanças. Mínimo 20 segundos. Padrão 30.
+              </p>
+            </div>
+          </div>
 
           <DialogFooter>
             <Button
@@ -319,116 +320,5 @@ export function ConnectionFormDialog({
         </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-/**
- * Bloco Webhook em modo Edit: URL copiável + texto explicando que Account
- * Webhooks não têm campo Secret + lista de eventos canônicos a marcar.
- */
-function WebhookSection({ webhookUrl }: { webhookUrl: string }) {
-  return (
-    <section
-      data-testid="webhook-section"
-      className="grid gap-3 border-t border-border pt-4"
-    >
-      <header className="flex items-center gap-2">
-        <Webhook
-          className="h-4 w-4 text-violet-500 dark:text-violet-400"
-          aria-hidden
-        />
-        <h3 className="font-heading text-sm font-medium text-foreground">
-          Webhook do Nexus Chat
-        </h3>
-      </header>
-
-      <div className="grid gap-1.5">
-        <Label className="text-xs text-muted-foreground">URL do webhook</Label>
-        <CopyableCode value={webhookUrl} label="URL do webhook" />
-        <p className="text-xs text-muted-foreground">
-          Cole esta URL no painel admin do Nexus Chat ao cadastrar o webhook
-          (Configurações → Integrações → Webhooks).
-        </p>
-      </div>
-
-      <div className="flex items-start gap-2 rounded-md border border-border bg-muted/30 p-3">
-        <Info
-          className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground"
-          aria-hidden
-        />
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          O painel do Nexus Chat não tem campo de secret —{" "}
-          <strong>
-            a autenticação acontece pelo token único embutido na URL
-          </strong>{" "}
-          (32 bytes random, não-enumerável). Tráfego trafega via HTTPS.
-        </p>
-      </div>
-
-      <div className="grid gap-1.5">
-        <Label className="text-xs text-muted-foreground">
-          Eventos a marcar no painel do Nexus Chat
-        </Label>
-        <ul
-          data-testid="webhook-events-list"
-          className="grid gap-1 rounded-md border border-border bg-muted/30 p-3 font-mono text-xs text-muted-foreground"
-        >
-          {CHATWOOT_WEBHOOK_EVENTS.map((evt) => (
-            <li key={evt} className="flex items-center gap-1.5">
-              <span
-                aria-hidden
-                className="h-1 w-1 rounded-full bg-muted-foreground/50"
-              />
-              {evt}
-            </li>
-          ))}
-        </ul>
-      </div>
-    </section>
-  );
-}
-
-/**
- * Caixa monoespaçada com botão Copy. String longa fica com scroll
- * horizontal interno (não estoura layout em mobile); botão fixo à direita.
- */
-function CopyableCode({ value, label }: { value: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-
-  async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      toast.success("Copiado");
-      window.setTimeout(() => setCopied(false), 1500);
-    } catch {
-      toast.error("Não foi possível copiar. Selecione e copie manualmente.");
-    }
-  }
-
-  return (
-    <div className="flex items-stretch gap-2 rounded-md border border-border bg-background/60">
-      <code
-        aria-label={label}
-        className={cn(
-          "min-w-0 flex-1 select-all overflow-x-auto whitespace-nowrap px-3 py-2 font-mono text-xs leading-relaxed text-foreground",
-        )}
-      >
-        {value}
-      </code>
-      <button
-        type="button"
-        onClick={handleCopy}
-        aria-label={`Copiar ${label}`}
-        title="Copiar para área de transferência"
-        className="inline-flex w-9 shrink-0 cursor-pointer items-center justify-center border-l border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-      >
-        {copied ? (
-          <Check className="h-4 w-4" aria-hidden />
-        ) : (
-          <Clipboard className="h-4 w-4" aria-hidden />
-        )}
-      </button>
-    </div>
   );
 }
