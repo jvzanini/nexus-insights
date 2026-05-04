@@ -2,6 +2,20 @@
 
 > **Release:** v0.8.0+. **Spec:** `docs/superpowers/specs/2026-04-30-pre-agregacao-design.md`. **Plan:** `docs/superpowers/plans/2026-04-30-pre-agregacao.md`.
 
+## Relação com Polling Delta (v0.41+)
+
+A partir da release v0.41.0, o gatilho **primário** dos jobs `refresh-by-*` é o
+worker `chatwoot-sync-delta` (polling delta universal). Quando ele detecta
+mudança em qualquer das 10 tabelas alvo do Chatwoot, enfileira os 4 jobs de
+refresh para a `(connection × account)` afetada.
+
+O cron antigo de 5 min foi **rebaixado para 30 min** e passa a funcionar como
+**rede de segurança** — só dispara se o polling delta não tiver disparado
+nada no intervalo (caso o worker estivesse fora ou o banco do Chatwoot
+estivesse inacessível).
+
+**Detalhes:** ver `docs/runbooks/polling-delta-sync.md`.
+
 ## Resumo do pipeline
 
 5 jobs BullMQ no container `nexus-insights_worker`:
