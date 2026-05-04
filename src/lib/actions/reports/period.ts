@@ -1,7 +1,8 @@
 "use server";
 
-import { auth } from "@/auth";
-import { getChatwootPool } from "@/lib/chatwoot/pool";
+import { getCurrentUser } from "@/lib/auth";
+import { queryNexusChat } from "@/lib/nexus-chat/pool";
+import { getActiveConnectionId } from "@/lib/reports/active-connection";
 
 /**
  * Retorna a data mais antiga em `conversations` para a `account_id` informada,
@@ -11,14 +12,15 @@ import { getChatwootPool } from "@/lib/chatwoot/pool";
  * Fallback (sem sessão / erro / sem dados): 30 dias atrás.
  */
 export async function getMinReportDate(accountId: number): Promise<string> {
-  const session = await auth();
-  if (!session?.user) {
+  const user = await getCurrentUser();
+  if (!user) {
     return new Date(Date.now() - 30 * 86_400_000).toISOString();
   }
 
   try {
-    const pool = getChatwootPool();
-    const r = await pool.query<{ min_date: Date | null }>(
+    const connectionId = await getActiveConnectionId(user);
+    const r = await queryNexusChat<{ min_date: Date | null }>(
+      connectionId,
       "SELECT MIN(created_at) as min_date FROM conversations WHERE account_id = $1",
       [accountId],
     );
