@@ -37,6 +37,7 @@ function formatBucket(bucket: string, granularity: Granularity): string {
 }
 
 export async function LeadsRecebidosContent({
+  connectionId,
   accountId,
   period,
   customStart,
@@ -49,6 +50,7 @@ export async function LeadsRecebidosContent({
     const excludeMatrixIA = await shouldExcludeMatrixIA();
     const filters: ReportFilters = { period: range, excludeMatrixIA };
     result = await leadsRecebidos({
+      connectionId,
       accountId,
       filters,
       granularity,

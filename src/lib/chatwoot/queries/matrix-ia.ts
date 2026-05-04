@@ -5,9 +5,11 @@
  * Apenas super_admin deve invocar (a tela checa antes).
  *
  * Live KPI — TTL 30s.
+ *
+ * Multi-tenant: usa `queryNexusChat(connectionId, sql, params)`.
  */
 
-import { getChatwootPool } from "../pool";
+import { queryNexusChat } from "@/lib/nexus-chat/pool";
 import { withChatwootResilience } from "../resilience";
 import { withCache } from "@/lib/cache/pull-through";
 import { cacheKey, hashFilters } from "@/lib/cache/keys";
@@ -34,25 +36,26 @@ export interface MatrixIaResult {
   ultimas10: MatrixIaUltimaConversa[];
 }
 
-interface RowCount {
+type RowCount = {
   total: string;
-}
+} & Record<string, unknown>;
 
-interface RowTempos {
+type RowTempos = {
   p50: string | null;
   avg: string | null;
-}
+} & Record<string, unknown>;
 
-interface RowUltima {
+type RowUltima = {
   id: number;
   display_id: number;
   contact_name: string | null;
   last_message: string | null;
   last_activity_at: Date | null;
   status: number;
-}
+} & Record<string, unknown>;
 
 export async function matrixIaMetrics(args: {
+  connectionId: string;
   accountId: number;
   filters: ReportFilters;
   ttlSeconds?: number;
@@ -73,8 +76,6 @@ export async function matrixIaMetrics(args: {
     fetcher: () =>
       withChatwootResilience<MatrixIaResult>(
         async () => {
-          const pool = getChatwootPool();
-
           const periodStart = args.filters.period?.start ?? null;
           const periodEnd = args.filters.period?.end ?? null;
 
@@ -184,14 +185,22 @@ export async function matrixIaMetrics(args: {
             temposRes,
             ultimasRes,
           ] = await Promise.all([
-            pool.query<RowCount>(sqlTotal, totalParams),
-            pool.query<RowCount>(sqlSemResposta, [
+            queryNexusChat<RowCount>(args.connectionId, sqlTotal, totalParams),
+            queryNexusChat<RowCount>(args.connectionId, sqlSemResposta, [
               args.accountId,
               MATRIX_IA_INBOX_ID,
             ]),
-            pool.query<RowCount>(sqlTransferidas, totalParams),
-            pool.query<RowTempos>(sqlTempos, tempoParams),
-            pool.query<RowUltima>(sqlUltimas, [
+            queryNexusChat<RowCount>(
+              args.connectionId,
+              sqlTransferidas,
+              totalParams,
+            ),
+            queryNexusChat<RowTempos>(
+              args.connectionId,
+              sqlTempos,
+              tempoParams,
+            ),
+            queryNexusChat<RowUltima>(args.connectionId, sqlUltimas, [
               args.accountId,
               MATRIX_IA_INBOX_ID,
             ]),

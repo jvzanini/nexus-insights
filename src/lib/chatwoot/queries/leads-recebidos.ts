@@ -4,9 +4,11 @@
  *
  * Quando `compareWith` for `true`, retorna também o total do período
  * imediatamente anterior, com mesma duração, para cálculo de delta.
+ *
+ * Multi-tenant: usa `queryNexusChat(connectionId, sql, params)`.
  */
 
-import { getChatwootPool } from "../pool";
+import { queryNexusChat } from "@/lib/nexus-chat/pool";
 import { withChatwootResilience } from "../resilience";
 import { withCache } from "@/lib/cache/pull-through";
 import { cacheKey, hashFilters } from "@/lib/cache/keys";
@@ -40,16 +42,17 @@ const TRUNC_MAP: Record<Granularity, string> = {
   month: "month",
 };
 
-interface RawRow {
+type RawRow = {
   bucket: string;
   total: string;
-}
+} & Record<string, unknown>;
 
-interface RawTotal {
+type RawTotal = {
   total: string;
-}
+} & Record<string, unknown>;
 
 export async function leadsRecebidos(args: {
+  connectionId: string;
   accountId: number;
   filters: ReportFilters;
   granularity: Granularity;
@@ -72,7 +75,6 @@ export async function leadsRecebidos(args: {
     fetcher: () =>
       withChatwootResilience<LeadsRecebidosData>(
         async () => {
-          const pool = getChatwootPool();
           const { whereSql, params } = buildBaseFilter(
             args.filters,
             args.accountId,
@@ -85,7 +87,11 @@ export async function leadsRecebidos(args: {
             GROUP BY 1
             ORDER BY 1
           `;
-          const result = await pool.query<RawRow>(sql, params as unknown[]);
+          const result = await queryNexusChat<RawRow>(
+            args.connectionId,
+            sql,
+            params as unknown[],
+          );
           const rows: LeadsRecebidosRow[] = result.rows.map((r) => ({
             bucket: r.bucket,
             total: Number(r.total),
@@ -109,7 +115,8 @@ export async function leadsRecebidos(args: {
               FROM conversations c
               WHERE ${prevBuilt.whereSql}
             `;
-            const prevRes = await pool.query<RawTotal>(
+            const prevRes = await queryNexusChat<RawTotal>(
+              args.connectionId,
               sqlPrev,
               prevBuilt.params as unknown[],
             );

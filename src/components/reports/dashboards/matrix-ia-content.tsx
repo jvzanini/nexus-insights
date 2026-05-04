@@ -45,6 +45,7 @@ interface MatrixIaContentProps extends DashboardContentProps {
 }
 
 export async function MatrixIaContent({
+  connectionId,
   accountId,
   showSuperAdminNote = false,
 }: MatrixIaContentProps) {
@@ -52,7 +53,7 @@ export async function MatrixIaContent({
   const filters: ReportFilters = { excludeMatrixIA: false };
   let result;
   try {
-    result = await matrixIaMetrics({ accountId, filters });
+    result = await matrixIaMetrics({ connectionId, accountId, filters });
   } catch (err) {
     console.error("[MatrixIaContent] erro:", err);
     return (
