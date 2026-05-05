@@ -156,13 +156,13 @@ describe("dashboardData — canonical SQL (v0.42)", () => {
     expect(anyMatrix).toBeUndefined();
   });
 
-  test("cache key bumped to canonical-v0.43 (string presente no fonte)", async () => {
+  test("cache key bumped to canonical-v0.44 (string presente no fonte)", async () => {
     const fs = await import("fs");
     const src = fs.readFileSync(
       "src/lib/chatwoot/queries/dashboard-data.ts",
       "utf8",
     );
-    expect(src).toContain("dashboard-data-canonical-v0.43");
+    expect(src).toContain("dashboard-data-canonical-v0.44");
     expect(src).not.toContain("dashboard-data-v9");
   });
 });

@@ -13,7 +13,7 @@
  *  - matrixClause: helper `chatwootMatrixIaClause(excludeMatrixIA)` (constante
  *    `MATRIX_IA_INBOX_ID = 31`).
  *
- * Cache pull-through 30s. Cache key bumped: v9 → canonical-v0.42 → canonical-v0.43 (resolved movido para Branch 2/last_activity_at).
+ * Cache pull-through 30s. Cache key bumped: v9 → canonical-v0.42 → canonical-v0.43 (resolved movido para Branch 2/last_activity_at) → canonical-v0.44 (fix bucket formula para timestamp without tz).
  */
 
 import { queryNexusChat } from "@/lib/nexus-chat/pool";
@@ -227,7 +227,7 @@ export async function dashboardData(
   // Cache key bumped na v0.42 (padrão canônico) — invalida v9 ao subir.
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-data-canonical-v0.43",
+    name: "dashboard-data-canonical-v0.44",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -306,10 +306,16 @@ export async function dashboardData(
           // `truncUnit` é constante derivada de granularity (hard-coded "hour"|"day"),
           // sem risco de SQL injection.
           const truncUnit = granularity === "hour" ? "hour" : "day";
+          // v0.44 fix: Chatwoot armazena timestamps como `timestamp without time zone` (UTC).
+          // A expressão `col AT TIME ZONE $4` sozinha trata o valor como se já fosse local,
+          // causando shift de +3h antes do date_trunc — o truncamento para 'day' resulta em
+          // 21:00 do dia anterior em BRT, jogando ~87,5% das conversas no bucket errado.
+          // Fix: `(col AT TIME ZONE 'UTC')` converte para `timestamptz` corretamente, depois
+          // `AT TIME ZONE $4` converte para horário local, e `date_trunc` opera no dia certo.
           const sqlChart = `
             WITH unioned AS (
               SELECT
-                (date_trunc('${truncUnit}', c.created_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
+                (date_trunc('${truncUnit}', (c.created_at AT TIME ZONE 'UTC') AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
                 1::bigint AS received,
                 0::bigint AS resolved,
                 0::bigint AS open,
@@ -321,7 +327,7 @@ export async function dashboardData(
                 ${matrixClause}
               UNION ALL
               SELECT
-                (date_trunc('${truncUnit}', c.last_activity_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
+                (date_trunc('${truncUnit}', (c.last_activity_at AT TIME ZONE 'UTC') AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
                 0::bigint AS received,
                 (CASE WHEN c.status = 1 THEN 1 ELSE 0 END)::bigint AS resolved,
                 (CASE WHEN c.status = 0 THEN 1 ELSE 0 END)::bigint AS open,
