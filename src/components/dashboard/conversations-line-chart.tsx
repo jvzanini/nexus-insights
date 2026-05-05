@@ -36,12 +36,13 @@ interface SeriesDef {
 /**
  * Cores conforme feedback de João (2026-05-01):
  * Recebidas → verde, Abertas → amarelo, Resolvidas → azul, Pendentes → roxo.
+ * Ordem conforme feedback (2026-05-05): recebidas, pendentes, resolvidas, abertas.
  */
 const SERIES: readonly SeriesDef[] = [
   { key: "received", label: "Recebidas", color: "#22c55e" },
-  { key: "open", label: "Abertas", color: "#f59e0b" },
-  { key: "resolved", label: "Resolvidas", color: "#3b82f6" },
   { key: "pending", label: "Pendentes", color: "#8b5cf6" },
+  { key: "resolved", label: "Resolvidas", color: "#3b82f6" },
+  { key: "open", label: "Abertas", color: "#f59e0b" },
 ];
 
 const STORAGE_KEY = "dashboard.chart.visibleSeries";
@@ -136,12 +137,14 @@ export function generateEmptyBuckets(
     month: "2-digit",
     day: "2-digit",
   }).format(rangeStart);
+  // rangeEnd é EXCLUSIVE (próximo 00:00 local). Subtraímos 1ms para obter
+  // a data civil do último dia real do período (e.g. 11/05 00:00 BRT → 10/05).
   const endKey = new Intl.DateTimeFormat("en-CA", {
     timeZone: tz,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(rangeEnd);
+  }).format(new Date(rangeEnd.getTime() - 1));
 
   const cur = new Date(`${startKey}T00:00:00Z`);
   const stop = new Date(`${endKey}T00:00:00Z`);

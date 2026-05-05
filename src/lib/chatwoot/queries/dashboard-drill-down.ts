@@ -132,6 +132,10 @@ export interface ResolvedDrillDownData {
   chart: DrillDownChartPoint[];
   byInbox: DrillDownByInbox[];
   byHour: DrillDownByHour[];
+  byTeam: DrillDownByGroup[];
+  byAssignee: DrillDownByGroup[];
+  range: { start: string; end: string };
+  tz: string;
   items: DrillDownConversationItem[];
   page: number;
   pageSize: number;
@@ -243,6 +247,7 @@ type RowStatus = {
   status: number;
   total: string;
 };
+type RowGroup = { id: number | null; name: string; total: string };
 type RowConversation = {
   id: number;
   display_id: number;
@@ -428,7 +433,6 @@ export async function getReceivedDrillDown(
             LIMIT $4 OFFSET $5
           `;
 
-          type RowGroup = { id: number | null; name: string; total: string };
           const p3 = [args.accountId, args.period.start, args.period.end];
 
           const [totalRes, chartRes, byInboxRes, byHourRes, recentRes, byTeamRes, byAssigneeRes] =
@@ -535,7 +539,7 @@ export async function getResolvedDrillDown(
 
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-drill-resolved-canonical-v0.42",
+    name: "dashboard-drill-resolved-canonical-v0.45",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -561,11 +565,12 @@ export async function getResolvedDrillDown(
               AND c.status = ${STATUS_RESOLVED}
               ${matrixClause}
           `;
+          const p3Resolved = [args.accountId, args.period.start, args.period.end];
           const sqlChart =
             granularity === "hour"
               ? `
               SELECT
-                (date_trunc('hour', c.last_activity_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
+                (date_trunc('hour', (c.last_activity_at AT TIME ZONE 'UTC') AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
                 0::bigint AS received,
                 COUNT(*)::bigint AS resolved
               FROM conversations c
@@ -579,7 +584,7 @@ export async function getResolvedDrillDown(
             `
               : `
               SELECT
-                (date_trunc('day', c.last_activity_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
+                (date_trunc('day', (c.last_activity_at AT TIME ZONE 'UTC') AT TIME ZONE $4) AT TIME ZONE $4) AS bucket,
                 0::bigint AS received,
                 COUNT(*)::bigint AS resolved
               FROM conversations c
@@ -605,7 +610,7 @@ export async function getResolvedDrillDown(
             LIMIT 10
           `;
           const sqlByHour = `
-            SELECT EXTRACT(HOUR FROM c.last_activity_at AT TIME ZONE $4)::int AS hour,
+            SELECT EXTRACT(HOUR FROM (c.last_activity_at AT TIME ZONE 'UTC') AT TIME ZONE $4)::int AS hour,
                    COUNT(*)::bigint AS total
             FROM conversations c
             WHERE c.account_id = $1
@@ -615,6 +620,34 @@ export async function getResolvedDrillDown(
               ${matrixClause}
             GROUP BY hour
             ORDER BY hour ASC
+          `;
+          const sqlByTeam = `
+            SELECT t.id, COALESCE(t.name, 'Sem departamento') AS name,
+                   COUNT(c.id)::bigint AS total
+            FROM conversations c
+            LEFT JOIN teams t ON t.id = c.team_id
+            WHERE c.account_id = $1
+              AND c.last_activity_at >= $2
+              AND c.last_activity_at < $3
+              AND c.status = ${STATUS_RESOLVED}
+              ${matrixClause}
+            GROUP BY t.id, t.name
+            ORDER BY total DESC
+            LIMIT 10
+          `;
+          const sqlByAssignee = `
+            SELECT u.id, COALESCE(u.name, 'Sem atendente') AS name,
+                   COUNT(c.id)::bigint AS total
+            FROM conversations c
+            LEFT JOIN users u ON u.id = c.assignee_id
+            WHERE c.account_id = $1
+              AND c.last_activity_at >= $2
+              AND c.last_activity_at < $3
+              AND c.status = ${STATUS_RESOLVED}
+              ${matrixClause}
+            GROUP BY u.id, u.name
+            ORDER BY total DESC
+            LIMIT 10
           `;
           const sqlRecent = `
             SELECT
@@ -639,30 +672,12 @@ export async function getResolvedDrillDown(
             LIMIT $4 OFFSET $5
           `;
 
-          const [totalRes, chartRes, byInboxRes, byHourRes, recentRes] =
+          const [totalRes, chartRes, byInboxRes, byHourRes, recentRes, byTeamRes, byAssigneeRes] =
             await Promise.all([
-              queryNexusChat<RowCount>(connectionId, sqlTotal, [
-                args.accountId,
-                args.period.start,
-                args.period.end,
-              ]),
-              queryNexusChat<RowChart>(connectionId, sqlChart, [
-                args.accountId,
-                args.period.start,
-                args.period.end,
-                tz,
-              ]),
-              queryNexusChat<RowInbox>(connectionId, sqlByInbox, [
-                args.accountId,
-                args.period.start,
-                args.period.end,
-              ]),
-              queryNexusChat<RowHour>(connectionId, sqlByHour, [
-                args.accountId,
-                args.period.start,
-                args.period.end,
-                tz,
-              ]),
+              queryNexusChat<RowCount>(connectionId, sqlTotal, p3Resolved),
+              queryNexusChat<RowChart>(connectionId, sqlChart, [...p3Resolved, tz]),
+              queryNexusChat<RowInbox>(connectionId, sqlByInbox, p3Resolved),
+              queryNexusChat<RowHour>(connectionId, sqlByHour, [...p3Resolved, tz]),
               queryNexusChat<RowConversation>(connectionId, sqlRecent, [
                 args.accountId,
                 args.period.start,
@@ -670,6 +685,8 @@ export async function getResolvedDrillDown(
                 pageSize,
                 offset,
               ]),
+              queryNexusChat<RowGroup>(connectionId, sqlByTeam, p3Resolved),
+              queryNexusChat<RowGroup>(connectionId, sqlByAssignee, p3Resolved),
             ]);
 
           const items = recentRes.rows.map((r) => ({
@@ -702,6 +719,21 @@ export async function getResolvedDrillDown(
               hour: Number(r.hour ?? 0),
               count: Number(r.total ?? 0),
             })),
+            byTeam: byTeamRes.rows.map((r) => ({
+              id: r.id ?? null,
+              name: r.name ?? "Sem departamento",
+              count: Number(r.total ?? 0),
+            })),
+            byAssignee: byAssigneeRes.rows.map((r) => ({
+              id: r.id ?? null,
+              name: r.name ?? "Sem atendente",
+              count: Number(r.total ?? 0),
+            })),
+            range: {
+              start: args.period.start.toISOString(),
+              end: args.period.end.toISOString(),
+            },
+            tz,
             items,
             page,
             pageSize,

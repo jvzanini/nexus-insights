@@ -146,6 +146,10 @@ export function DashboardContent({
     () => (chartPoints ? chartPoints.map((p) => p.resolved) : []),
     [chartPoints],
   );
+  const openSpark = useMemo(
+    () => (chartPoints ? chartPoints.map((p) => p.open) : []),
+    [chartPoints],
+  );
   const rateSpark = useMemo(
     () =>
       chartPoints
@@ -341,7 +345,6 @@ export function DashboardContent({
           <p className="text-sm text-muted-foreground mt-1">{today}</p>
         </div>
         <div className="flex items-center gap-2">
-          <FactsFreshness connectionId={connectionId} accountId={accountId} />
           <TourButton tour={dashboardTour} />
         </div>
       </motion.div>
@@ -364,8 +367,8 @@ export function DashboardContent({
       >
         <KpiClickableCard
           icon={Inbox}
-          iconBg="bg-violet-500/10"
-          iconColor="text-violet-400"
+          iconBg="bg-green-500/10"
+          iconColor="text-green-400"
           label="Conversas recebidas"
           subtitle="criadas no período"
           value={stats.received.toLocaleString("pt-BR")}
@@ -373,7 +376,7 @@ export function DashboardContent({
           miniChart={
             <Sparkline
               data={receivedSpark}
-              color={CHART_COLORS.violet}
+              color={CHART_COLORS.green}
               ariaLabel="Tendência de recebidas no período"
             />
           }
@@ -381,8 +384,8 @@ export function DashboardContent({
         />
         <KpiClickableCard
           icon={CheckCircle2}
-          iconBg="bg-emerald-500/10"
-          iconColor="text-emerald-400"
+          iconBg="bg-blue-500/10"
+          iconColor="text-blue-400"
           label="Conversas resolvidas"
           subtitle="finalizadas no período"
           value={stats.resolved.toLocaleString("pt-BR")}
@@ -390,7 +393,7 @@ export function DashboardContent({
           miniChart={
             <Sparkline
               data={resolvedSpark}
-              color={CHART_COLORS.emerald}
+              color={CHART_COLORS.blue}
               ariaLabel="Tendência de resolvidas no período"
             />
           }
@@ -404,12 +407,19 @@ export function DashboardContent({
           subtitle="com atividade no período"
           value={stats.open.toLocaleString("pt-BR")}
           trend={trendFor(stats.comparison.open, "%")}
+          miniChart={
+            <Sparkline
+              data={openSpark}
+              color={CHART_COLORS.amber}
+              ariaLabel="Tendência de abertas no período"
+            />
+          }
           onClick={() => setDrillDown("open")}
         />
         <KpiClickableCard
           icon={TrendingUp}
-          iconBg="bg-violet-500/10"
-          iconColor="text-violet-400"
+          iconBg="bg-foreground/10"
+          iconColor="text-foreground"
           label="Taxa de resolução"
           subtitle="no período"
           value={resolutionRateLabel}
@@ -417,7 +427,7 @@ export function DashboardContent({
           miniChart={
             <Sparkline
               data={rateSpark}
-              color={CHART_COLORS.violet}
+              color="#94a3b8"
               ariaLabel="Histórico da taxa de resolução"
             />
           }

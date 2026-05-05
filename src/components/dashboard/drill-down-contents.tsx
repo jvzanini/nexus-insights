@@ -431,6 +431,95 @@ export function ReceivedDrillDownContent({
   );
 }
 
+/* -------------------------- Resolvidas — gráfico de linha -------------------------- */
+
+function ResolvedTooltip(props: TooltipContentProps<ValueType, NameType>) {
+  const { active, payload, label } = props;
+  if (!active || !payload?.length) return null;
+  const windowLabel = (payload[0]?.payload as { windowLabel?: string } | undefined)?.windowLabel;
+  return (
+    <div className="rounded-lg border border-border bg-card p-3 shadow-lg">
+      <p className="text-sm font-medium text-foreground mb-1">{label}</p>
+      {windowLabel ? (
+        <p className="text-xs text-muted-foreground/70 mb-2">{windowLabel}</p>
+      ) : null}
+      {payload.map((entry) => (
+        <p key={entry.name} className="text-xs flex items-center gap-2" style={{ color: entry.color }}>
+          <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: entry.color as string }} />
+          <span className="text-foreground">{entry.name}:</span>
+          <span className="font-bold tabular-nums">
+            {typeof entry.value === "number" ? entry.value.toLocaleString("pt-BR") : (entry.value ?? "—")}
+          </span>
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function ResolvedLineChart({ data }: { data: ResolvedDrillDownData }) {
+  const chartData = useMemo(
+    () =>
+      fillBuckets(
+        data.chart.map((p) => ({ ...p, open: 0, pending: 0 })),
+        data.granularity,
+        data.tz,
+        data.range,
+      ).map((r) => ({
+        label: r.label,
+        windowLabel: r.windowLabel,
+        Resolvidas: r.resolved,
+      })),
+    [data.chart, data.granularity, data.tz, data.range],
+  );
+
+  const isEmpty = chartData.every((p) => p.Resolvidas === 0);
+
+  if (isEmpty) {
+    return (
+      <div className="flex items-center justify-center h-[280px] text-sm text-muted-foreground">
+        Nenhuma conversa resolvida no período
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ width: "100%", height: 280 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={chartData} margin={{ top: 12, right: 20, left: 8, bottom: 12 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+          <XAxis
+            dataKey="label"
+            tick={{ fill: "#a1a1aa", fontSize: 12 }}
+            tickLine={false}
+            tickMargin={10}
+            axisLine={{ stroke: "#3f3f46" }}
+            interval="preserveStartEnd"
+            minTickGap={20}
+            height={36}
+          />
+          <YAxis
+            tick={{ fill: "#a1a1aa", fontSize: 13 }}
+            tickLine={false}
+            axisLine={false}
+            allowDecimals={false}
+            width={40}
+          />
+          <Tooltip content={ResolvedTooltip} cursor={{ stroke: "rgba(63, 63, 70, 0.6)" }} />
+          <Line
+            type="monotone"
+            dataKey="Resolvidas"
+            name="Resolvidas"
+            stroke="#3b82f6"
+            strokeWidth={2.5}
+            dot={false}
+            activeDot={{ r: 5, strokeWidth: 0 }}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 /* -------------------------- Resolvidas -------------------------- */
 
 export function ResolvedDrillDownContent({
@@ -442,6 +531,7 @@ export function ResolvedDrillDownContent({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
+  const [distributionView, setDistributionView] = useState<DistributionView>("estado");
 
   // Reset page when period changes
   useEffect(() => {
@@ -478,30 +568,25 @@ export function ResolvedDrillDownContent({
   if (error && !data) return <ErrorState message={error} />;
   if (!data) return null;
 
-  const chartData = data.chart.map((p) => ({
-    name: formatBucket(p.bucket, data.granularity),
-    Resolvidas: p.resolved,
-  }));
-  const series: AreaChartSeries[] = [
-    { key: "Resolvidas", label: "Resolvidas", color: CHART_COLORS.emerald },
+  const distributionData = (() => {
+    if (distributionView === "estado") {
+      return data.byInbox.map((i) => ({ name: i.name, Conversas: i.count }));
+    }
+    if (distributionView === "departamento") {
+      return data.byTeam.map((i) => ({ name: i.name, Conversas: i.count }));
+    }
+    return data.byAssignee.map((i) => ({ name: i.name, Conversas: i.count }));
+  })();
+
+  const distributionSeries: BarChartSeries[] = [
+    { key: "Conversas", label: "Conversas", color: "#3b82f6" },
   ];
 
-  const byInboxData = data.byInbox.map((i) => ({
-    name: i.name,
-    Conversas: i.count,
-  }));
-  const byInboxSeries: BarChartSeries[] = [
-    { key: "Conversas", label: "Conversas", color: CHART_COLORS.emerald },
-  ];
-
-  // v0.22.0: name = "HH:00" apenas; description já comunica a janela completa.
-  const byHourData = data.byHour.map((h) => ({
-    name: `${String(h.hour).padStart(2, "0")}:00`,
-    Conversas: h.count,
-  }));
-  const byHourSeries: AreaChartSeries[] = [
-    { key: "Conversas", label: "Conversas", color: CHART_COLORS.cyan },
-  ];
+  const distributionDescription = (() => {
+    if (distributionView === "estado") return "Top 10 estados com mais resoluções";
+    if (distributionView === "departamento") return "Todos os departamentos, incluindo sem departamento";
+    return "Top 10 atendentes por volume (desc)";
+  })();
 
   const items = data.items ?? data.recent;
 
@@ -511,43 +596,41 @@ export function ResolvedDrillDownContent({
         title="Resoluções ao longo do período"
         description={data.granularity === "hour" ? "Por hora" : "Por dia"}
       >
-        <InteractiveAreaChart
-          data={chartData}
-          series={series}
-          height={280}
-          showLegend={false}
-          emptyMessage="Nenhuma conversa resolvida no período"
-        />
+        <ResolvedLineChart data={data} />
       </DrillDownSection>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <DrillDownSection
-          title="Distribuição por estado"
-          description="Top 10 estados que mais resolveram"
-        >
-          <InteractiveBarChart
-            data={byInboxData}
-            series={byInboxSeries}
-            layout="horizontal"
-            height={Math.max(280, Math.min(480, byInboxData.length * 28 + 60))}
-            showLegend={false}
-            yAxisWidth={160}
-            emptyMessage="Sem estados com resoluções"
-          />
-        </DrillDownSection>
-        <DrillDownSection
-          title="Distribuição por hora do dia"
-          description="Cada coluna cobre HH:00 – HH:59"
-        >
-          <InteractiveAreaChart
-            data={byHourData}
-            series={byHourSeries}
-            height={280}
-            showLegend={false}
-            emptyMessage="Sem dados de horário"
-          />
-        </DrillDownSection>
-      </div>
+      <DrillDownSection
+        title="Distribuição"
+        description={distributionDescription}
+        action={
+          <div className="flex items-center gap-1 rounded-lg border border-border bg-background/60 p-1">
+            {DISTRIBUTION_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setDistributionView(opt.value)}
+                className={
+                  distributionView === opt.value
+                    ? "rounded-md bg-blue-500/15 px-2.5 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 transition-colors"
+                    : "rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                }
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        }
+      >
+        <InteractiveBarChart
+          data={distributionData}
+          series={distributionSeries}
+          layout="horizontal"
+          height={Math.max(280, Math.min(480, distributionData.length * 28 + 60))}
+          showLegend={false}
+          yAxisWidth={160}
+          emptyMessage="Nenhum dado para exibir"
+        />
+      </DrillDownSection>
 
       <DrillDownSection
         title={
