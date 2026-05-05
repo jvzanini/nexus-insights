@@ -1,5 +1,50 @@
 # Changelog
 
+## [v0.42.0] 2026-05-04 — Padrão Canônico de Dados (consistência total entre dashboard e relatórios)
+
+> **Refatoração de semântica.** Unifica a definição de todas as métricas em toda a plataforma (dashboard, 7 relatórios, drill-downs, pré-agregação). Elimina discrepâncias de dados entre telas.
+
+### Glossário canônico (`src/lib/reports/canonical.ts`)
+- Nova fonte única da verdade: `PeriodColumn`, constantes `STATUS_*` / `MSG_*`, `buildActivePeriodClause`, `buildCreatedPeriodClause`, `chatwootMatrixIaClause`, `chatwootMatrixIaOnlyClause`, 3 CTEs de mensagens (`buildLastClassificationMsgCte`, `buildLastIncomingPublicMsgCte`, `buildLastOutgoingAnyMsgCte`).
+
+### Definições canônicas fixadas
+- **Recebidas**: `c.created_at` ∈ período — única métrica por `created_at`.
+- **Abertas/Pendentes/Resolvidas**: `c.last_activity_at` ∈ período — conversa com movimentação no período, filtrada por status.
+- **Sem resposta**: `status=0` + última mensagem classificável (`buildLastClassificationMsgCte`) = incoming público.
+- **Semana**: sempre segunda → domingo. `weekStartsOn=1` hardcoded. Settings de DB ignorados.
+- **Proibido**: `COALESCE(last_activity_at, created_at)` em WHERE — invalida índice Postgres.
+
+### Queries migradas para canonical-v0.42
+- `buildBaseFilter` agora aceita `periodColumn: "active" | "created"` (default: `"active"`)
+- `dashboard-data.ts`: `sqlResolved` migrado `created_at → last_activity_at`; CTEs canônicas em `sqlNoResponse`
+- `dashboard-kpis.ts`: `resolvidasNoPeriodo` usa `periodColumn: "active"`; `mensagensNaoRespondidas` usa CTE canônica
+- `dashboard-drill-down.ts`: todos os drill-downs com semântica correta
+- `conversas-list.ts`: 3 CTEs canônicas; `waiting_seconds`/`open_seconds` com timestamps corretos
+- `mensagens-nao-respondidas.ts`: CTE canônica; filtro de período unificado
+- `status-distribution.ts`, `por-departamento.ts`, `por-estado.ts`, `ranking-atendentes.ts`: cache keys v0.42
+- `home-summary.ts`, `leads-recebidos.ts`: cache keys v0.42; `leads-recebidos` usa `created_at` em ambos os `buildBaseFilter` (principal + comparação)
+- `matrix-ia.ts`: `sqlSemResposta` migrado de `EXISTS` aninhado para CTE canônica
+- `tempos-resposta.ts`: cache key v0.42; `inbox_id <> MATRIX_IA_INBOX_ID` via constante
+
+### Período unificado (`datetime-core.ts`)
+- `getCanonicalPeriod()`: nova fonte única para cálculo de período (end-exclusive, weekStartsOn=1 hardcoded)
+- `getDashboardPeriod()`: refatorado como wrapper compat; `mode` e `weekStartsOn` ignorados
+- `getDashboardSettings()`: retorna sempre defaults canônicos sem consultar DB
+
+### Pré-agregação
+- 4 jobs `refresh-by-*` têm `@canonical` documentado: `received=created_at`, `resolved=last_activity_at+status=1`
+
+### UI / Labels
+- Dashboard KPIs: "criadas no período", "finalizadas no período", "com atividade no período"
+- Period pills: `title=` canônico ("Segunda-feira → Domingo", "Dia 1 → último dia do mês")
+- Relatórios: "Esta semana (Seg–Dom)" em `PERIOD_OPTIONS`
+
+### Documentação
+- `docs/runbooks/canonical-data-rules.md`: runbook completo com checklist para novas queries
+- `CLAUDE.md §11`: regras canônicas para futuras sessões
+
+---
+
 ## [v0.41.1] 2026-05-04 — Hotfix usersSync (column u.role does not exist)
 
 > Pós-deploy v0.41.0: aba Saúde mostrou `column u.role does not exist` em todas as runs de `users`. No Chatwoot OSS atual, `role` está em `account_users.role` (não em `users.role`) — um user pode ter roles diferentes em accounts distintas.
