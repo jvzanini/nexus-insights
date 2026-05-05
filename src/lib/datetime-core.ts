@@ -35,67 +35,192 @@ export interface CustomRangeInput {
 export const DEFAULT_TZ = "America/Sao_Paulo";
 export const DEFAULT_LOCALE = "pt-BR";
 
+// ---------------------------------------------------------------------------
+// Helper canônico v0.42 — fonte única da verdade para cálculo de período.
+// ---------------------------------------------------------------------------
+//
+// Regra suprema do projeto (definida pelo usuário):
+//   "começa na segunda e termina no domingo, sempre"
+//
+// → semana é ISO week (segunda → próxima segunda, end-exclusive).
+//   `weekStartsOn: 1` é HARDCODED. Não é configurável.
+//
+// → mês é mês civil (dia 1 → dia 1 do mês seguinte, end-exclusive).
+//
+// → "rolling" (now-7d..now etc.) NÃO existe mais. Settings legados
+//   `dashboard.week_mode` e `dashboard.month_mode` são deprecados em v0.42
+//   e ignorados pelo helper.
+//
+// Convenção de end: TODO `end` é EXCLUSIVE (próximo 00:00 BRT). Para SQL com
+// `column >= start AND column < end`. Não usamos mais `endOfDay(...)` (que
+// retorna 23:59:59.999) porque cria off-by-1ms entre prev/current.
+
+export type CanonicalPeriodLabel =
+  | "hoje"
+  | "semana"
+  | "mes"
+  | "todos"
+  | "custom";
+
+export interface CanonicalPeriod {
+  /** UTC, inclusive */
+  start: Date;
+  /** UTC, EXCLUSIVE (próximo 00:00 BRT) */
+  end: Date;
+  /** Período de mesma duração imediatamente anterior. `prev.end === start`. */
+  prev: { start: Date; end: Date };
+}
+
+export interface CanonicalPeriodInput {
+  label: CanonicalPeriodLabel;
+  tz: string;
+  /** ISO string. Default = `new Date()`. */
+  refIso?: string;
+  /** Apenas para `label: "custom"`. Formato YYYY-MM-DD. */
+  customStart?: string;
+  /** Apenas para `label: "custom"`. Formato YYYY-MM-DD (inclusive). */
+  customEnd?: string;
+}
+
+/**
+ * Calcula o período canônico (start, end, prev) em UTC.
+ *
+ * @example
+ * ```ts
+ * const r = getCanonicalPeriod({ label: "semana", tz: "America/Sao_Paulo" });
+ * // r.start = segunda 00:00 BRT (UTC = 03:00)
+ * // r.end   = próxima segunda 00:00 BRT (UTC = 03:00)
+ * ```
+ */
+export function getCanonicalPeriod(args: CanonicalPeriodInput): CanonicalPeriod {
+  const { label, tz } = args;
+  const ref = args.refIso ? new Date(args.refIso) : new Date();
+  const refInTz = toZonedTime(ref, tz);
+
+  let start: Date;
+  let end: Date;
+
+  switch (label) {
+    case "hoje": {
+      const startLocal = startOfDay(refInTz);
+      const nextDayLocal = addDays(startLocal, 1);
+      start = fromZonedTime(startLocal, tz);
+      end = fromZonedTime(nextDayLocal, tz);
+      break;
+    }
+
+    case "semana": {
+      // CANÔNICO: weekStartsOn = 1 (segunda-feira). Hardcoded.
+      const startLocal = startOfWeek(refInTz, { weekStartsOn: 1 });
+      const nextWeekLocal = addWeeks(startLocal, 1);
+      start = fromZonedTime(startLocal, tz);
+      end = fromZonedTime(nextWeekLocal, tz);
+      break;
+    }
+
+    case "mes": {
+      const startLocal = startOfMonth(refInTz);
+      const nextMonthLocal = addMonths(startLocal, 1);
+      start = fromZonedTime(startLocal, tz);
+      end = fromZonedTime(nextMonthLocal, tz);
+      break;
+    }
+
+    case "todos": {
+      start = new Date(0);
+      end = new Date();
+      break;
+    }
+
+    case "custom": {
+      if (!args.customStart || !args.customEnd) {
+        throw new Error(
+          'getCanonicalPeriod: "custom" requer customStart e customEnd (YYYY-MM-DD)',
+        );
+      }
+      // Parse YYYY-MM-DD em civil-day no tz.
+      // `new Date("2026-04-15T00:00:00Z")` é UTC midnight; em BRT (UTC-3)
+      // representa 21:00 do dia anterior. Para tratar como "15 de abril BRT",
+      // extraímos Y/M/D em UTC e construímos local.
+      const startUtc = new Date(args.customStart + "T00:00:00.000Z");
+      const endUtc = new Date(args.customEnd + "T00:00:00.000Z");
+      const startCivil = new Date(
+        startUtc.getUTCFullYear(),
+        startUtc.getUTCMonth(),
+        startUtc.getUTCDate(),
+      );
+      const endCivilInclusive = new Date(
+        endUtc.getUTCFullYear(),
+        endUtc.getUTCMonth(),
+        endUtc.getUTCDate(),
+      );
+      // end-exclusive: 00:00 BRT do dia seguinte ao último dia inclusive.
+      const endCivilExclusive = addDays(endCivilInclusive, 1);
+      start = fromZonedTime(startCivil, tz);
+      end = fromZonedTime(endCivilExclusive, tz);
+      break;
+    }
+
+    default: {
+      const _exhaustive: never = label;
+      throw new Error(
+        `getCanonicalPeriod: label desconhecido "${String(_exhaustive)}"`,
+      );
+    }
+  }
+
+  const span = end.getTime() - start.getTime();
+  const prevEnd = new Date(start.getTime());
+  const prevStart = new Date(start.getTime() - span);
+
+  return { start, end, prev: { start: prevStart, end: prevEnd } };
+}
+
+// ---------------------------------------------------------------------------
+// `getPeriodInTz` — wrapper legado (compat). Usa `getCanonicalPeriod` por baixo.
+// ---------------------------------------------------------------------------
+
 /**
  * Calcula o intervalo (em UTC) correspondente ao "dia/semana/mês" no
- * timezone informado. Para `semana_atual` é ISO week (segunda-feira).
+ * timezone informado.
+ *
+ * Para `semana_atual` é ISO week (segunda-feira) — REGRA CANÔNICA v0.42:
+ * sempre segunda → próxima segunda, sem `rolling`.
+ *
+ * @deprecated em favor de `getCanonicalPeriod`. Mantido para compat.
  */
 export function getPeriodInTz(
   key: PeriodKey,
   tz: string,
   customRange?: CustomRangeInput,
 ): PeriodRange {
-  const nowUtc = new Date();
-  const nowInTz = toZonedTime(nowUtc, tz);
-
   switch (key) {
     case "hoje": {
-      const startLocal = startOfDay(nowInTz);
-      const endLocal = endOfDay(nowInTz);
-      return {
-        start: fromZonedTime(startLocal, tz),
-        end: fromZonedTime(endLocal, tz),
-      };
+      const r = getCanonicalPeriod({ label: "hoje", tz });
+      return { start: r.start, end: r.end };
     }
-
     case "semana_atual": {
-      const weekStartLocal = startOfWeek(nowInTz, { weekStartsOn: 1 });
-      const nextWeekStartLocal = addWeeks(weekStartLocal, 1);
-      return {
-        start: fromZonedTime(weekStartLocal, tz),
-        end: fromZonedTime(nextWeekStartLocal, tz),
-      };
+      const r = getCanonicalPeriod({ label: "semana", tz });
+      return { start: r.start, end: r.end };
     }
-
     case "mes_atual": {
-      const monthStartLocal = startOfMonth(nowInTz);
-      const nextMonthStartLocal = addMonths(monthStartLocal, 1);
-      return {
-        start: fromZonedTime(monthStartLocal, tz),
-        end: fromZonedTime(nextMonthStartLocal, tz),
-      };
+      const r = getCanonicalPeriod({ label: "mes", tz });
+      return { start: r.start, end: r.end };
     }
-
     case "todos": {
-      // Sem corte temporal — pega tudo desde o epoch até "agora".
-      return {
-        start: new Date(0),
-        end: new Date(),
-      };
+      const r = getCanonicalPeriod({ label: "todos", tz });
+      return { start: r.start, end: r.end };
     }
-
     case "custom": {
       if (!customRange) {
         throw new Error(
           'getPeriodInTz: customRange é obrigatório para key="custom"',
         );
       }
-      // FIX v0.23: o caller (resolvePeriod) faz `new Date("yyyy-mm-dd")`,
-      // que vira UTC midnight. Em SP (UTC-3) isso recua um dia (21h do dia
-      // anterior), e startOfDay/endOfDay no tz local capturavam o dia
-      // errado — single-day 21/03→21/03 retornava range em 20/03.
-      //
-      // Solução: extrair Y/M/D em UTC da entrada (a forma "civil" como o
-      // user enxerga "21 de março") e construir 00:00 local nesse dia no tz.
+      // Compat: getPeriodInTz herdou semântica de "endOfDay no tz" para
+      // o end (23:59:59.999), enquanto getCanonicalPeriod usa end-exclusive
+      // (próximo 00:00 BRT). Para não quebrar callers que dependem do .999,
+      // mantemos a forma antiga aqui e delegamos a normalização ao caller.
       const startLocal = startOfDay(
         new Date(
           customRange.start.getUTCFullYear(),
@@ -115,7 +240,6 @@ export function getPeriodInTz(
         end: fromZonedTime(endLocal, tz),
       };
     }
-
     default: {
       const _exhaustive: never = key;
       throw new Error(`getPeriodInTz: chave desconhecida "${String(_exhaustive)}"`);

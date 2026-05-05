@@ -1,5 +1,9 @@
 import { getDashboardPeriod } from "@/lib/dashboard-period";
 
+// v0.42 (Task 11): a partir desta versão `mode: 'rolling'` e `weekStartsOn` !== 1
+// são IGNORADOS — semana é sempre segunda → próxima segunda (canônico).
+// O parâmetro continua na assinatura para compat com callers legados.
+
 describe("getDashboardPeriod", () => {
   beforeAll(() => {
     jest.useFakeTimers();
@@ -9,16 +13,28 @@ describe("getDashboardPeriod", () => {
 
   const tz = "America/Sao_Paulo";
 
-  it("dia: start=00:00 BRT, end=23:59:59.999 BRT do dia atual", () => {
-    const { current } = getDashboardPeriod({ period: "dia", mode: "current", weekStartsOn: 1, tz });
+  it("dia: start=00:00 BRT, end=próximo 00:00 BRT do dia atual (end-exclusive)", () => {
+    const { current } = getDashboardPeriod({
+      period: "dia",
+      mode: "current",
+      weekStartsOn: 1,
+      tz,
+    });
     expect(current.start.toISOString()).toBe("2026-04-30T03:00:00.000Z");
-    expect(current.end.toISOString()).toBe("2026-05-01T02:59:59.999Z");
+    // end-exclusive: próximo dia 00:00 BRT
+    expect(current.end.toISOString()).toBe("2026-05-01T03:00:00.000Z");
   });
 
-  it("dia: prev = ontem inteiro", () => {
-    const { prev } = getDashboardPeriod({ period: "dia", mode: "current", weekStartsOn: 1, tz });
+  it("dia: prev = ontem inteiro (24h imediatamente antes do start)", () => {
+    const { current, prev } = getDashboardPeriod({
+      period: "dia",
+      mode: "current",
+      weekStartsOn: 1,
+      tz,
+    });
     expect(prev.start.toISOString()).toBe("2026-04-29T03:00:00.000Z");
-    expect(prev.end.toISOString()).toBe("2026-04-30T02:59:59.999Z");
+    expect(prev.end.toISOString()).toBe("2026-04-30T03:00:00.000Z");
+    expect(prev.end.getTime()).toBe(current.start.getTime());
   });
 
   it("dia: aceita referenceDate (ontem)", () => {
@@ -31,42 +47,68 @@ describe("getDashboardPeriod", () => {
       referenceDate: ref,
     });
     expect(current.start.toISOString()).toBe("2026-04-29T03:00:00.000Z");
-    expect(current.end.toISOString()).toBe("2026-04-30T02:59:59.999Z");
+    expect(current.end.toISOString()).toBe("2026-04-30T03:00:00.000Z");
   });
 
-  it("semana current weekStartsOn=1: cobre seg→dom completo (mesmo dias futuros)", () => {
-    const { current } = getDashboardPeriod({ period: "semana", mode: "current", weekStartsOn: 1, tz });
-    // segunda 27/04 00:00 BRT até domingo 03/05 23:59 BRT
+  it("semana current weekStartsOn=1: cobre seg→próxima seg (end-exclusive)", () => {
+    const { current } = getDashboardPeriod({
+      period: "semana",
+      mode: "current",
+      weekStartsOn: 1,
+      tz,
+    });
+    // segunda 27/04 00:00 BRT até segunda 04/05 00:00 BRT (end-exclusive)
     expect(current.start.toISOString()).toBe("2026-04-27T03:00:00.000Z");
-    expect(current.end.toISOString()).toBe("2026-05-04T02:59:59.999Z");
+    expect(current.end.toISOString()).toBe("2026-05-04T03:00:00.000Z");
   });
 
-  it("semana current weekStartsOn=0: domingo→sábado", () => {
-    const { current } = getDashboardPeriod({ period: "semana", mode: "current", weekStartsOn: 0, tz });
-    // domingo 26/04 00:00 BRT até sábado 02/05 23:59 BRT
-    expect(current.start.toISOString()).toBe("2026-04-26T03:00:00.000Z");
-    expect(current.end.toISOString()).toBe("2026-05-03T02:59:59.999Z");
+  it("semana: weekStartsOn=0 (domingo) é IGNORADO — sempre segunda canônico", () => {
+    const { current } = getDashboardPeriod({
+      period: "semana",
+      mode: "current",
+      weekStartsOn: 0, // ← ignorado pelo helper canônico
+      tz,
+    });
+    // Mesmo passando 0, retorna segunda → segunda
+    expect(current.start.toISOString()).toBe("2026-04-27T03:00:00.000Z");
+    expect(current.end.toISOString()).toBe("2026-05-04T03:00:00.000Z");
   });
 
   it("semana current: prev tem mesmo tamanho da janela atual", () => {
-    const { current, prev } = getDashboardPeriod({ period: "semana", mode: "current", weekStartsOn: 1, tz });
+    const { current, prev } = getDashboardPeriod({
+      period: "semana",
+      mode: "current",
+      weekStartsOn: 1,
+      tz,
+    });
     const span = current.end.getTime() - current.start.getTime();
     const prevSpan = prev.end.getTime() - prev.start.getTime();
     expect(prevSpan).toBe(span);
-    expect(prev.end.getTime()).toBe(current.start.getTime() - 1);
+    expect(prev.end.getTime()).toBe(current.start.getTime());
   });
 
-  it("semana rolling: now-7d → now", () => {
-    const { current } = getDashboardPeriod({ period: "semana", mode: "rolling", weekStartsOn: 1, tz });
-    const expectedStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    expect(current.start.toISOString()).toBe(expectedStart.toISOString());
+  it("semana mode='rolling' é IGNORADO — sempre 'current' (canônico seg→seg)", () => {
+    const { current } = getDashboardPeriod({
+      period: "semana",
+      mode: "rolling", // ← ignorado
+      weekStartsOn: 1,
+      tz,
+    });
+    // Mesmo resultado da semana ISO atual:
+    expect(current.start.toISOString()).toBe("2026-04-27T03:00:00.000Z");
+    expect(current.end.toISOString()).toBe("2026-05-04T03:00:00.000Z");
   });
 
-  it("mes current: dia 1 → último dia do mês (cobre dias futuros)", () => {
-    const { current } = getDashboardPeriod({ period: "mes", mode: "current", weekStartsOn: 1, tz });
-    // 01/04 00:00 BRT até 30/04 23:59 BRT (abril tem 30 dias)
+  it("mes current: dia 1 → dia 1 do mês seguinte (end-exclusive)", () => {
+    const { current } = getDashboardPeriod({
+      period: "mes",
+      mode: "current",
+      weekStartsOn: 1,
+      tz,
+    });
+    // 01/04 00:00 BRT até 01/05 00:00 BRT
     expect(current.start.toISOString()).toBe("2026-04-01T03:00:00.000Z");
-    expect(current.end.toISOString()).toBe("2026-05-01T02:59:59.999Z");
+    expect(current.end.toISOString()).toBe("2026-05-01T03:00:00.000Z");
   });
 
   it("mes current: aceita referenceDate (mês passado)", () => {
@@ -78,19 +120,32 @@ describe("getDashboardPeriod", () => {
       tz,
       referenceDate: ref,
     });
-    // 01/03 00:00 BRT até 31/03 23:59 BRT
+    // 01/03 00:00 BRT até 01/04 00:00 BRT
     expect(current.start.toISOString()).toBe("2026-03-01T03:00:00.000Z");
-    expect(current.end.toISOString()).toBe("2026-04-01T02:59:59.999Z");
+    expect(current.end.toISOString()).toBe("2026-04-01T03:00:00.000Z");
   });
 
-  it("mes current: prev mesma janela de tamanho (aproximada)", () => {
-    const { current, prev } = getDashboardPeriod({ period: "mes", mode: "current", weekStartsOn: 1, tz });
-    expect(prev.end.getTime() - prev.start.getTime()).toBe(current.end.getTime() - current.start.getTime());
+  it("mes current: prev mesma janela de tamanho", () => {
+    const { current, prev } = getDashboardPeriod({
+      period: "mes",
+      mode: "current",
+      weekStartsOn: 1,
+      tz,
+    });
+    expect(prev.end.getTime() - prev.start.getTime()).toBe(
+      current.end.getTime() - current.start.getTime(),
+    );
+    expect(prev.end.getTime()).toBe(current.start.getTime());
   });
 
-  it("mes rolling: now-30d → now", () => {
-    const { current } = getDashboardPeriod({ period: "mes", mode: "rolling", weekStartsOn: 1, tz });
-    const expectedStart = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    expect(current.start.toISOString()).toBe(expectedStart.toISOString());
+  it("mes mode='rolling' é IGNORADO — sempre mês civil canônico", () => {
+    const { current } = getDashboardPeriod({
+      period: "mes",
+      mode: "rolling", // ← ignorado
+      weekStartsOn: 1,
+      tz,
+    });
+    expect(current.start.toISOString()).toBe("2026-04-01T03:00:00.000Z");
+    expect(current.end.toISOString()).toBe("2026-05-01T03:00:00.000Z");
   });
 });
