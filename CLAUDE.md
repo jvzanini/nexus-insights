@@ -193,7 +193,21 @@ Há 2–3 sessões Claude no repositório ao mesmo tempo. **Antes de qualquer a�
 
 ## 10. Memórias canônicas a respeitar
 
-- Hoje é **2026-04-29**.
+- Hoje é **2026-05-04**.
 - Usuário: João Vitor Zanini, e-mail `zanini107@gmail.com`.
 - Usuário **leigo em partes técnicas** — explicar passo a passo quando precisar de ação manual dele (ex.: criar usuário read-only no Postgres, configurar DNS, abrir porta).
 - Nome da plataforma e domínio serão definidos junto com o usuário durante o brainstorm.
+
+---
+
+## 11. Regras canônicas de dados (v0.42)
+
+> Runbook completo: `docs/runbooks/canonical-data-rules.md`
+
+- **Filtro padrão de período:** `c.last_activity_at` (conversa com movimentação). Não usar `COALESCE(last_activity_at, created_at)` — invalida índice.
+- **Recebidas é a ÚNICA métrica que filtra por `c.created_at`.** Passar `periodColumn: "created"` no `buildBaseFilter`.
+- **Semana: sempre segunda → domingo.** `weekStartsOn = 1` hardcoded em `getCanonicalPeriod`. Settings de DB são ignorados desde v0.42.
+- **Matrix IA inbox_id = 31.** Usar `chatwootMatrixIaClause()` / `chatwootMatrixIaOnlyClause()` — nunca literal `31`.
+- **CTEs de mensagens:** `buildLastClassificationMsgCte()`, `buildLastIncomingPublicMsgCte()`, `buildLastOutgoingAnyMsgCte()`. Nunca subquery ad-hoc.
+- **Cache keys:** sufixo `-canonical-v0.42`. Ao mudar semântica, incrementar sufixo.
+- Fonte única: `src/lib/reports/canonical.ts`.
