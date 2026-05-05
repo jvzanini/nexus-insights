@@ -72,6 +72,8 @@ interface ConversationsLineChartProps {
 interface ChartRow {
   label: string;
   windowLabel?: string;
+  /** UTC ISO do início do bucket — usado para cortar buckets futuros. */
+  bucketIso: string;
   received: number;
   open: number;
   resolved: number;
@@ -185,6 +187,16 @@ export function toCumulative(rows: ChartRow[]): ChartRow[] {
 }
 
 /**
+ * Remove buckets cujo início UTC é posterior ao momento atual.
+ * Garante que o gráfico não mostre linha plana para dias/horas que ainda não aconteceram.
+ * Exportado para uso nos drill-down charts.
+ */
+export function truncateToNow(rows: ChartRow[]): ChartRow[] {
+  const nowIso = new Date().toISOString();
+  return rows.filter((r) => r.bucketIso <= nowIso);
+}
+
+/**
  * Mapeia DashboardChartPoint[] (vindo do backend) em uma linha por bucket
  * cobrindo todo o range. Buckets sem dado real ganham zeros nas 4 séries.
  *
@@ -248,6 +260,7 @@ export function fillBuckets(
     return {
       label,
       windowLabel,
+      bucketIso: slot.bucket,
       received: real?.received ?? 0,
       open: real?.open ?? 0,
       resolved: real?.resolved ?? 0,
@@ -309,7 +322,10 @@ export function ConversationsLineChart({
     [data, granularity, tz, range],
   );
 
-  const chartData = useMemo(() => toCumulative(rawChartData), [rawChartData]);
+  const chartData = useMemo(
+    () => truncateToNow(toCumulative(rawChartData)),
+    [rawChartData],
+  );
 
   const seriesTotals = useMemo(
     () =>

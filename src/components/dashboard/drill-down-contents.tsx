@@ -31,7 +31,7 @@ import {
   type AreaChartSeries,
   type BarChartSeries,
 } from "@/components/charts";
-import { fillBuckets, toCumulative } from "./conversations-line-chart";
+import { fillBuckets, toCumulative, truncateToNow } from "./conversations-line-chart";
 import { CHART_COLORS } from "@/lib/charts/colors";
 import { StatusBadge } from "@/components/reports/status-badge";
 import { OpenInChatwoot } from "@/components/reports/open-in-chatwoot";
@@ -239,8 +239,7 @@ function ReceivedLineChart({ data }: { data: ReceivedDrillDownData }) {
       data.tz,
       data.range,
     );
-    const cumulative = toCumulative(filled);
-    return cumulative.map((r) => ({
+    return truncateToNow(toCumulative(filled)).map((r) => ({
       label: r.label,
       windowLabel: r.windowLabel,
       Novas: r.received,
@@ -466,8 +465,7 @@ function ResolvedLineChart({ data }: { data: ResolvedDrillDownData }) {
       data.tz,
       data.range,
     );
-    const cumulative = toCumulative(filled);
-    return cumulative.map((r) => ({
+    return truncateToNow(toCumulative(filled)).map((r) => ({
       label: r.label,
       windowLabel: r.windowLabel,
       Resolvidas: r.resolved,
