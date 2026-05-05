@@ -7,6 +7,9 @@
  *   - chatwoot_facts_daily_by_account (1 linha por dia)
  *   - chatwoot_facts_hourly_by_account (24 linhas por dia)
  *
+ * @canonical received=c.created_at; resolved=c.last_activity_at+status=1.
+ *   Alinhado com src/lib/reports/canonical.ts (v0.42).
+ *
  * Concorrência:
  *   - Bindings processadas SEQUENCIALMENTE (uma por vez). O pool dinâmico
  *     `getNexusChatPool(connectionId)` já serializa por connection, então

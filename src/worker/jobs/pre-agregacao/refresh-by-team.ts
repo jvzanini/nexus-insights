@@ -10,6 +10,9 @@
  * em todos os SQL agregados. Isso permite que o dashboard mostre
  * "sem time" como uma linha distinta sem precisar de NULL semantic.
  *
+ * @canonical received=c.created_at; resolved=c.last_activity_at+status=1.
+ *   Alinhado com src/lib/reports/canonical.ts (v0.42).
+ *
  * Concorrência / idempotência / snapshot: ver `refresh-by-account.ts`.
  *
  * Multi-tenant:

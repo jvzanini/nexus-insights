@@ -14,6 +14,9 @@
  * `is_active_at_eod` é sempre `true` (sentinel) — não rastreamos
  * desativação de agente do lado Chatwoot a partir daqui.
  *
+ * @canonical received=c.created_at; resolved=c.last_activity_at+status=1.
+ *   Alinhado com src/lib/reports/canonical.ts (v0.42).
+ *
  * Concorrência / idempotência / snapshot: ver `refresh-by-account.ts`.
  *
  * Multi-tenant:

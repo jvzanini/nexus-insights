@@ -10,6 +10,9 @@
  *   - Agrega por `c.inbox_id` em todas as 5 SQL (daily + msgs + frt + rt + snapshot).
  *   - Pula linhas com `inbox_id IS NULL` (improvável, mas filtramos defensivamente).
  *
+ * @canonical received=c.created_at; resolved=c.last_activity_at+status=1.
+ *   Alinhado com src/lib/reports/canonical.ts (v0.42).
+ *
  * Concorrência / idempotência / snapshot: ver `refresh-by-account.ts`.
  *
  * Multi-tenant:
