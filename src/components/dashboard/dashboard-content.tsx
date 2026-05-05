@@ -367,7 +367,7 @@ export function DashboardContent({
           iconBg="bg-violet-500/10"
           iconColor="text-violet-400"
           label="Conversas recebidas"
-          subtitle="no período"
+          subtitle="criadas no período"
           value={stats.received.toLocaleString("pt-BR")}
           trend={trendFor(stats.comparison.received, "%")}
           miniChart={
@@ -384,7 +384,7 @@ export function DashboardContent({
           iconBg="bg-emerald-500/10"
           iconColor="text-emerald-400"
           label="Conversas resolvidas"
-          subtitle="no período"
+          subtitle="finalizadas no período"
           value={stats.resolved.toLocaleString("pt-BR")}
           trend={trendFor(stats.comparison.resolved, "%")}
           miniChart={
@@ -400,8 +400,8 @@ export function DashboardContent({
           icon={MessageSquare}
           iconBg="bg-amber-500/10"
           iconColor="text-amber-400"
-          label="Abertas"
-          subtitle="no período"
+          label="Conversas abertas"
+          subtitle="com atividade no período"
           value={stats.open.toLocaleString("pt-BR")}
           trend={trendFor(stats.comparison.open, "%")}
           onClick={() => setDrillDown("open")}

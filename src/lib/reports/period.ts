@@ -30,7 +30,7 @@ export type { PeriodRange, CustomRangeInput };
 // As 5 opções "canônicas" exibidas aos usuários (inclui "Todos" — sem corte).
 export const PERIOD_OPTIONS: Array<{ key: NewPeriodKey; label: string }> = [
   { key: "hoje", label: "Hoje" },
-  { key: "semana_atual", label: "Esta semana" },
+  { key: "semana_atual", label: "Esta semana (Seg–Dom)" },
   { key: "mes_atual", label: "Este mês" },
   { key: "todos", label: "Todos" },
   { key: "custom", label: "Personalizado" },

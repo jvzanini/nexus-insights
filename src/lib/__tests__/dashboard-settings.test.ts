@@ -19,7 +19,8 @@ describe("getDashboardSettings", () => {
     expect(s.monthMode).toBe("current");
   });
 
-  it("respeita valores persistidos", async () => {
+  it("v0.42 canônico: ignora valores persistidos e sempre retorna defaults", async () => {
+    // Em v0.42, settings de DB são deprecados. Sempre weekStartsOn=1 (segunda).
     mockQuery.mockResolvedValue({
       rowCount: 3,
       rows: [
@@ -29,25 +30,15 @@ describe("getDashboardSettings", () => {
       ],
     });
     const s = await getDashboardSettings();
-    expect(s.weekStartsOn).toBe(0);
-    expect(s.weekMode).toBe("rolling");
-    expect(s.monthMode).toBe("rolling");
-  });
-
-  it("ignora weekStartsOn fora do range 0..6", async () => {
-    mockQuery.mockResolvedValue({
-      rowCount: 1,
-      rows: [{ key: "dashboard.week_starts_on", value: "9" }],
-    });
-    const s = await getDashboardSettings();
     expect(s.weekStartsOn).toBe(1);
+    expect(s.weekMode).toBe("current");
+    expect(s.monthMode).toBe("current");
   });
 
-  it("não cacheia (lê DB sempre) — cache module-level removido em v0.13.8", async () => {
-    mockQuery.mockResolvedValue({ rowCount: 0, rows: [] });
+  it("v0.42 canônico: não consulta DB (zero queries)", async () => {
     await getDashboardSettings();
     await getDashboardSettings();
-    expect(mockQuery).toHaveBeenCalledTimes(2);
+    expect(mockQuery).toHaveBeenCalledTimes(0);
   });
 
   it("invalidateDashboardSettings é no-op (mantido por compat)", () => {

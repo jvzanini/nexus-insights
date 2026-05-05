@@ -17,10 +17,11 @@ describe("getPeriodInTz", () => {
     jest.useRealTimers();
   });
 
-  it('hoje em "America/Sao_Paulo" cobre o dia inteiro em BRT', () => {
+  it('hoje em "America/Sao_Paulo" cobre o dia inteiro em BRT (end-exclusive desde v0.42)', () => {
     const { start, end } = getPeriodInTz("hoje", "America/Sao_Paulo");
     expect(start.toISOString()).toBe("2026-04-29T03:00:00.000Z");
-    expect(end.toISOString()).toBe("2026-04-30T02:59:59.999Z");
+    // end-exclusive: próximo 00:00 BRT (não mais 23:59:59.999)
+    expect(end.toISOString()).toBe("2026-04-30T03:00:00.000Z");
   });
 
   it('semana_atual em "America/Sao_Paulo" cobre seg→próxima seg (ISO week)', () => {
