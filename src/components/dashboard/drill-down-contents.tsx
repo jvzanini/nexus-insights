@@ -11,7 +11,18 @@
  *  - reaproveita charts genéricos de `@/components/charts`.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import type { TooltipContentProps } from "recharts/types/component/Tooltip";
+import type { NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
 
 import {
   InteractiveAreaChart,
@@ -20,6 +31,7 @@ import {
   type AreaChartSeries,
   type BarChartSeries,
 } from "@/components/charts";
+import { fillBuckets } from "./conversations-line-chart";
 import { CHART_COLORS } from "@/lib/charts/colors";
 import { StatusBadge } from "@/components/reports/status-badge";
 import { OpenInChatwoot } from "@/components/reports/open-in-chatwoot";
@@ -184,6 +196,103 @@ function ErrorState({ message }: { message: string }) {
   );
 }
 
+/* -------------------------- Recebidas — gráfico de linha -------------------------- */
+
+type DistributionView = "estado" | "departamento" | "atendente";
+
+const DISTRIBUTION_OPTIONS: { value: DistributionView; label: string }[] = [
+  { value: "estado", label: "Por estado" },
+  { value: "departamento", label: "Por departamento" },
+  { value: "atendente", label: "Por atendente" },
+];
+
+function ReceivedTooltip(props: TooltipContentProps<ValueType, NameType>) {
+  const { active, payload, label } = props;
+  if (!active || !payload?.length) return null;
+  const windowLabel = (payload[0]?.payload as { windowLabel?: string } | undefined)?.windowLabel;
+  return (
+    <div className="rounded-lg border border-border bg-card p-3 shadow-lg">
+      <p className="text-sm font-medium text-foreground mb-1">{label}</p>
+      {windowLabel ? (
+        <p className="text-xs text-muted-foreground/70 mb-2">{windowLabel}</p>
+      ) : null}
+      {payload.map((entry) => (
+        <p key={entry.name} className="text-xs flex items-center gap-2" style={{ color: entry.color }}>
+          <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: entry.color as string }} />
+          <span className="text-foreground">{entry.name}:</span>
+          <span className="font-bold tabular-nums">
+            {typeof entry.value === "number" ? entry.value.toLocaleString("pt-BR") : (entry.value ?? "—")}
+          </span>
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function ReceivedLineChart({ data }: { data: ReceivedDrillDownData }) {
+  const chartData = useMemo(
+    () =>
+      fillBuckets(
+        data.chart.map((p) => ({ ...p, open: 0, pending: 0 })),
+        data.granularity,
+        data.tz,
+        data.range,
+      ).map((r) => ({
+        label: r.label,
+        windowLabel: r.windowLabel,
+        Recebidas: r.received,
+      })),
+    [data.chart, data.granularity, data.tz, data.range],
+  );
+
+  const isEmpty = chartData.every((p) => p.Recebidas === 0);
+
+  if (isEmpty) {
+    return (
+      <div className="flex items-center justify-center h-[280px] text-sm text-muted-foreground">
+        Nenhuma conversa recebida no período
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ width: "100%", height: 280 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={chartData} margin={{ top: 12, right: 20, left: 8, bottom: 12 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+          <XAxis
+            dataKey="label"
+            tick={{ fill: "#a1a1aa", fontSize: 12 }}
+            tickLine={false}
+            tickMargin={10}
+            axisLine={{ stroke: "#3f3f46" }}
+            interval="preserveStartEnd"
+            minTickGap={20}
+            height={36}
+          />
+          <YAxis
+            tick={{ fill: "#a1a1aa", fontSize: 13 }}
+            tickLine={false}
+            axisLine={false}
+            allowDecimals={false}
+            width={40}
+          />
+          <Tooltip content={ReceivedTooltip} cursor={{ stroke: "rgba(63, 63, 70, 0.6)" }} />
+          <Line
+            type="monotone"
+            dataKey="Recebidas"
+            name="Recebidas"
+            stroke="#22c55e"
+            strokeWidth={2.5}
+            dot={false}
+            activeDot={{ r: 5, strokeWidth: 0 }}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 /* -------------------------- Recebidas -------------------------- */
 
 export function ReceivedDrillDownContent({
@@ -195,6 +304,7 @@ export function ReceivedDrillDownContent({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
+  const [distributionView, setDistributionView] = useState<DistributionView>("estado");
 
   // Reset page when period changes
   useEffect(() => {
@@ -231,30 +341,25 @@ export function ReceivedDrillDownContent({
   if (error && !data) return <ErrorState message={error} />;
   if (!data) return null;
 
-  const chartData = data.chart.map((p) => ({
-    name: formatBucket(p.bucket, data.granularity),
-    Recebidas: p.received,
-  }));
-  const series: AreaChartSeries[] = [
-    { key: "Recebidas", label: "Recebidas", color: CHART_COLORS.violet },
+  const distributionData = (() => {
+    if (distributionView === "estado") {
+      return data.byInbox.map((i) => ({ name: i.name, Conversas: i.count }));
+    }
+    if (distributionView === "departamento") {
+      return data.byTeam.map((i) => ({ name: i.name, Conversas: i.count }));
+    }
+    return data.byAssignee.map((i) => ({ name: i.name, Conversas: i.count }));
+  })();
+
+  const distributionSeries: BarChartSeries[] = [
+    { key: "Conversas", label: "Conversas", color: "#22c55e" },
   ];
 
-  const byInboxData = data.byInbox.map((i) => ({
-    name: i.name,
-    Conversas: i.count,
-  }));
-  const byInboxSeries: BarChartSeries[] = [
-    { key: "Conversas", label: "Conversas", color: CHART_COLORS.violet },
-  ];
-
-  // v0.22.0: name = "HH:00" apenas; description já comunica a janela completa.
-  const byHourData = data.byHour.map((h) => ({
-    name: `${String(h.hour).padStart(2, "0")}:00`,
-    Conversas: h.count,
-  }));
-  const byHourSeries: AreaChartSeries[] = [
-    { key: "Conversas", label: "Conversas", color: CHART_COLORS.amber },
-  ];
+  const distributionDescription = (() => {
+    if (distributionView === "estado") return "Top 10 estados que receberam mais conversas";
+    if (distributionView === "departamento") return "Todos os departamentos, incluindo sem departamento";
+    return "Top 10 atendentes por volume (desc)";
+  })();
 
   const items = data.items ?? data.recent;
 
@@ -262,47 +367,43 @@ export function ReceivedDrillDownContent({
     <div className="space-y-5">
       <DrillDownSection
         title="Volume ao longo do período"
-        description={
-          data.granularity === "hour" ? "Por hora" : "Por dia"
-        }
+        description={data.granularity === "hour" ? "Por hora" : "Por dia"}
       >
-        <InteractiveAreaChart
-          data={chartData}
-          series={series}
-          height={280}
-          showLegend={false}
-          emptyMessage="Sem conversas recebidas no período"
-        />
+        <ReceivedLineChart data={data} />
       </DrillDownSection>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <DrillDownSection
-          title="Distribuição por estado"
-          description="Top 10 estados que receberam mais conversas"
-        >
-          <InteractiveBarChart
-            data={byInboxData}
-            series={byInboxSeries}
-            layout="horizontal"
-            height={Math.max(280, Math.min(480, byInboxData.length * 28 + 60))}
-            showLegend={false}
-            yAxisWidth={160}
-            emptyMessage="Nenhum estado com volume no período"
-          />
-        </DrillDownSection>
-        <DrillDownSection
-          title="Distribuição por hora do dia"
-          description="Cada coluna cobre HH:00 – HH:59"
-        >
-          <InteractiveAreaChart
-            data={byHourData}
-            series={byHourSeries}
-            height={280}
-            showLegend={false}
-            emptyMessage="Sem dados de horário"
-          />
-        </DrillDownSection>
-      </div>
+      <DrillDownSection
+        title="Distribuição"
+        description={distributionDescription}
+        action={
+          <div className="flex items-center gap-1 rounded-lg border border-border bg-background/60 p-1">
+            {DISTRIBUTION_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setDistributionView(opt.value)}
+                className={
+                  distributionView === opt.value
+                    ? "rounded-md bg-green-500/15 px-2.5 py-1 text-xs font-medium text-green-600 dark:text-green-400 transition-colors"
+                    : "rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                }
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        }
+      >
+        <InteractiveBarChart
+          data={distributionData}
+          series={distributionSeries}
+          layout="horizontal"
+          height={Math.max(280, Math.min(480, distributionData.length * 28 + 60))}
+          showLegend={false}
+          yAxisWidth={160}
+          emptyMessage="Nenhum dado para exibir"
+        />
+      </DrillDownSection>
 
       <DrillDownSection
         title={

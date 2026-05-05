@@ -231,7 +231,7 @@ describe("dashboard-drill-down — canonical SQL (v0.42)", () => {
         "src/lib/chatwoot/queries/dashboard-drill-down.ts",
         "utf8",
       );
-      expect(src).toContain("dashboard-drill-received-canonical-v0.42");
+      expect(src).toContain("dashboard-drill-received-canonical-v0.45");
       expect(src).toContain("dashboard-drill-resolved-canonical-v0.42");
       expect(src).toContain("dashboard-drill-status-canonical-v0.42");
       expect(src).toContain("dashboard-drill-open-canonical-v0.42");

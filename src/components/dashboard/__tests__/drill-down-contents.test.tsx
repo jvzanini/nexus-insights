@@ -20,6 +20,10 @@ jest.mock("@/lib/actions/dashboard-drill-down", () => ({
       chart: [],
       byInbox: [{ id: 1, name: "SP-São Paulo", count: 22 }],
       byHour: [{ hour: 14, count: 3 }],
+      byTeam: [{ id: 1, name: "Vendas", count: 10 }],
+      byAssignee: [{ id: 1, name: "Hevelyn", count: 7 }],
+      range: { start: "2026-05-01T00:00:00.000Z", end: "2026-05-01T23:59:59.999Z" },
+      tz: "America/Sao_Paulo",
       items: [
         {
           id: 1,
@@ -63,13 +67,12 @@ describe("ReceivedDrillDownContent (v0.22.0)", () => {
     );
   });
 
-  it("renderiza distribuição por hora com label HH:00 (sem '01:00 – 01:59')", async () => {
+  it("renderiza seletor de distribuição com opções Por estado/departamento/atendente", async () => {
     render(<ReceivedDrillDownContent accountId={1} period="dia" enabled />);
     await waitFor(() =>
-      expect(screen.getByText(/Distribuição por hora/i)).toBeInTheDocument(),
+      expect(screen.getByText(/Por estado/i)).toBeInTheDocument(),
     );
-    // O nome do data point é "14:00" (não "14:00 – 14:59")
-    // Verificação implícita pelo render do label do XAxis — tooltip não é
-    // testável sem hover. Confiar no test do componente.
+    expect(screen.getByText(/Por departamento/i)).toBeInTheDocument();
+    expect(screen.getByText(/Por atendente/i)).toBeInTheDocument();
   });
 });
