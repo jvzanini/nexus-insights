@@ -93,7 +93,7 @@ export function PeriodNavigator({
       className={cn(
         "inline-flex items-center gap-1 rounded-lg border bg-violet-500/5 px-2 py-1.5",
         "border-violet-500/30 transition-all duration-150",
-        "hover:border-violet-500/60 hover:bg-violet-500/10",
+        "hover:border-violet-500/50 hover:bg-violet-500/10",
       )}
       role="group"
       aria-label={`Navegação de ${period}`}
@@ -102,15 +102,16 @@ export function PeriodNavigator({
         type="button"
         onClick={handlePrev}
         className={cn(
-          "inline-flex h-7 w-7 items-center justify-center rounded transition-colors duration-150",
-          "text-violet-300 hover:bg-violet-500/25 hover:text-violet-100 cursor-pointer",
-          "focus-visible:outline-none focus-visible:bg-violet-500/30",
+          "inline-flex h-7 w-7 items-center justify-center rounded transition-colors duration-150 cursor-pointer",
+          "text-violet-600 dark:text-violet-300",
+          "hover:bg-violet-500/15 hover:text-violet-800 dark:hover:bg-violet-500/25 dark:hover:text-violet-100",
+          "focus-visible:outline-none focus-visible:bg-violet-500/20",
         )}
         aria-label="Período anterior"
       >
         <ChevronLeft className="h-4 w-4" aria-hidden />
       </button>
-      <span className="px-2 text-sm font-medium tabular-nums text-violet-100 select-none whitespace-nowrap leading-none">
+      <span className="px-2 text-sm font-medium tabular-nums text-violet-700 dark:text-violet-100 select-none whitespace-nowrap leading-none">
         {label}
       </span>
       <button
@@ -120,8 +121,8 @@ export function PeriodNavigator({
         className={cn(
           "inline-flex h-7 w-7 items-center justify-center rounded transition-colors duration-150",
           nextAvailable
-            ? "text-violet-300 hover:bg-violet-500/25 hover:text-violet-100 cursor-pointer focus-visible:outline-none focus-visible:bg-violet-500/30"
-            : "text-violet-300/30 cursor-not-allowed",
+            ? "text-violet-600 dark:text-violet-300 hover:bg-violet-500/15 hover:text-violet-800 dark:hover:bg-violet-500/25 dark:hover:text-violet-100 cursor-pointer focus-visible:outline-none focus-visible:bg-violet-500/20"
+            : "text-violet-400/40 dark:text-violet-300/30 cursor-not-allowed",
         )}
         aria-label="Próximo período"
       >

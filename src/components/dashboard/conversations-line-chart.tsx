@@ -278,6 +278,16 @@ export function ConversationsLineChart({
     [data, granularity, tz, range],
   );
 
+  const seriesTotals = useMemo(
+    () => ({
+      received: chartData.reduce((s, r) => s + r.received, 0),
+      open: chartData.reduce((s, r) => s + r.open, 0),
+      resolved: chartData.reduce((s, r) => s + r.resolved, 0),
+      pending: chartData.reduce((s, r) => s + r.pending, 0),
+    }),
+    [chartData],
+  );
+
   const isEmpty = chartData.every(
     (p) => p.received === 0 && p.open === 0 && p.resolved === 0 && p.pending === 0,
   );
@@ -356,6 +366,15 @@ export function ConversationsLineChart({
                   ) : null}
                 </span>
                 <span>{s.label}</span>
+                <span
+                  className="ml-0.5 inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-xs font-semibold tabular-nums leading-none"
+                  style={{
+                    backgroundColor: `${s.color}22`,
+                    color: s.color,
+                  }}
+                >
+                  {seriesTotals[s.key].toLocaleString("pt-BR")}
+                </span>
               </label>
             );
           })}
