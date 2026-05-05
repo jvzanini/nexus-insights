@@ -6,6 +6,10 @@
  * - business_hours: avg de `value_in_business_hours` em ambos.
  *
  * Retorno: avg, p50, p95, max e count por categoria. Tempos em segundos.
+ *
+ * @canonical periodColumn=n/a — filtra por re.created_at (timestamp do evento),
+ *   não por c.last_activity_at nem c.created_at. Correto: "first responses que
+ *   ocorreram no período". re.inbox_id <> MATRIX_IA_INBOX_ID para exclusão.
  */
 
 import { queryNexusChat } from "@/lib/nexus-chat/pool";
@@ -13,6 +17,7 @@ import { withChatwootResilience } from "../resilience";
 import { withCache } from "@/lib/cache/pull-through";
 import { cacheKey, hashFilters } from "@/lib/cache/keys";
 import type { ReportFilters } from "../filters";
+import { MATRIX_IA_INBOX_ID } from "@/lib/constants/matrix-ia";
 
 export interface TempoStats {
   avg: number;
@@ -61,7 +66,7 @@ export async function temposResposta(args: {
   const ttl = args.ttlSeconds ?? DEFAULT_TTL_SECONDS;
   const key = cacheKey({
     scope: "report",
-    name: "tempos-resposta",
+    name: "tempos-resposta-canonical-v0.42",
     accountId: args.accountId,
     filtersHash: hashFilters(args.filters),
   });
@@ -85,7 +90,7 @@ export async function temposResposta(args: {
           params.push(args.accountId);
 
           if (args.filters.excludeMatrixIA !== false) {
-            reConds.push(`re.inbox_id <> 31`);
+            reConds.push(`re.inbox_id <> ${MATRIX_IA_INBOX_ID}`);
           }
 
           if (args.filters.inboxIds?.length) {

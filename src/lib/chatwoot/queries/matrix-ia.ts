@@ -7,6 +7,10 @@
  * Live KPI — TTL 30s.
  *
  * Multi-tenant: usa `queryNexusChat(connectionId, sql, params)`.
+ *
+ * @canonical periodColumn=created (totalConversas/transferidas).
+ *   "cliente_sem_resposta" usa last_classification_msg CTE canônica
+ *   (status=open + última msg pública = incoming, ignorando system/template).
  */
 
 import { queryNexusChat } from "@/lib/nexus-chat/pool";
@@ -14,6 +18,10 @@ import { withChatwootResilience } from "../resilience";
 import { withCache } from "@/lib/cache/pull-through";
 import { cacheKey, hashFilters } from "@/lib/cache/keys";
 import type { ReportFilters } from "../filters";
+import {
+  buildLastClassificationMsgCte,
+  MSG_INCOMING,
+} from "@/lib/reports/canonical";
 
 const MATRIX_IA_INBOX_ID = 31;
 const DEFAULT_TTL_SECONDS = 30;
@@ -65,7 +73,7 @@ export async function matrixIaMetrics(args: {
   // Hash inclui filters mas a query força inbox_id=31, ignorando excludeMatrixIA.
   const key = cacheKey({
     scope: "report",
-    name: "matrix-ia",
+    name: "matrix-ia-canonical-v0.42",
     accountId: args.accountId,
     filtersHash: hashFilters(args.filters),
   });
@@ -100,26 +108,18 @@ export async function matrixIaMetrics(args: {
               ${totalPeriodSql}
           `;
 
-          // Cliente sem resposta da IA: status open + última msg incoming + last_activity > 5min.
-          // message_type: 0=incoming, 1=outgoing, 2=activity, 3=template (Chatwoot enum).
+          // Cliente sem resposta da IA: status=open + última msg classificável é incoming
+          // pública + last_activity > 5min. Usa CTE canônica (exclui system/template).
           const sqlSemResposta = `
+            ${buildLastClassificationMsgCte()}
             SELECT COUNT(*)::bigint AS total
             FROM conversations c
+            JOIN last_classification_msg lcm ON lcm.conversation_id = c.id
             WHERE c.account_id = $1
               AND c.inbox_id = $2
               AND c.status = 0
               AND c.last_activity_at < (now() - interval '5 minutes')
-              AND EXISTS (
-                SELECT 1
-                FROM messages m
-                WHERE m.conversation_id = c.id
-                  AND m.created_at = (
-                    SELECT MAX(m2.created_at)
-                    FROM messages m2
-                    WHERE m2.conversation_id = c.id
-                  )
-                  AND m.message_type = 0
-              )
+              AND lcm.message_type = ${MSG_INCOMING}
           `;
 
           // Transferidas: simplificação — conversas no inbox 31 com assignee_id != NULL e != 1
