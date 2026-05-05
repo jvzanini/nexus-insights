@@ -6,6 +6,11 @@
  * imediatamente anterior, com mesma duração, para cálculo de delta.
  *
  * Multi-tenant: usa `queryNexusChat(connectionId, sql, params)`.
+ *
+ * @canonical periodColumn=created. Definição "lead recebido = conversa criada".
+ *   É a única queria além do KPI Recebidas que filtra por created_at.
+ *   Bucket SQL `date_trunc('day', c.created_at AT TIME ZONE 'America/Sao_Paulo')`
+ *   já é por created_at.
  */
 
 import { queryNexusChat } from "@/lib/nexus-chat/pool";
@@ -64,7 +69,7 @@ export async function leadsRecebidos(args: {
   const compareWith = args.compareWith === true;
   const key = cacheKey({
     scope: "report",
-    name: `leads-recebidos-${args.granularity}${compareWith ? "-cmp" : ""}`,
+    name: `leads-recebidos-canonical-v0.42-${args.granularity}${compareWith ? "-cmp" : ""}`,
     accountId: args.accountId,
     filtersHash: hashFilters(args.filters),
   });
@@ -76,7 +81,7 @@ export async function leadsRecebidos(args: {
       withChatwootResilience<LeadsRecebidosData>(
         async () => {
           const { whereSql, params } = buildBaseFilter(
-            args.filters,
+            { ...args.filters, periodColumn: "created" },
             args.accountId,
           );
           const sql = `
@@ -109,7 +114,10 @@ export async function leadsRecebidos(args: {
               ...args.filters,
               period: { start: prevStart, end: prevEnd },
             };
-            const prevBuilt = buildBaseFilter(prevFilters, args.accountId);
+            const prevBuilt = buildBaseFilter(
+              { ...prevFilters, periodColumn: "created" },
+              args.accountId,
+            );
             const sqlPrev = `
               SELECT COUNT(*)::bigint AS total
               FROM conversations c

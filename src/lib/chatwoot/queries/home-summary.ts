@@ -3,6 +3,10 @@
  * órfãs (sem assignee), p50 first response 24h e top 5 atendentes 24h.
  *
  * TTL curto (30s) — esse painel atualiza por polling.
+ *
+ * @canonical periodColumn=active (default de buildBaseFilter v0.42).
+ *   Janelas rolling fixas (now() - interval '24 hours') em sqlP50/sqlTop são
+ *   intencionais — independentes do filtro do usuário. Manter.
  */
 
 import { queryNexusChat } from "@/lib/nexus-chat/pool";
@@ -63,7 +67,7 @@ export async function homeSummary(
   const ttl = args.ttlSeconds ?? DEFAULT_TTL_SECONDS;
   const key = cacheKey({
     scope: "kpi",
-    name: "home-summary",
+    name: "home-summary-canonical-v0.42",
     accountId: args.accountId,
     filtersHash: hashFilters(args.filters),
   });
