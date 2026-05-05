@@ -62,16 +62,18 @@ describe("getDashboardPeriod", () => {
     expect(current.end.toISOString()).toBe("2026-05-04T03:00:00.000Z");
   });
 
-  it("semana: weekStartsOn=0 (domingo) é IGNORADO — sempre segunda canônico", () => {
+  it("semana: weekStartsOn=0 (domingo) afeta o cálculo — semana dom→sáb", () => {
     const { current } = getDashboardPeriod({
       period: "semana",
       mode: "current",
-      weekStartsOn: 0, // ← ignorado pelo helper canônico
+      weekStartsOn: 0,
       tz,
     });
-    // Mesmo passando 0, retorna segunda → segunda
-    expect(current.start.toISOString()).toBe("2026-04-27T03:00:00.000Z");
-    expect(current.end.toISOString()).toBe("2026-05-04T03:00:00.000Z");
+    // Ref = quarta 29/04/2026. Com weekStartsOn=0 (domingo):
+    // início = dom 26/04 00:00 BRT = 2026-04-26T03:00:00.000Z
+    // fim    = dom 03/05 00:00 BRT = 2026-05-03T03:00:00.000Z (end-exclusive)
+    expect(current.start.toISOString()).toBe("2026-04-26T03:00:00.000Z");
+    expect(current.end.toISOString()).toBe("2026-05-03T03:00:00.000Z");
   });
 
   it("semana current: prev tem mesmo tamanho da janela atual", () => {

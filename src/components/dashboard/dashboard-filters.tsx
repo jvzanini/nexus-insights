@@ -11,10 +11,10 @@ interface DashboardFiltersProps {
   onRefresh: () => void;
 }
 
-const periods: Array<{ value: DashboardPeriod; label: string; hint: string }> = [
-  { value: "dia", label: "Dia", hint: "Hoje (00:00–23:59 BRT)" },
-  { value: "semana", label: "Semana", hint: "Segunda-feira → Domingo" },
-  { value: "mes", label: "Mês", hint: "Dia 1 → último dia do mês" },
+const periods: Array<{ value: DashboardPeriod; label: string }> = [
+  { value: "dia", label: "Dia" },
+  { value: "semana", label: "Semana" },
+  { value: "mes", label: "Mês" },
 ];
 
 /**
@@ -40,7 +40,6 @@ export function DashboardFilters({
             <button
               key={p.value}
               onClick={() => onPeriodChange(p.value)}
-              title={p.hint}
               className={`px-3.5 py-1.5 text-xs font-medium transition-all duration-200 cursor-pointer ${
                 selectedPeriod === p.value
                   ? "bg-violet-600 text-white shadow-[0_0_8px_rgba(124,58,237,0.3)]"

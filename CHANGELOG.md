@@ -1,5 +1,22 @@
 # Changelog
 
+## [v0.43.0] 2026-05-04 — Correções pós v0.42: gráfico, settings configuráveis, labels
+
+### Correções
+- **`sqlChart` resolved no branch correto**: `resolved` agora está no Branch 2 (`last_activity_at`), não no Branch 1 (`created_at`). O gráfico de "Resolvidas" agora mostra quando a conversa teve atividade no período, não quando foi criada. Cache key bumped para `dashboard-data-canonical-v0.43`.
+- **`getDashboardSettings()` restaurado para ler DB**: Revertido o lock v0.42 que ignorava `app_settings`. Configurações de `week_starts_on`, `week_mode`, `month_mode` voltam a ser lidas da tabela `app_settings` e afetam globalmente a plataforma.
+- **`weekStartsOn` configurável**: `getCanonicalPeriod()` agora aceita `weekStartsOn` como parâmetro (padrão 1). `getDashboardPeriod()` passa o valor lido do banco. Se João alterar início da semana para domingo nas configurações, o dashboard reflete imediatamente.
+- **Label limpa**: "Esta semana (Seg–Dom)" → "Esta semana" em `PERIOD_OPTIONS`.
+- **Removido `title=` hints** das pills de período no dashboard (eram tooltips com texto técnico desnecessário).
+
+### Testes
+- `dashboard-settings.test.ts`: atualizado para verificar leitura real do DB (2 consultas em 2 chamadas, valores persistidos aplicados).
+- `dashboard-period.test.ts`: `weekStartsOn=0` agora gera semana dom→sáb corretamente.
+- `dashboard-data.test.ts`: cache key atualizada para `canonical-v0.43`.
+- Suite completa: 1879/1879 verde.
+
+---
+
 ## [v0.42.0] 2026-05-04 — Padrão Canônico de Dados (consistência total entre dashboard e relatórios)
 
 > **Refatoração de semântica.** Unifica a definição de todas as métricas em toda a plataforma (dashboard, 7 relatórios, drill-downs, pré-agregação). Elimina discrepâncias de dados entre telas.

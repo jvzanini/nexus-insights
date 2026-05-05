@@ -80,6 +80,11 @@ export interface CanonicalPeriodInput {
   customStart?: string;
   /** Apenas para `label: "custom"`. Formato YYYY-MM-DD (inclusive). */
   customEnd?: string;
+  /**
+   * Dia de início da semana (0=domingo … 6=sábado). Default = 1 (segunda).
+   * Lido de `app_settings.dashboard.week_starts_on`.
+   */
+  weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6;
 }
 
 /**
@@ -110,8 +115,8 @@ export function getCanonicalPeriod(args: CanonicalPeriodInput): CanonicalPeriod 
     }
 
     case "semana": {
-      // CANÔNICO: weekStartsOn = 1 (segunda-feira). Hardcoded.
-      const startLocal = startOfWeek(refInTz, { weekStartsOn: 1 });
+      const wso = (args.weekStartsOn ?? 1) as 0 | 1 | 2 | 3 | 4 | 5 | 6;
+      const startLocal = startOfWeek(refInTz, { weekStartsOn: wso });
       const nextWeekLocal = addWeeks(startLocal, 1);
       start = fromZonedTime(startLocal, tz);
       end = fromZonedTime(nextWeekLocal, tz);

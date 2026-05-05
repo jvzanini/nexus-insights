@@ -1,12 +1,11 @@
 //
-// Wrapper compat sobre `getCanonicalPeriod` (canonical-v0.42).
+// Wrapper sobre `getCanonicalPeriod` (canonical-v0.42+).
 //
-// REGRA SUPREMA do projeto (definida pelo usuário):
-//   "começa na segunda e termina no domingo, sempre"
-//   → semana é ISO week (segunda → próxima segunda, end-exclusive).
-//   → mês é mês civil (dia 1 → dia 1 do mês seguinte, end-exclusive).
-//   → "rolling" não existe mais. `mode` é IGNORADO em v0.42+.
-//   → `weekStartsOn` é IGNORADO em v0.42+ (sempre 1=segunda).
+// `weekStartsOn` é lido de `app_settings` (via `getDashboardSettings`) e
+// passado para `getCanonicalPeriod` — afeta o cálculo de semana.
+//
+// `mode` (rolling/current) é ignorado — sempre usa current (mês civil,
+// semana ISO). Rolling foi removido em v0.42.
 //
 // `end` é EXCLUSIVE (próximo 00:00 BRT) para consistência com SQL
 // `column >= start AND column < end`.
@@ -16,9 +15,8 @@
 import { getCanonicalPeriod } from "@/lib/datetime-core";
 
 export type DashboardPeriod = "dia" | "semana" | "mes";
-/** @deprecated v0.42 — sempre tratado como "current" (canonical seg→seg). */
+/** @deprecated v0.42 — sempre tratado como "current" (canonical). */
 export type DashboardMode = "current" | "rolling";
-/** @deprecated v0.42 — sempre tratado como 1 (segunda). */
 export type WeekStartsOn = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 export interface PeriodRange {
@@ -30,7 +28,7 @@ export interface DashboardPeriodInput {
   period: DashboardPeriod;
   /** @deprecated v0.42 — ignorado. */
   mode: DashboardMode;
-  /** @deprecated v0.42 — ignorado. */
+  /** Dia de início da semana. Lido de app_settings. Default = 1 (segunda). */
   weekStartsOn: WeekStartsOn;
   tz: string;
   referenceDate?: Date;
@@ -50,10 +48,11 @@ const PERIOD_TO_LABEL = {
 export function getDashboardPeriod(
   input: DashboardPeriodInput,
 ): DashboardPeriodResult {
-  const { period, tz, referenceDate } = input;
+  const { period, tz, weekStartsOn, referenceDate } = input;
   const r = getCanonicalPeriod({
     label: PERIOD_TO_LABEL[period],
     tz,
+    weekStartsOn,
     refIso: (referenceDate ?? new Date()).toISOString(),
   });
   return {
