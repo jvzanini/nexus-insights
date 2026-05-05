@@ -3,6 +3,7 @@ import { Inbox } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export interface Top5ListItem {
+  id?: number | null;
   name: string;
   value: string;
   meta?: string;
@@ -16,6 +17,7 @@ export interface Top5ListCardProps {
   subtitle?: string;
   items: Top5ListItem[];
   emptyMessage?: string;
+  onItemClick?: (id: number | null, name: string) => void;
 }
 
 function getInitials(name: string): string {
@@ -33,6 +35,7 @@ export function Top5ListCard({
   subtitle,
   items,
   emptyMessage = "Sem dados no período.",
+  onItemClick,
 }: Top5ListCardProps) {
   return (
     <Card className="bg-card border border-border rounded-xl h-full">
@@ -67,35 +70,58 @@ export function Top5ListCard({
           </div>
         ) : (
           <ul className="divide-y divide-border/60">
-            {items.map((item, idx) => (
-              <li
-                key={`${item.name}-${idx}`}
-                className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
-              >
-                <span className="w-4 text-xs font-medium tabular-nums text-muted-foreground">
-                  {idx + 1}
-                </span>
-                <div
-                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${iconBg} text-xs font-semibold ${iconColor}`}
-                  aria-hidden="true"
-                >
-                  {getInitials(item.name)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-foreground">
-                    {item.name}
-                  </p>
-                  {item.meta ? (
-                    <p className="truncate text-xs text-muted-foreground">
-                      {item.meta}
+            {items.map((item, idx) => {
+              const clickable = !!onItemClick;
+              const content = (
+                <>
+                  <span className="w-4 text-xs font-medium tabular-nums text-muted-foreground">
+                    {idx + 1}
+                  </span>
+                  <div
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${iconBg} text-xs font-semibold ${iconColor}`}
+                    aria-hidden="true"
+                  >
+                    {getInitials(item.name)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {item.name}
                     </p>
-                  ) : null}
-                </div>
-                <span className="shrink-0 rounded-md bg-muted/40 px-2 py-1 text-xs font-semibold tabular-nums text-foreground">
-                  {item.value}
-                </span>
-              </li>
-            ))}
+                    {item.meta ? (
+                      <p className="truncate text-xs text-muted-foreground">
+                        {item.meta}
+                      </p>
+                    ) : null}
+                  </div>
+                  <span className="shrink-0 rounded-md bg-muted/40 px-2 py-1 text-xs font-semibold tabular-nums text-foreground">
+                    {item.value}
+                  </span>
+                </>
+              );
+
+              if (clickable) {
+                return (
+                  <li key={`${item.name}-${idx}`}>
+                    <button
+                      type="button"
+                      onClick={() => onItemClick(item.id ?? null, item.name)}
+                      className="flex w-full items-center gap-3 py-2.5 first:pt-0 last:pb-0 rounded hover:bg-accent/30 transition-colors px-1 -mx-1 cursor-pointer"
+                    >
+                      {content}
+                    </button>
+                  </li>
+                );
+              }
+
+              return (
+                <li
+                  key={`${item.name}-${idx}`}
+                  className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
+                >
+                  {content}
+                </li>
+              );
+            })}
           </ul>
         )}
       </CardContent>

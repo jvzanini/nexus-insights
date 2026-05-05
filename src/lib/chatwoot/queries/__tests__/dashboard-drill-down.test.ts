@@ -110,21 +110,21 @@ describe("dashboard-drill-down — canonical SQL (v0.42)", () => {
   /* ------------------------------- Open ------------------------------- */
 
   describe("getOpenDrillDown", () => {
-    test("filtra c.last_activity_at + status=0 (canonical active)", async () => {
+    test("filtra c.last_activity_at + status IN (0,2) — openCount e pendingCount separados (v0.47)", async () => {
       await getOpenDrillDown(CONNECTION_ID, baseArgs);
       const calls = getCalls();
-      // sqlTotal vem do getStatusDrillDown (status=0)
-      const sqlTotal = calls.find(
+      // sqlOpenCount: status = 0 (hardcoded, não parametrizado)
+      const sqlOpenCount = calls.find(
         (sql) =>
           /SELECT COUNT\(\*\)::bigint AS total/.test(sql) &&
           /AND c\.last_activity_at >= \$2/.test(sql) &&
-          /AND c\.status = \$4/.test(sql),
+          /AND c\.status = 0/.test(sql),
       );
-      expect(sqlTotal).toBeDefined();
-      // sqlByStatus do wrapper (status IN 0,2,3) também precisa usar last_activity_at
+      expect(sqlOpenCount).toBeDefined();
+      // sqlByStatus: status IN (0, 2) com GROUP BY
       const sqlByStatus = calls.find(
         (sql) =>
-          /AND c\.status IN \(0, 2, 3\)/.test(sql) &&
+          /AND c\.status IN \(0, 2\)/.test(sql) &&
           /GROUP BY c\.status/.test(sql),
       );
       expect(sqlByStatus).toBeDefined();
@@ -234,7 +234,7 @@ describe("dashboard-drill-down — canonical SQL (v0.42)", () => {
       expect(src).toContain("dashboard-drill-received-canonical-v0.45");
       expect(src).toContain("dashboard-drill-resolved-canonical-v0.45");
       expect(src).toContain("dashboard-drill-status-canonical-v0.42");
-      expect(src).toContain("dashboard-drill-open-canonical-v0.42");
+      expect(src).toContain("dashboard-drill-open-canonical-v0.47");
       expect(src).toContain("dashboard-drill-resolution-canonical-v0.42");
       expect(src).toContain("dashboard-drill-no-response-canonical-v0.42");
       expect(src).toContain("dashboard-drill-by-team-canonical-v0.42");

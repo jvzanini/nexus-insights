@@ -47,6 +47,9 @@ export interface DonutWithCenterProps {
   onSliceClick?: (name: string, index: number) => void;
   /** Posição do tooltip dentro do container (default: "top-right"). */
   tooltipPosition?: DonutTooltipPosition;
+  /** Quando fornecido, exibe segunda linha no centro (abaixo da linha principal). */
+  secondaryValue?: string;
+  secondaryLabel?: string;
 }
 
 export interface DonutTooltipStackedProps {
@@ -152,6 +155,8 @@ export function DonutWithCenter({
   ariaLabel = "Donut chart",
   onSliceClick,
   tooltipPosition = "top-right",
+  secondaryValue,
+  secondaryLabel,
 }: DonutWithCenterProps) {
   const prefersReducedMotion = useReducedMotion();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -251,12 +256,36 @@ export function DonutWithCenter({
         data-slot="donut-center"
         className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 px-6 text-center"
       >
-        <span className="text-xl font-bold tabular-nums text-foreground">
-          {centerValue}
-        </span>
-        <span className="max-w-[60%] text-xs uppercase tracking-wide text-muted-foreground">
-          {centerLabel}
-        </span>
+        {secondaryValue ? (
+          <>
+            <div className="flex flex-col items-center gap-0.5">
+              <span className="text-lg font-bold tabular-nums text-foreground leading-tight">
+                {centerValue}
+              </span>
+              <span className="max-w-[70%] text-[10px] uppercase tracking-wide text-muted-foreground">
+                {centerLabel}
+              </span>
+            </div>
+            <div className="h-px w-8 bg-border/60 my-0.5" />
+            <div className="flex flex-col items-center gap-0.5">
+              <span className="text-lg font-bold tabular-nums text-foreground leading-tight">
+                {secondaryValue}
+              </span>
+              <span className="max-w-[70%] text-[10px] uppercase tracking-wide text-muted-foreground">
+                {secondaryLabel}
+              </span>
+            </div>
+          </>
+        ) : (
+          <>
+            <span className="text-xl font-bold tabular-nums text-foreground">
+              {centerValue}
+            </span>
+            <span className="max-w-[60%] text-xs uppercase tracking-wide text-muted-foreground">
+              {centerLabel}
+            </span>
+          </>
+        )}
       </div>
     </motion.div>
   );

@@ -56,9 +56,11 @@ import {
   getResolutionRateDrillDownAction,
   getResolvedDrillDownAction,
   getStatusDrillDownAction,
+  getAgentDrillDownAction,
   type DashboardPeriod,
 } from "@/lib/actions/dashboard-drill-down";
 import type {
+  AgentDrillDownData,
   OpenDrillDownData,
   ReceivedDrillDownData,
   ResolutionRateDrillDownData,
@@ -658,7 +660,7 @@ export function ResolvedDrillDownContent({
   );
 }
 
-/* -------------------------- Em aberto -------------------------- */
+/* -------------------------- Em aberto e pendentes -------------------------- */
 
 export function OpenDrillDownContent({
   accountId,
@@ -668,13 +670,19 @@ export function OpenDrillDownContent({
   const [data, setData] = useState<OpenDrillDownData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [distributionView, setDistributionView] = useState<DistributionView>("estado");
+
+  useEffect(() => {
+    setPage(1);
+  }, [period]);
 
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
     async function run() {
       setLoading(true);
-      const res = await getOpenDrillDownAction({ accountId, period });
+      const res = await getOpenDrillDownAction({ accountId, period, page, pageSize: 50 });
       if (cancelled) return;
       if (res.success && res.data) {
         setData(res.data);
@@ -688,7 +696,7 @@ export function OpenDrillDownContent({
     return () => {
       cancelled = true;
     };
-  }, [accountId, period, enabled]);
+  }, [accountId, period, enabled, page]);
 
   if (loading && !data) return <DrillDownSkeleton />;
   if (error && !data) return <ErrorState message={error} />;
@@ -697,7 +705,6 @@ export function OpenDrillDownContent({
   const STATUS_COLOR: Record<number, string> = {
     0: CHART_COLORS.amber,
     2: CHART_COLORS.violet,
-    3: CHART_COLORS.slate,
   };
   const pieData = data.byStatus.map((s) => ({
     name: s.label,
@@ -705,11 +712,32 @@ export function OpenDrillDownContent({
     color: STATUS_COLOR[s.status] ?? CHART_COLORS.slate,
   }));
 
-  const byInboxData = data.byInbox.map((i) => ({
-    name: i.name,
-    Conversas: i.count,
-  }));
-  const byInboxSeries: BarChartSeries[] = [
+  const openCount = data.openCount ?? data.byStatus.find((s) => s.status === 0)?.count ?? 0;
+  const pendingCount = data.pendingCount ?? data.byStatus.find((s) => s.status === 2)?.count ?? 0;
+
+  const distributionData = (() => {
+    if (distributionView === "departamento") {
+      return (data.byTeam ?? []).map((i) => ({ name: i.name, Conversas: i.count }));
+    }
+    if (distributionView === "atendente") {
+      return (data.byAssignee ?? []).map((i) => ({ name: i.name, Conversas: i.count }));
+    }
+    return data.byInbox.map((i) => ({ name: i.name, Conversas: i.count }));
+  })();
+
+  const distributionTitle = (() => {
+    if (distributionView === "departamento") return "Departamento com mais conversas em aberto";
+    if (distributionView === "atendente") return "Atendente com mais conversas em aberto";
+    return "Estados com mais conversas em aberto";
+  })();
+
+  const distributionDescription = (() => {
+    if (distributionView === "departamento") return "Todos os departamentos, incluindo sem departamento";
+    if (distributionView === "atendente") return "Top 10 atendentes por volume (desc)";
+    return "Top 10 estados com mais conversas abertas ou pendentes";
+  })();
+
+  const distributionSeries: BarChartSeries[] = [
     { key: "Conversas", label: "Conversas", color: CHART_COLORS.amber },
   ];
 
@@ -718,28 +746,49 @@ export function OpenDrillDownContent({
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <DrillDownSection
           title="Distribuição por status"
-          description="Snapshot atual"
+          description="Abertas e pendentes agora"
         >
           <DonutWithCenter
             data={pieData}
             centerLabel="Abertas"
-            centerValue={data.total.toLocaleString("pt-BR")}
+            centerValue={openCount.toLocaleString("pt-BR")}
+            secondaryLabel="Pendentes"
+            secondaryValue={pendingCount.toLocaleString("pt-BR")}
             height={280}
-            emptyMessage="Sem conversas em aberto"
+            emptyMessage="Sem conversas abertas ou pendentes"
           />
         </DrillDownSection>
+
         <DrillDownSection
-          title="Estados com mais conversas em aberto"
-          description="Top 10 — snapshot agora"
+          title={distributionTitle}
+          description={distributionDescription}
+          action={
+            <div className="flex items-center gap-1 rounded-lg border border-border bg-background/60 p-1">
+              {DISTRIBUTION_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setDistributionView(opt.value)}
+                  className={
+                    distributionView === opt.value
+                      ? "rounded-md bg-amber-500/15 px-2.5 py-1 text-xs font-medium text-amber-600 dark:text-amber-400 transition-colors"
+                      : "rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  }
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          }
         >
           <InteractiveBarChart
-            data={byInboxData}
-            series={byInboxSeries}
+            data={distributionData}
+            series={distributionSeries}
             layout="horizontal"
-            height={Math.max(280, Math.min(480, byInboxData.length * 28 + 60))}
+            height={Math.max(280, Math.min(480, distributionData.length * 28 + 60))}
             showLegend={false}
             yAxisWidth={160}
-            emptyMessage="Sem estados com conversas em aberto"
+            emptyMessage="Nenhum dado para exibir"
           />
         </DrillDownSection>
       </div>
@@ -747,16 +796,23 @@ export function OpenDrillDownContent({
       <DrillDownSection
         title={
           <>
-            Conversas em aberto agora
+            Conversas pendentes e em aberto agora
             <TotalBadge n={data.total} />
           </>
         }
-        description="20 mais antigas (last activity ascendente) — possíveis prioridades"
+        description="Ordenadas pela mais antiga (priorize a mais tempo sem resposta)"
       >
         <ConversationTable
-          items={data.open}
+          items={data.items ?? data.open}
           accountId={accountId}
-          emptyMessage="Nenhuma conversa em aberto"
+          emptyMessage="Nenhuma conversa aberta ou pendente"
+        />
+        <DrillDownPagination
+          page={data.page}
+          pageSize={data.pageSize}
+          total={data.total}
+          loading={loading}
+          onChange={setPage}
         />
       </DrillDownSection>
     </div>
@@ -1010,6 +1066,156 @@ export function ResolutionRateDrillDownContent({
           showLegend={false}
           formatValue={(v) => `${v.toFixed(1)}%`}
           emptyMessage="Sem histórico calculável no período"
+        />
+      </DrillDownSection>
+    </div>
+  );
+}
+
+/* -------------------------- Atendente -------------------------- */
+
+const AGENT_STATUS_COLOR: Record<number, string> = {
+  0: CHART_COLORS.amber,
+  1: CHART_COLORS.blue,
+  2: CHART_COLORS.violet,
+  3: CHART_COLORS.slate,
+};
+
+type AgentDistributionView = "estado" | "departamento";
+
+const AGENT_DISTRIBUTION_OPTIONS: { value: AgentDistributionView; label: string }[] = [
+  { value: "estado", label: "Por estado" },
+  { value: "departamento", label: "Por departamento" },
+];
+
+export function AgentDrillDownContent({
+  accountId,
+  period,
+  agentId,
+  agentName,
+  enabled,
+}: DrillDownProps & { agentId: number | null; agentName: string }) {
+  const [data, setData] = useState<AgentDrillDownData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [distView, setDistView] = useState<AgentDistributionView>("estado");
+
+  useEffect(() => {
+    setPage(1);
+  }, [period, agentId]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    async function run() {
+      setLoading(true);
+      const res = await getAgentDrillDownAction({ accountId, period, agentId, page, pageSize: 50 });
+      if (cancelled) return;
+      if (res.success && res.data) {
+        setData(res.data);
+        setError(null);
+      } else {
+        setError(res.error ?? "Erro desconhecido");
+      }
+      setLoading(false);
+    }
+    void run();
+    return () => { cancelled = true; };
+  }, [accountId, period, agentId, enabled, page]);
+
+  if (loading && !data) return <DrillDownSkeleton />;
+  if (error && !data) return <ErrorState message={error} />;
+  if (!data) return null;
+
+  const pieData = data.byStatus.map((s) => ({
+    name: s.label,
+    value: s.count,
+    color: AGENT_STATUS_COLOR[s.status] ?? CHART_COLORS.slate,
+  }));
+
+  const distributionData = distView === "departamento"
+    ? data.byTeam.map((i) => ({ name: i.name, Conversas: i.count }))
+    : data.byInbox.map((i) => ({ name: i.name, Conversas: i.count }));
+
+  const distributionSeries: BarChartSeries[] = [
+    { key: "Conversas", label: "Conversas", color: CHART_COLORS.violet },
+  ];
+
+  const distributionDescription = distView === "departamento"
+    ? "Todos os departamentos deste atendente"
+    : "Top 10 estados (inboxes) deste atendente";
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <DrillDownSection
+          title="Distribuição por status"
+          description={`Conversas de ${agentName} no período`}
+        >
+          <DonutWithCenter
+            data={pieData}
+            centerLabel="Total"
+            centerValue={data.total.toLocaleString("pt-BR")}
+            height={280}
+            emptyMessage="Sem conversas neste período"
+          />
+        </DrillDownSection>
+
+        <DrillDownSection
+          title={distView === "departamento" ? "Por departamento" : "Por estado"}
+          description={distributionDescription}
+          action={
+            <div className="flex items-center gap-1 rounded-lg border border-border bg-background/60 p-1">
+              {AGENT_DISTRIBUTION_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setDistView(opt.value)}
+                  className={
+                    distView === opt.value
+                      ? "rounded-md bg-violet-500/15 px-2.5 py-1 text-xs font-medium text-violet-600 dark:text-violet-400 transition-colors"
+                      : "rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  }
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          }
+        >
+          <InteractiveBarChart
+            data={distributionData}
+            series={distributionSeries}
+            layout="horizontal"
+            height={Math.max(280, Math.min(480, distributionData.length * 28 + 60))}
+            showLegend={false}
+            yAxisWidth={160}
+            emptyMessage="Nenhum dado para exibir"
+          />
+        </DrillDownSection>
+      </div>
+
+      <DrillDownSection
+        title={
+          <>
+            Conversas de {agentName}
+            <TotalBadge n={data.total} />
+          </>
+        }
+        description="Ordenadas pela mais recente"
+      >
+        <ConversationTable
+          items={data.items}
+          accountId={accountId}
+          emptyMessage="Nenhuma conversa encontrada"
+        />
+        <DrillDownPagination
+          page={data.page}
+          pageSize={data.pageSize}
+          total={data.total}
+          loading={loading}
+          onChange={setPage}
         />
       </DrillDownSection>
     </div>

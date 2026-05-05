@@ -57,7 +57,7 @@ export interface DashboardChartPoint {
 export interface DashboardTopAgent {
   id: number | null;
   name: string;
-  avgSeconds: number;
+  totalConversations: number;
 }
 
 export interface DashboardTopInbox {
@@ -151,7 +151,7 @@ type RowChart = {
 type RowAgent = {
   id: number | null;
   name: string | null;
-  avg_seconds: string | null;
+  total_conversations: string;
 };
 type RowInbox = {
   id: number;
@@ -349,23 +349,20 @@ export async function dashboardData(
             ORDER BY bucket ASC
           `;
 
-          // ---------- 6. Top atendentes mais rápidos ----------
-          // Filtra por `re.created_at` (evento first_response — domínio próprio).
+          // ---------- 6. Top atendentes com mais conversas ----------
+          // Filtra por c.last_activity_at (canonical "active") para alinhar
+          // com os demais KPIs. Limite 10 para mostrar ranking mais amplo.
           const sqlTopAgents = `
-            SELECT u.id, u.name, AVG(re.value)::float AS avg_seconds
-            FROM reporting_events re
-            JOIN conversations c ON c.id = re.conversation_id
+            SELECT u.id, u.name, COUNT(c.id)::bigint AS total_conversations
+            FROM conversations c
             JOIN users u ON u.id = c.assignee_id
-            WHERE re.account_id = $1
-              AND re.name = 'first_response'
-              AND re.value IS NOT NULL
-              AND re.created_at >= $2
-              AND re.created_at < $3
+            WHERE c.account_id = $1
+              AND c.last_activity_at >= $2
+              AND c.last_activity_at < $3
               ${matrixClause}
             GROUP BY u.id, u.name
-            HAVING COUNT(re.id) >= 3
-            ORDER BY avg_seconds ASC
-            LIMIT 5
+            ORDER BY total_conversations DESC
+            LIMIT 10
           `;
 
           // ---------- 7. Inboxes em aberto no período (atividade) ----------
@@ -619,11 +616,10 @@ export async function dashboardData(
               pending: Number(r.pending ?? 0),
             })),
             topAgents: topAgentsRes.rows
-              .filter((r) => r.avg_seconds !== null)
               .map((r) => ({
                 id: r.id ?? null,
                 name: r.name ?? "(sem nome)",
-                avgSeconds: Math.round(Number(r.avg_seconds ?? 0)),
+                totalConversations: Number(r.total_conversations ?? 0),
               })),
             topInboxes: topInboxesRes.rows
               .filter((r) => r.name)

@@ -158,13 +158,16 @@ export interface StatusDrillDownData {
 }
 
 /**
- * @deprecated use StatusDrillDownData. Type estendido por compat com
- * componentes antigos (que usam `byStatus[]` e `open[]`); preenchido apenas
- * pelo wrapper `getOpenDrillDown`. Será removido em v0.14.0.
+ * Drill-down "Conversas abertas e pendentes" (v0.47+).
+ * Inclui status=0 (abertas) + status=2 (pendentes) em uma única visão.
  */
 export interface OpenDrillDownData extends StatusDrillDownData {
   byStatus: DrillDownByStatus[];
   open: DrillDownConversationItem[];
+  openCount: number;
+  pendingCount: number;
+  byTeam: DrillDownByGroup[];
+  byAssignee: DrillDownByGroup[];
 }
 
 export interface ResolutionRateDrillDownData {
@@ -895,11 +898,14 @@ export async function getStatusDrillDown(
 }
 
 /**
- * @deprecated use getStatusDrillDown. Wrapper de compat para callers
- * existentes (KPI "Abertas no período"). Adiciona `byStatus[]` (distribuição
- * por status no recorte) e `open[]` (alias de items) para preservar a UI
- * antiga até T8 reescrever o componente. Cache key separado para isolar
- * payloads enquanto a UI antiga é gradualmente migrada.
+ * Drill-down "Conversas abertas e pendentes" (v0.47+).
+ *
+ * Inclui status=0 (Abertas) + status=2 (Pendentes) em uma única visão:
+ *  - Contagens separadas para donut com dois centros.
+ *  - byInbox / byTeam / byAssignee combinados (status IN (0,2)).
+ *  - Lista paginada ordenada por last_activity_at ASC (mais antigas primeiro).
+ *
+ * Canonical "active": filtra por c.last_activity_at (alinhado com KPI Abertas).
  */
 export async function getOpenDrillDown(
   connectionId: string,
@@ -909,6 +915,7 @@ export async function getOpenDrillDown(
   const excludeMatrixIA = args.excludeMatrixIA !== false;
   const page = Math.max(1, args.page ?? 1);
   const pageSize = Math.max(10, Math.min(200, args.pageSize ?? 50));
+  const offset = (page - 1) * pageSize;
 
   const filtersForHash = {
     period: {
@@ -921,7 +928,7 @@ export async function getOpenDrillDown(
   };
   const key = cacheKey({
     scope: "report",
-    name: "dashboard-drill-open-canonical-v0.42",
+    name: "dashboard-drill-open-canonical-v0.47",
     accountId: args.accountId,
     filtersHash: hashFilters(filtersForHash),
   });
@@ -932,52 +939,152 @@ export async function getOpenDrillDown(
     fetcher: () =>
       withChatwootResilience<OpenDrillDownData>(
         async () => {
-          // canonical "active" — KPI Abertas filtra por last_activity_at;
-          // distribuição por status segue mesma coorte. matrixClause via
-          // helper canônico.
           const matrixHelper = chatwootMatrixIaClause(excludeMatrixIA);
           const matrixClause = matrixHelper ? ` ${matrixHelper}` : "";
 
-          // Distribuição por status no recorte do período (open/pending/snoozed)
-          // — só usada pela UI antiga; será removida em T8.
+          const p3 = [args.accountId, args.period.start, args.period.end];
+
+          const sqlOpenCount = `
+            SELECT COUNT(*)::bigint AS total
+            FROM conversations c
+            WHERE c.account_id = $1
+              AND c.last_activity_at >= $2 AND c.last_activity_at < $3
+              AND c.status = 0
+              ${matrixClause}
+          `;
+          const sqlPendingCount = `
+            SELECT COUNT(*)::bigint AS total
+            FROM conversations c
+            WHERE c.account_id = $1
+              AND c.last_activity_at >= $2 AND c.last_activity_at < $3
+              AND c.status = 2
+              ${matrixClause}
+          `;
+          const sqlByInbox = `
+            SELECT i.id, i.name, COUNT(c.id)::bigint AS total
+            FROM conversations c
+            JOIN inboxes i ON i.id = c.inbox_id
+            WHERE c.account_id = $1
+              AND c.last_activity_at >= $2 AND c.last_activity_at < $3
+              AND c.status IN (0, 2)
+              ${matrixClause}
+            GROUP BY i.id, i.name
+            ORDER BY total DESC
+            LIMIT 10
+          `;
+          const sqlByTeam = `
+            SELECT t.id, COALESCE(t.name, 'Sem departamento') AS name,
+                   COUNT(c.id)::bigint AS total
+            FROM conversations c
+            LEFT JOIN teams t ON t.id = c.team_id
+            WHERE c.account_id = $1
+              AND c.last_activity_at >= $2 AND c.last_activity_at < $3
+              AND c.status IN (0, 2)
+              ${matrixClause}
+            GROUP BY t.id, t.name
+            ORDER BY total DESC
+            LIMIT 10
+          `;
+          const sqlByAssignee = `
+            SELECT u.id, COALESCE(u.name, 'Sem atendente') AS name,
+                   COUNT(c.id)::bigint AS total
+            FROM conversations c
+            LEFT JOIN users u ON u.id = c.assignee_id
+            WHERE c.account_id = $1
+              AND c.last_activity_at >= $2 AND c.last_activity_at < $3
+              AND c.status IN (0, 2)
+              ${matrixClause}
+            GROUP BY u.id, u.name
+            ORDER BY total DESC
+            LIMIT 10
+          `;
           const sqlByStatus = `
             SELECT c.status, COUNT(*)::bigint AS total
             FROM conversations c
             WHERE c.account_id = $1
-              AND c.last_activity_at >= $2
-              AND c.last_activity_at < $3
-              AND c.status IN (0, 2, 3)
+              AND c.last_activity_at >= $2 AND c.last_activity_at < $3
+              AND c.status IN (0, 2)
               ${matrixClause}
             GROUP BY c.status
             ORDER BY total DESC
           `;
+          const sqlList = `
+            SELECT
+              c.id, c.display_id,
+              ct.name AS contact_name,
+              i.name AS inbox_name,
+              t.name AS team_name,
+              u.name AS assignee_name,
+              c.status,
+              c.last_activity_at
+            FROM conversations c
+            LEFT JOIN contacts ct ON ct.id = c.contact_id
+            LEFT JOIN inboxes i ON i.id = c.inbox_id
+            LEFT JOIN teams t ON t.id = c.team_id
+            LEFT JOIN users u ON u.id = c.assignee_id
+            WHERE c.account_id = $1
+              AND c.last_activity_at >= $2 AND c.last_activity_at < $3
+              AND c.status IN (0, 2)
+              ${matrixClause}
+            ORDER BY c.last_activity_at ASC NULLS LAST
+            LIMIT $4 OFFSET $5
+          `;
 
-          const [statusResult, byStatusRes] = await Promise.all([
-            getStatusDrillDown(connectionId, {
-              accountId: args.accountId,
-              period: args.period,
-              excludeMatrixIA,
-              ttlSeconds: ttl,
-              status: STATUS_OPEN,
-              page,
-              pageSize,
-            }),
-            queryNexusChat<RowStatus>(connectionId, sqlByStatus, [
-              args.accountId,
-              args.period.start,
-              args.period.end,
-            ]),
-          ]);
+          const [openRes, pendingRes, byInboxRes, byTeamRes, byAssigneeRes, byStatusRes, listRes] =
+            await Promise.all([
+              queryNexusChat<RowCount>(connectionId, sqlOpenCount, p3),
+              queryNexusChat<RowCount>(connectionId, sqlPendingCount, p3),
+              queryNexusChat<RowInbox>(connectionId, sqlByInbox, p3),
+              queryNexusChat<RowGroup>(connectionId, sqlByTeam, p3),
+              queryNexusChat<RowGroup>(connectionId, sqlByAssignee, p3),
+              queryNexusChat<RowStatus>(connectionId, sqlByStatus, p3),
+              queryNexusChat<RowConversation>(connectionId, sqlList, [
+                args.accountId, args.period.start, args.period.end, pageSize, offset,
+              ]),
+            ]);
 
-          const base = statusResult.data;
+          const openCount = Number(openRes.rows[0]?.total ?? 0);
+          const pendingCount = Number(pendingRes.rows[0]?.total ?? 0);
+          const total = openCount + pendingCount;
+
+          const items = listRes.rows.map((r) => ({
+            id: r.id,
+            displayId: r.display_id,
+            contactName: r.contact_name,
+            inboxName: r.inbox_name,
+            teamName: r.team_name,
+            assigneeName: r.assignee_name,
+            status: r.status,
+            lastActivityAt: new Date(r.last_activity_at).toISOString(),
+          }));
+
           return {
-            ...base,
-            open: base.items,
+            status: STATUS_OPEN,
+            total,
+            openCount,
+            pendingCount,
+            byInbox: byInboxRes.rows
+              .filter((r) => r.name)
+              .map((r) => ({ id: r.id, name: r.name ?? "(sem nome)", count: Number(r.total ?? 0) })),
+            byTeam: byTeamRes.rows.map((r) => ({
+              id: r.id ?? null,
+              name: r.name ?? "Sem departamento",
+              count: Number(r.total ?? 0),
+            })),
+            byAssignee: byAssigneeRes.rows.map((r) => ({
+              id: r.id ?? null,
+              name: r.name ?? "Sem atendente",
+              count: Number(r.total ?? 0),
+            })),
             byStatus: byStatusRes.rows.map((r) => ({
               status: Number(r.status),
               label: STATUS_LABELS[Number(r.status)] ?? "—",
               count: Number(r.total ?? 0),
             })),
+            open: items,
+            items,
+            page,
+            pageSize,
           };
         },
         { fallbackKey: key },
@@ -1687,6 +1794,190 @@ export async function getByTeamDrillDown(
               createdAt: new Date(r.created_at).toISOString(),
               lastActivityAt: new Date(r.last_activity_at).toISOString(),
             })),
+          };
+        },
+        { fallbackKey: key },
+      ),
+  });
+}
+
+/* ------------------------------ byAgent ------------------------------ */
+
+export interface AgentDrillDownData {
+  agentId: number | null;
+  agentName: string;
+  total: number;
+  byStatus: DrillDownByStatus[];
+  byInbox: DrillDownByInbox[];
+  byTeam: DrillDownByGroup[];
+  items: DrillDownConversationItem[];
+  page: number;
+  pageSize: number;
+}
+
+/**
+ * Drill-down por atendente — mostra distribuição de status (donut),
+ * Estado/Departamento (bar toggle) e lista paginada de conversas.
+ *
+ * Canonical "active": coorte = c.last_activity_at ∈ período + assignee_id.
+ */
+export async function getAgentDrillDown(
+  connectionId: string,
+  args: {
+    accountId: number;
+    period: { start: Date; end: Date };
+    agentId: number | null;
+    excludeMatrixIA?: boolean;
+    ttlSeconds?: number;
+    page?: number;
+    pageSize?: number;
+  },
+) {
+  const ttl = args.ttlSeconds ?? DEFAULT_TTL_SECONDS;
+  const excludeMatrixIA = args.excludeMatrixIA !== false;
+  const page = Math.max(1, args.page ?? 1);
+  const pageSize = Math.max(10, Math.min(200, args.pageSize ?? 50));
+  const offset = (page - 1) * pageSize;
+
+  const filtersForHash = {
+    period: {
+      start: args.period.start.toISOString(),
+      end: args.period.end.toISOString(),
+    },
+    agentId: args.agentId,
+    page,
+    pageSize,
+    excludeMatrixIA,
+  };
+  const key = cacheKey({
+    scope: "report",
+    name: "dashboard-drill-agent-canonical-v0.47",
+    accountId: args.accountId,
+    filtersHash: hashFilters(filtersForHash),
+  });
+
+  return withCache<AgentDrillDownData>({
+    key,
+    ttlSeconds: ttl,
+    fetcher: () =>
+      withChatwootResilience<AgentDrillDownData>(
+        async () => {
+          const matrixHelper = chatwootMatrixIaClause(excludeMatrixIA);
+          const matrixClause = matrixHelper ? ` ${matrixHelper}` : "";
+          const agentClause =
+            args.agentId === null
+              ? " AND c.assignee_id IS NULL"
+              : " AND c.assignee_id = $4::int";
+          const baseParams =
+            args.agentId === null
+              ? [args.accountId, args.period.start, args.period.end]
+              : [args.accountId, args.period.start, args.period.end, args.agentId];
+
+          const sqlTotal = `
+            SELECT COUNT(c.id)::bigint AS total
+            FROM conversations c
+            WHERE c.account_id = $1
+              AND c.last_activity_at >= $2 AND c.last_activity_at < $3
+              ${agentClause}
+              ${matrixClause}
+          `;
+          const sqlByStatus = `
+            SELECT c.status, COUNT(*)::bigint AS total
+            FROM conversations c
+            WHERE c.account_id = $1
+              AND c.last_activity_at >= $2 AND c.last_activity_at < $3
+              ${agentClause}
+              ${matrixClause}
+            GROUP BY c.status
+            ORDER BY total DESC
+          `;
+          const sqlByInbox = `
+            SELECT i.id, i.name, COUNT(c.id)::bigint AS total
+            FROM conversations c
+            JOIN inboxes i ON i.id = c.inbox_id
+            WHERE c.account_id = $1
+              AND c.last_activity_at >= $2 AND c.last_activity_at < $3
+              ${agentClause}
+              ${matrixClause}
+            GROUP BY i.id, i.name
+            ORDER BY total DESC
+            LIMIT 10
+          `;
+          const sqlByTeam = `
+            SELECT t.id, COALESCE(t.name, 'Sem departamento') AS name,
+                   COUNT(c.id)::bigint AS total
+            FROM conversations c
+            LEFT JOIN teams t ON t.id = c.team_id
+            WHERE c.account_id = $1
+              AND c.last_activity_at >= $2 AND c.last_activity_at < $3
+              ${agentClause}
+              ${matrixClause}
+            GROUP BY t.id, t.name
+            ORDER BY total DESC
+            LIMIT 10
+          `;
+          const listParamOffset = baseParams.length + 1;
+          const sqlList = `
+            SELECT
+              c.id, c.display_id,
+              ct.name AS contact_name,
+              i.name AS inbox_name,
+              t.name AS team_name,
+              u.name AS assignee_name,
+              c.status,
+              c.last_activity_at
+            FROM conversations c
+            LEFT JOIN contacts ct ON ct.id = c.contact_id
+            LEFT JOIN inboxes i ON i.id = c.inbox_id
+            LEFT JOIN teams t ON t.id = c.team_id
+            LEFT JOIN users u ON u.id = c.assignee_id
+            WHERE c.account_id = $1
+              AND c.last_activity_at >= $2 AND c.last_activity_at < $3
+              ${agentClause}
+              ${matrixClause}
+            ORDER BY c.last_activity_at DESC NULLS LAST
+            LIMIT $${listParamOffset} OFFSET $${listParamOffset + 1}
+          `;
+          const listParams = [...baseParams, pageSize, offset];
+
+          const [totalRes, byStatusRes, byInboxRes, byTeamRes, listRes] =
+            await Promise.all([
+              queryNexusChat<RowCount>(connectionId, sqlTotal, baseParams),
+              queryNexusChat<RowStatus>(connectionId, sqlByStatus, baseParams),
+              queryNexusChat<RowInbox>(connectionId, sqlByInbox, baseParams),
+              queryNexusChat<RowGroup>(connectionId, sqlByTeam, baseParams),
+              queryNexusChat<RowConversation>(connectionId, sqlList, listParams),
+            ]);
+
+          return {
+            agentId: args.agentId,
+            agentName: "(sem nome)",
+            total: Number(totalRes.rows[0]?.total ?? 0),
+            byStatus: byStatusRes.rows.map((r) => ({
+              status: Number(r.status),
+              label: STATUS_LABELS[Number(r.status)] ?? "—",
+              count: Number(r.total ?? 0),
+            })),
+            byInbox: byInboxRes.rows
+              .filter((r) => r.name)
+              .map((r) => ({ id: r.id, name: r.name ?? "(sem nome)", count: Number(r.total ?? 0) })),
+            byTeam: byTeamRes.rows.map((r) => ({
+              id: r.id ?? null,
+              name: r.name ?? "Sem departamento",
+              count: Number(r.total ?? 0),
+            })),
+            items: listRes.rows.map((r) => ({
+              id: r.id,
+              displayId: r.display_id,
+              contactName: r.contact_name,
+              inboxName: r.inbox_name,
+              teamName: r.team_name,
+              assigneeName: r.assignee_name,
+              status: r.status,
+              lastActivityAt: new Date(r.last_activity_at).toISOString(),
+            })),
+            page,
+            pageSize,
           };
         },
         { fallbackKey: key },

@@ -126,7 +126,7 @@ export function KpiClickableCard({
       {/* Linha topo: label (esq.) + badge + ícone (top-right) */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+          <p className="text-[13px] font-medium uppercase tracking-wide text-muted-foreground">
             {label}
           </p>
         </div>

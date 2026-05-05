@@ -18,7 +18,6 @@ import {
   type DashboardActionResult,
   type DashboardPeriod,
 } from "@/lib/actions/dashboard";
-import { formatDuration } from "@/lib/utils/format-time";
 import { CHART_COLORS } from "@/lib/charts/colors";
 import { ConversationsLineChart } from "./conversations-line-chart";
 import { DashboardFilters } from "./dashboard-filters";
@@ -32,6 +31,7 @@ import { StatusDistributionCard } from "./status-distribution-card";
 import { NoResponseDrillDownContent } from "./no-response-drill-down";
 import { TeamDrillDownContent } from "./team-drill-down";
 import {
+  AgentDrillDownContent,
   OpenDrillDownContent,
   ReceivedDrillDownContent,
   ResolutionRateDrillDownContent,
@@ -109,7 +109,8 @@ type DrillDownState =
   | "noResponse"
   | { kind: "team"; id: number | null; name: string }
   | { kind: "inbox"; id: number; name: string }
-  | { kind: "status"; status: DashboardStatusCode };
+  | { kind: "status"; status: DashboardStatusCode }
+  | { kind: "agent"; id: number | null; name: string };
 
 function isDrillDownObject(
   d: DrillDownState,
@@ -325,6 +326,9 @@ export function DashboardContent({
   const statusDrill = isDrillDownObject(drillDown) && drillDown.kind === "status"
     ? drillDown
     : null;
+  const agentDrill = isDrillDownObject(drillDown) && drillDown.kind === "agent"
+    ? drillDown
+    : null;
 
   return (
     <motion.div
@@ -403,7 +407,7 @@ export function DashboardContent({
           icon={MessageSquare}
           iconBg="bg-amber-500/10"
           iconColor="text-amber-400"
-          label="Conversas abertas"
+          label="Conversas abertas e pendentes"
           subtitle="com atividade no período"
           value={stats.open.toLocaleString("pt-BR")}
           trend={trendFor(stats.comparison.open, "%")}
@@ -461,16 +465,20 @@ export function DashboardContent({
         </motion.div>
         <motion.div variants={itemVariants}>
           <Top5ListCard
-            icon={TrendingUp}
+            icon={Users}
             iconColor="text-violet-400"
             iconBg="bg-violet-500/10"
-            title="Atendentes mais rápidos"
-            subtitle="Tempo médio de 1ª resposta"
+            title="Atendentes com mais conversas"
+            subtitle="Volume no período — clique para detalhes"
             items={topAgents.map((a) => ({
+              id: a.id,
               name: a.name,
-              value: formatDuration(a.avgSeconds),
+              value: a.totalConversations.toLocaleString("pt-BR"),
             }))}
-            emptyMessage="Sem first response no período."
+            emptyMessage="Sem dados de atendentes no período."
+            onItemClick={(id, name) =>
+              setDrillDown({ kind: "agent", id, name })
+            }
           />
         </motion.div>
       </div>
@@ -513,8 +521,8 @@ export function DashboardContent({
         title="Conversas recebidas no período"
         subtitle="Volume, distribuição e últimas chegadas"
         icon={Inbox}
-        iconColor="text-violet-400"
-        iconBg="bg-violet-500/10"
+        iconColor="text-green-400"
+        iconBg="bg-green-500/10"
         size="xl"
       >
         <ReceivedDrillDownContent
@@ -530,8 +538,8 @@ export function DashboardContent({
         title="Conversas resolvidas no período"
         subtitle="Mesma coorte de criação — taxa coerente"
         icon={CheckCircle2}
-        iconColor="text-emerald-400"
-        iconBg="bg-emerald-500/10"
+        iconColor="text-blue-400"
+        iconBg="bg-blue-500/10"
         size="xl"
       >
         <ResolvedDrillDownContent
@@ -544,8 +552,8 @@ export function DashboardContent({
       <DrillDownDialog
         open={drillDown === "open"}
         onOpenChange={(o) => (o ? setDrillDown("open") : closeDrillDown())}
-        title="Conversas abertas no período"
-        subtitle="Criadas no período e ainda em aberto"
+        title="Conversas abertas e pendentes"
+        subtitle="Criadas no período, pendentes e ainda em aberto"
         icon={MessageSquare}
         iconColor="text-amber-400"
         iconBg="bg-amber-500/10"
@@ -564,8 +572,8 @@ export function DashboardContent({
         title="Análise da taxa de resolução"
         subtitle="Atual vs anterior, histórico e top atendentes"
         icon={TrendingUp}
-        iconColor="text-violet-400"
-        iconBg="bg-violet-500/10"
+        iconColor="text-foreground"
+        iconBg="bg-foreground/10"
         size="xl"
       >
         <ResolutionRateDrillDownContent
@@ -651,6 +659,27 @@ export function DashboardContent({
             period={period}
             status={statusDrill.status}
             enabled={statusDrill !== null}
+          />
+        ) : null}
+      </DrillDownDialog>
+
+      <DrillDownDialog
+        open={agentDrill !== null}
+        onOpenChange={(o) => (o ? null : closeDrillDown())}
+        title={agentDrill ? `Atendente: ${agentDrill.name}` : "Atendente"}
+        subtitle="Distribuição de status, por estado/departamento e conversas"
+        icon={Users}
+        iconColor="text-violet-400"
+        iconBg="bg-violet-500/10"
+        size="xl"
+      >
+        {agentDrill ? (
+          <AgentDrillDownContent
+            accountId={accountId}
+            period={period}
+            agentId={agentDrill.id}
+            agentName={agentDrill.name}
+            enabled={agentDrill !== null}
           />
         ) : null}
       </DrillDownDialog>

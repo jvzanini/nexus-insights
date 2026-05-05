@@ -13,6 +13,7 @@ import {
   getStatusDrillDown,
   getNoResponseDrillDown,
   getByTeamDrillDown,
+  getAgentDrillDown,
   type OpenDrillDownData,
   type ReceivedDrillDownData,
   type ResolutionRateDrillDownData,
@@ -20,6 +21,7 @@ import {
   type StatusDrillDownData,
   type NoResponseDrillDownData,
   type ByTeamDrillDownData,
+  type AgentDrillDownData,
 } from "@/lib/chatwoot/queries/dashboard-drill-down";
 import { getDashboardPeriod } from "@/lib/dashboard-period";
 import {
@@ -197,8 +199,8 @@ export async function getOpenDrillDownAction(args: {
       accountId: args.accountId,
       period: current,
       excludeMatrixIA: auth.excludeMatrixIA,
-      page: args.page,
-      pageSize: args.pageSize,
+      page: args.page ?? 1,
+      pageSize: args.pageSize ?? 50,
     });
     return { success: true, data: result.data };
   } catch (err) {
@@ -245,6 +247,32 @@ export async function getByTeamDrillDownAction(args: {
     return { success: true, data: result.data };
   } catch (err) {
     console.error("[getByTeamDrillDownAction]", err);
+    return { success: false, error: "Erro ao carregar drill-down" };
+  }
+}
+
+export async function getAgentDrillDownAction(args: {
+  accountId: number;
+  period: DashboardPeriod;
+  agentId: number | null;
+  page?: number;
+  pageSize?: number;
+}): Promise<DrillDownActionResult<AgentDrillDownData>> {
+  try {
+    const auth = await authorize(args.accountId);
+    if (!auth.ok) return { success: false, error: auth.error };
+    const { current } = await resolvePeriodRanges(args.period);
+    const result = await getAgentDrillDown(auth.connectionId, {
+      accountId: args.accountId,
+      period: current,
+      agentId: args.agentId,
+      excludeMatrixIA: auth.excludeMatrixIA,
+      page: args.page ?? 1,
+      pageSize: args.pageSize ?? 50,
+    });
+    return { success: true, data: result.data };
+  } catch (err) {
+    console.error("[getAgentDrillDownAction]", err);
     return { success: false, error: "Erro ao carregar drill-down" };
   }
 }
