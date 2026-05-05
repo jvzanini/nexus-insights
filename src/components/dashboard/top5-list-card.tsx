@@ -105,7 +105,7 @@ export function Top5ListCard({
                     <button
                       type="button"
                       onClick={() => onItemClick(item.id ?? null, item.name)}
-                      className="flex w-full items-center gap-3 py-2.5 first:pt-0 last:pb-0 rounded hover:bg-accent/30 transition-colors px-1 -mx-1 cursor-pointer"
+                      className="flex w-full items-center gap-3 py-3.5 first:pt-0 last:pb-0 rounded hover:bg-accent/30 transition-colors px-1 -mx-1 cursor-pointer"
                     >
                       {content}
                     </button>
@@ -116,7 +116,7 @@ export function Top5ListCard({
               return (
                 <li
                   key={`${item.name}-${idx}`}
-                  className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
+                  className="flex items-center gap-3 py-3.5 first:pt-0 last:pb-0"
                 >
                   {content}
                 </li>

@@ -12,7 +12,7 @@ interface DashboardFiltersProps {
 }
 
 const periods: Array<{ value: DashboardPeriod; label: string }> = [
-  { value: "dia", label: "Dia" },
+  { value: "dia", label: "Hoje" },
   { value: "semana", label: "Semana" },
   { value: "mes", label: "Mês" },
 ];

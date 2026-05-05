@@ -77,7 +77,8 @@ export function PeriodNavigator({
       return formatDayDate(range.start, tz);
     }
     if (period === "semana") {
-      return `${formatDayDate(range.start, tz)} — ${formatDayDate(range.end, tz)}`;
+      const inclusiveEnd = new Date(new Date(range.end).getTime() - 1).toISOString();
+      return `${formatDayDate(range.start, tz)} — ${formatDayDate(inclusiveEnd, tz)}`;
     }
     return formatMonthYear(range.start, tz);
   })();

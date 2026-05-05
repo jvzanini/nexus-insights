@@ -35,11 +35,11 @@ interface SeriesDef {
 
 /**
  * Cores conforme feedback de João (2026-05-01):
- * Recebidas → verde, Abertas → amarelo, Resolvidas → azul, Pendentes → roxo.
- * Ordem conforme feedback (2026-05-05): recebidas, pendentes, resolvidas, abertas.
+ * Novas → verde, Abertas → amarelo, Resolvidas → azul, Pendentes → roxo.
+ * Ordem conforme feedback (2026-05-05): novas, pendentes, resolvidas, abertas.
  */
 const SERIES: readonly SeriesDef[] = [
-  { key: "received", label: "Recebidas", color: "#22c55e" },
+  { key: "received", label: "Novas", color: "#22c55e" },
   { key: "pending", label: "Pendentes", color: "#8b5cf6" },
   { key: "resolved", label: "Resolvidas", color: "#3b82f6" },
   { key: "open", label: "Abertas", color: "#f59e0b" },
@@ -47,6 +47,13 @@ const SERIES: readonly SeriesDef[] = [
 
 const STORAGE_KEY = "dashboard.chart.visibleSeries";
 const DEFAULT_VISIBLE: SeriesKey[] = ["received", "open", "resolved", "pending"];
+
+export interface KpiTotals {
+  received: number;
+  open: number;
+  resolved: number;
+  pending: number;
+}
 
 interface ConversationsLineChartProps {
   data: DashboardChartPoint[];
@@ -58,6 +65,8 @@ interface ConversationsLineChartProps {
   referenceDate: string | null;
   nextAvailable: boolean;
   onReferenceDateChange: (iso: string | null) => void;
+  /** Totais corretos vindos do backend — Novas/Resolvidas=soma de eventos; Abertas/Pendentes=snapshot atual. */
+  kpiTotals?: KpiTotals;
 }
 
 interface ChartRow {
@@ -158,6 +167,24 @@ export function generateEmptyBuckets(
 }
 
 /**
+ * Transforma uma lista de ChartRow em acumulado progressivo (carry-forward).
+ * Se hora 7 tem 5 novas e hora 8 tem 0, hora 8 mantém 5.
+ * Exportado para uso nos drill-down charts.
+ */
+export function toCumulative(rows: ChartRow[]): ChartRow[] {
+  let acc = { received: 0, open: 0, resolved: 0, pending: 0 };
+  return rows.map((r) => {
+    acc = {
+      received: acc.received + r.received,
+      open: acc.open + r.open,
+      resolved: acc.resolved + r.resolved,
+      pending: acc.pending + r.pending,
+    };
+    return { ...r, ...acc };
+  });
+}
+
+/**
  * Mapeia DashboardChartPoint[] (vindo do backend) em uma linha por bucket
  * cobrindo todo o range. Buckets sem dado real ganham zeros nas 4 séries.
  *
@@ -239,6 +266,7 @@ export function ConversationsLineChart({
   referenceDate,
   nextAvailable,
   onReferenceDateChange,
+  kpiTotals,
 }: ConversationsLineChartProps) {
   const [visibleSeries, setVisibleSeries] = useState<SeriesKey[]>(DEFAULT_VISIBLE);
 
@@ -276,22 +304,25 @@ export function ConversationsLineChart({
 
   const title = granularity === "hour" ? "Conversas por hora" : "Conversas por dia";
 
-  const chartData = useMemo(
+  const rawChartData = useMemo(
     () => fillBuckets(data, granularity, tz, range),
     [data, granularity, tz, range],
   );
 
+  const chartData = useMemo(() => toCumulative(rawChartData), [rawChartData]);
+
   const seriesTotals = useMemo(
-    () => ({
-      received: chartData.reduce((s, r) => s + r.received, 0),
-      open: chartData.reduce((s, r) => s + r.open, 0),
-      resolved: chartData.reduce((s, r) => s + r.resolved, 0),
-      pending: chartData.reduce((s, r) => s + r.pending, 0),
-    }),
-    [chartData],
+    () =>
+      kpiTotals ?? {
+        received: rawChartData.reduce((s, r) => s + r.received, 0),
+        open: rawChartData.reduce((s, r) => s + r.open, 0),
+        resolved: rawChartData.reduce((s, r) => s + r.resolved, 0),
+        pending: rawChartData.reduce((s, r) => s + r.pending, 0),
+      },
+    [rawChartData, kpiTotals],
   );
 
-  const isEmpty = chartData.every(
+  const isEmpty = rawChartData.every(
     (p) => p.received === 0 && p.open === 0 && p.resolved === 0 && p.pending === 0,
   );
 

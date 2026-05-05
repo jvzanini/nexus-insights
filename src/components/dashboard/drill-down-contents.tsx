@@ -31,7 +31,7 @@ import {
   type AreaChartSeries,
   type BarChartSeries,
 } from "@/components/charts";
-import { fillBuckets } from "./conversations-line-chart";
+import { fillBuckets, toCumulative } from "./conversations-line-chart";
 import { CHART_COLORS } from "@/lib/charts/colors";
 import { StatusBadge } from "@/components/reports/status-badge";
 import { OpenInChatwoot } from "@/components/reports/open-in-chatwoot";
@@ -232,22 +232,22 @@ function ReceivedTooltip(props: TooltipContentProps<ValueType, NameType>) {
 }
 
 function ReceivedLineChart({ data }: { data: ReceivedDrillDownData }) {
-  const chartData = useMemo(
-    () =>
-      fillBuckets(
-        data.chart.map((p) => ({ ...p, open: 0, pending: 0 })),
-        data.granularity,
-        data.tz,
-        data.range,
-      ).map((r) => ({
-        label: r.label,
-        windowLabel: r.windowLabel,
-        Recebidas: r.received,
-      })),
-    [data.chart, data.granularity, data.tz, data.range],
-  );
+  const chartData = useMemo(() => {
+    const filled = fillBuckets(
+      data.chart.map((p) => ({ ...p, open: 0, pending: 0 })),
+      data.granularity,
+      data.tz,
+      data.range,
+    );
+    const cumulative = toCumulative(filled);
+    return cumulative.map((r) => ({
+      label: r.label,
+      windowLabel: r.windowLabel,
+      Novas: r.received,
+    }));
+  }, [data.chart, data.granularity, data.tz, data.range]);
 
-  const isEmpty = chartData.every((p) => p.Recebidas === 0);
+  const isEmpty = chartData.every((p) => p.Novas === 0);
 
   if (isEmpty) {
     return (
@@ -282,8 +282,8 @@ function ReceivedLineChart({ data }: { data: ReceivedDrillDownData }) {
           <Tooltip content={ReceivedTooltip} cursor={{ stroke: "rgba(63, 63, 70, 0.6)" }} />
           <Line
             type="monotone"
-            dataKey="Recebidas"
-            name="Recebidas"
+            dataKey="Novas"
+            name="Novas"
             stroke="#22c55e"
             strokeWidth={2.5}
             dot={false}
@@ -410,7 +410,7 @@ export function ReceivedDrillDownContent({
       <DrillDownSection
         title={
           <>
-            Conversas recebidas
+            Novas conversas
             <TotalBadge n={data.total} />
           </>
         }
@@ -459,20 +459,20 @@ function ResolvedTooltip(props: TooltipContentProps<ValueType, NameType>) {
 }
 
 function ResolvedLineChart({ data }: { data: ResolvedDrillDownData }) {
-  const chartData = useMemo(
-    () =>
-      fillBuckets(
-        data.chart.map((p) => ({ ...p, open: 0, pending: 0 })),
-        data.granularity,
-        data.tz,
-        data.range,
-      ).map((r) => ({
-        label: r.label,
-        windowLabel: r.windowLabel,
-        Resolvidas: r.resolved,
-      })),
-    [data.chart, data.granularity, data.tz, data.range],
-  );
+  const chartData = useMemo(() => {
+    const filled = fillBuckets(
+      data.chart.map((p) => ({ ...p, open: 0, pending: 0 })),
+      data.granularity,
+      data.tz,
+      data.range,
+    );
+    const cumulative = toCumulative(filled);
+    return cumulative.map((r) => ({
+      label: r.label,
+      windowLabel: r.windowLabel,
+      Resolvidas: r.resolved,
+    }));
+  }, [data.chart, data.granularity, data.tz, data.range]);
 
   const isEmpty = chartData.every((p) => p.Resolvidas === 0);
 

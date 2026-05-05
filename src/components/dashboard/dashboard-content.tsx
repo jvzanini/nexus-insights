@@ -373,7 +373,7 @@ export function DashboardContent({
           icon={Inbox}
           iconBg="bg-green-500/10"
           iconColor="text-green-400"
-          label="Conversas recebidas"
+          label="Novas conversas"
           subtitle="criadas no período"
           value={stats.received.toLocaleString("pt-BR")}
           trend={trendFor(stats.comparison.received, "%")}
@@ -451,6 +451,12 @@ export function DashboardContent({
           referenceDate={referenceDate}
           nextAvailable={data.nextAvailable ?? false}
           onReferenceDateChange={handleReferenceDateChange}
+          kpiTotals={{
+            received: stats.received,
+            open: byStatus.find((s) => s.status === 0)?.count ?? 0,
+            resolved: stats.resolved,
+            pending: byStatus.find((s) => s.status === 2)?.count ?? 0,
+          }}
         />
       </motion.div>
 
@@ -518,12 +524,20 @@ export function DashboardContent({
       <DrillDownDialog
         open={drillDown === "received"}
         onOpenChange={(o) => (o ? setDrillDown("received") : closeDrillDown())}
-        title="Conversas recebidas no período"
+        title="Novas conversas no período"
         subtitle="Volume, distribuição e últimas chegadas"
         icon={Inbox}
         iconColor="text-green-400"
         iconBg="bg-green-500/10"
         size="xl"
+        headerExtra={
+          <div className="flex items-baseline gap-1 mr-1">
+            <span className="text-xl font-bold tabular-nums text-green-400">
+              {stats.received.toLocaleString("pt-BR")}
+            </span>
+            <span className="text-xs text-muted-foreground">conversas</span>
+          </div>
+        }
       >
         <ReceivedDrillDownContent
           accountId={accountId}
@@ -541,6 +555,14 @@ export function DashboardContent({
         iconColor="text-blue-400"
         iconBg="bg-blue-500/10"
         size="xl"
+        headerExtra={
+          <div className="flex items-baseline gap-1 mr-1">
+            <span className="text-xl font-bold tabular-nums text-blue-400">
+              {stats.resolved.toLocaleString("pt-BR")}
+            </span>
+            <span className="text-xs text-muted-foreground">conversas</span>
+          </div>
+        }
       >
         <ResolvedDrillDownContent
           accountId={accountId}
