@@ -68,7 +68,7 @@ export function NexMessage({
     //  - sem blob mas hasStoredAudio: skeleton "carregando áudio…" (IDB hidratando).
     //  - sem blob e sem hasStoredAudio: fallback "(áudio expirado)" — legacy.
     return (
-      <div className="group flex w-full justify-end">
+      <div className="group/msg flex w-full justify-end">
         <div className="relative flex max-w-[85%] flex-col gap-1.5">
           {audioBlobUrl ? (
             <AudioPlayer
@@ -107,7 +107,7 @@ export function NexMessage({
   return (
     <div
       className={cn(
-        "group flex w-full",
+        "group/msg flex w-full",
         isUser ? "justify-end" : "justify-start",
       )}
     >
@@ -184,7 +184,7 @@ function CopyButton({ text }: { text: string }) {
       onClick={onCopy}
       aria-label={copied ? "Copiado" : "Copiar mensagem"}
       className={cn(
-        "absolute -top-2 -right-2 flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border border-border bg-background text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100",
+        "absolute -top-2 -right-2 flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border border-border bg-background text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/msg:opacity-100",
         "shadow-sm",
       )}
       style={{ opacity: copied ? 1 : undefined }}
