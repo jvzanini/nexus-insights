@@ -22,7 +22,8 @@ import { getColorByIndex } from "@/lib/charts/colors";
 
 export interface AreaChartData {
   name: string;
-  [key: string]: string | number;
+  isFuture?: boolean;
+  [key: string]: string | number | boolean | null | undefined;
 }
 
 export interface AreaChartSeries {
@@ -57,6 +58,11 @@ export interface InteractiveAreaChartProps {
    * Margem entre os ticks e o eixo X — aplicado como `tickMargin` (default 12).
    */
   xAxisPadding?: number;
+  /**
+   * Intervalo entre labels do eixo X (0 = todos, 1 = a cada 2, 2 = a cada 3, …).
+   * Útil para gráficos horários onde 24 labels ficam sobrepostos.
+   */
+  xAxisInterval?: number | "preserveStart" | "preserveEnd" | "preserveStartEnd";
 }
 
 const defaultFormat = (v: number) =>
@@ -111,6 +117,7 @@ export function InteractiveAreaChart({
   yAxisCurrency,
   xAxisFontSize = 13,
   xAxisPadding = 12,
+  xAxisInterval,
 }: InteractiveAreaChartProps) {
   const prefersReducedMotion = useReducedMotion();
   const gradientId = useId();
@@ -202,6 +209,7 @@ export function InteractiveAreaChart({
             tick={{ fill: "currentColor", fontSize: xAxisFontSize }}
             fontSize={xAxisFontSize}
             tickMargin={xAxisPadding}
+            interval={xAxisInterval}
           />
           <YAxis
             tickLine={false}
@@ -226,14 +234,18 @@ export function InteractiveAreaChart({
               active?: boolean;
               payload?: unknown;
               label?: unknown;
-            }) => (
-              <ChartTooltip
-                active={props.active}
-                payload={props.payload as ChartTooltipPayloadItem[] | undefined}
-                label={String(props.label ?? "")}
-                formatValue={formatValue}
-              />
-            )}
+            }) => {
+              const entry = data.find((d) => d.name === String(props.label ?? ""));
+              if (entry?.isFuture) return null;
+              return (
+                <ChartTooltip
+                  active={props.active}
+                  payload={props.payload as ChartTooltipPayloadItem[] | undefined}
+                  label={String(props.label ?? "")}
+                  formatValue={formatValue}
+                />
+              );
+            }}
           />
           {showLegend && series.length > 1 ? (
             <Legend
@@ -263,6 +275,7 @@ export function InteractiveAreaChart({
                 stackId={stacked ? "stack" : undefined}
                 fillOpacity={dim ? 0.3 : 1}
                 strokeOpacity={dim ? 0.4 : 1}
+                connectNulls={false}
                 isAnimationActive={!prefersReducedMotion}
                 animationBegin={0}
                 animationDuration={800}

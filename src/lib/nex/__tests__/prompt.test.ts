@@ -48,8 +48,8 @@ describe("IDENTITY_BASE", () => {
   });
 
   it("é enxuta (anti-prolixidade)", () => {
-    // v0.49: IDENTITY_BASE expandida com guia de ferramentas e mapeamento de negócio
-    expect(IDENTITY_BASE.length).toBeLessThan(6000);
+    // v0.52: IDENTITY_BASE expandida com guia de document/CPF search e mapeamento de etiquetas
+    expect(IDENTITY_BASE.length).toBeLessThan(8000);
   });
 
   it("menciona 'dashboard summary' apenas como jargão proibido (não como instrução de uso)", () => {

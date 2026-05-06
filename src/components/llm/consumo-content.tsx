@@ -168,6 +168,69 @@ function isWhisperModel(model: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Full-period chart helpers
+// ---------------------------------------------------------------------------
+
+function currentHourInBrt(): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: TZ,
+    hour: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+  const h = parseInt(parts.find((p) => p.type === "hour")?.value ?? "23", 10);
+  return Number.isNaN(h) || h === 24 ? 0 : h;
+}
+
+function todayIsoInBrt(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date());
+}
+
+function dateIsoInBrt(date: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(date);
+}
+
+function buildHourlyFullPeriod(stats: UsageSummary | null): AreaChartData[] {
+  const currentHour = currentHourInBrt();
+  const map = new Map<number, number>();
+  for (const h of stats?.byHour ?? []) map.set(h.hour, h.costBrl);
+  return Array.from({ length: 24 }, (_, hour) => {
+    const isFuture = hour > currentHour;
+    return {
+      name: `${String(hour).padStart(2, "0")}:00`,
+      Custo: isFuture ? null : Number((map.get(hour) ?? 0).toFixed(6)),
+      isFuture,
+    };
+  });
+}
+
+function buildDailyFullPeriod(
+  stats: UsageSummary | null,
+  rangeStart: Date,
+  rangeEnd: Date,
+): AreaChartData[] {
+  const todayIso = todayIsoInBrt();
+  const map = new Map<string, number>();
+  for (const d of stats?.byDay ?? []) map.set(d.day, d.costBrl);
+
+  const rows: AreaChartData[] = [];
+  let curIso = dateIsoInBrt(rangeStart);
+  const endIso = dateIsoInBrt(rangeEnd);
+
+  while (curIso < endIso) {
+    const isFuture = curIso > todayIso;
+    rows.push({
+      name: dayLabelFmt.format(isoLocalToDate(curIso)).replace(".", ""),
+      Custo: isFuture ? null : Number((map.get(curIso) ?? 0).toFixed(6)),
+      isFuture,
+    });
+    const [y, m, d] = curIso.split("-").map(Number);
+    const next = new Date(y, (m ?? 1) - 1, (d ?? 1) + 1);
+    curIso = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
+  }
+  return rows;
+}
+
+// ---------------------------------------------------------------------------
 // Componente principal
 // ---------------------------------------------------------------------------
 
@@ -219,7 +282,7 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
     Record<string, string[]>
   >({});
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [sheetRow, setSheetRow] = useState<UsageDetailRow | null>(null);
 
   // Navegação do gráfico "Custo por dia"
@@ -280,6 +343,7 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
   useEffect(() => {
     if (!chartReferenceDate || !canonicalLabel) {
       setChartStats(null);
+      setIsChartLoading(false);
       return;
     }
     let cancelled = false;
@@ -459,18 +523,19 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
   const isHourly = pill === "hoje" && activeChartStats?.byHour !== undefined;
 
   const areaData = useMemo<AreaChartData[]>(() => {
-    if (!activeChartStats) return [];
-    if (isHourly && activeChartStats.byHour) {
-      return activeChartStats.byHour.map((h) => ({
-        name: `${String(h.hour).padStart(2, "0")}:00`,
-        Custo: Number(h.costBrl.toFixed(6)),
-      }));
+    if (isHourly) {
+      return buildHourlyFullPeriod(activeChartStats);
     }
+    if (navigatorPeriod) {
+      return buildDailyFullPeriod(activeChartStats, effectiveChartRange.start, effectiveChartRange.end);
+    }
+    // Pill não navegável (todos, custom) — exibe apenas dias com dados reais.
+    if (!activeChartStats) return [];
     return activeChartStats.byDay.map((d) => ({
       name: dayLabelFmt.format(isoLocalToDate(d.day)).replace(".", ""),
       Custo: Number(d.costBrl.toFixed(6)),
     }));
-  }, [activeChartStats, isHourly]);
+  }, [activeChartStats, isHourly, navigatorPeriod, effectiveChartRange.start, effectiveChartRange.end]);
 
   const providerPieData = useMemo<PieChartData[]>(() => {
     if (!stats) return [];
@@ -666,6 +731,7 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
                 referenceDate={chartReferenceDate}
                 nextAvailable={chartNextAvailable}
                 onChange={setChartReferenceDate}
+                minDate={minDate.toISOString()}
               />
             ) : null}
           </CardHeader>
@@ -685,9 +751,10 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
                 height={300}
                 formatValue={formatBrlRaw}
                 yAxisCurrency="BRL"
-                xAxisFontSize={13}
+                xAxisFontSize={isHourly ? 11 : 13}
                 xAxisPadding={12}
-                ariaLabel="Custo diário em BRL"
+                xAxisInterval={isHourly ? 1 : undefined}
+                ariaLabel={isHourly ? "Custo por hora em BRL" : "Custo diário em BRL"}
                 emptyMessage="Sem custos no período"
                 emptyHint="Tente ampliar o intervalo de datas."
               />

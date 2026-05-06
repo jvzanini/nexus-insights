@@ -89,7 +89,7 @@ describe("getNexusChatPool", () => {
         user: "u",
         password: "plaintext-pass",
         min: 0,
-        max: 2,
+        max: 1,
       }),
     );
   });

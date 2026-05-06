@@ -16,6 +16,8 @@ interface PeriodNavigatorProps {
   /** Backend indica se há período seguinte (range.end < now). */
   nextAvailable: boolean;
   onChange: (referenceDate: string | null) => void;
+  /** ISO string — bloqueia navegação para trás antes desta data. */
+  minDate?: string;
 }
 
 const MONTH_ABBR_PT = [
@@ -71,6 +73,7 @@ export function PeriodNavigator({
   referenceDate,
   nextAvailable,
   onChange,
+  minDate,
 }: PeriodNavigatorProps) {
   const label = (() => {
     if (period === "dia") {
@@ -83,7 +86,12 @@ export function PeriodNavigator({
     return formatMonthYear(range.start, tz);
   })();
 
-  const handlePrev = () => onChange(shiftReferenceDate(referenceDate, period, "prev"));
+  const prevAvailable = !minDate || new Date(range.start) > new Date(minDate);
+
+  const handlePrev = () => {
+    if (!prevAvailable) return;
+    onChange(shiftReferenceDate(referenceDate, period, "prev"));
+  };
   const handleNext = () => {
     if (!nextAvailable) return;
     onChange(shiftReferenceDate(referenceDate, period, "next"));
@@ -102,11 +110,12 @@ export function PeriodNavigator({
       <button
         type="button"
         onClick={handlePrev}
+        disabled={!prevAvailable}
         className={cn(
-          "inline-flex h-7 w-7 items-center justify-center rounded transition-colors duration-150 cursor-pointer",
-          "text-violet-600 dark:text-violet-300",
-          "hover:bg-violet-500/15 hover:text-violet-800 dark:hover:bg-violet-500/25 dark:hover:text-violet-100",
-          "focus-visible:outline-none focus-visible:bg-violet-500/20",
+          "inline-flex h-7 w-7 items-center justify-center rounded transition-colors duration-150",
+          prevAvailable
+            ? "text-violet-600 dark:text-violet-300 hover:bg-violet-500/15 hover:text-violet-800 dark:hover:bg-violet-500/25 dark:hover:text-violet-100 cursor-pointer focus-visible:outline-none focus-visible:bg-violet-500/20"
+            : "text-violet-400/40 dark:text-violet-300/30 cursor-not-allowed",
         )}
         aria-label="Período anterior"
       >

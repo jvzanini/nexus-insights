@@ -185,6 +185,10 @@ describe("composeSystemPrompt — suggestions_enabled (v0.31)", () => {
       [],
     );
     expect(out).not.toMatch(/## Sugestões clicáveis\b(?!\s*\(HABILITADAS\))/);
-    expect(out).not.toMatch(/\[\[suggestions\]\]/);
+    // A IDENTITY_BASE pode mencionar [[suggestions]] no texto de instrução, mas
+    // a seção de sugestões clicáveis (que inclui o formato [[suggestions]]:)
+    // só é injetada quando suggestionsEnabled=true.
+    expect(out).not.toMatch(/\[\[suggestions\]\]:/);
+    expect(out).not.toMatch(/## Sugestões clicáveis \(HABILITADAS/);
   });
 });
