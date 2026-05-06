@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   MessageSquare,
   PieChart as PieChartIcon,
+  RefreshCw,
   TrendingUp,
   Users,
 } from "lucide-react";
@@ -133,7 +134,13 @@ export function DashboardContent({
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [staleError, setStaleError] = useState<string | null>(null);
+  const dataRef = useRef<DashboardSnapshot | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
 
   const [drillDown, setDrillDown] = useState<DrillDownState>(null);
   const closeDrillDown = useCallback(() => setDrillDown(null), []);
@@ -176,13 +183,23 @@ export function DashboardContent({
         if (result.success && result.data) {
           setData(result.data);
           setError(null);
+          setStaleError(null);
         } else {
-          setError(result.error ?? "Erro ao carregar dados");
+          const msg = result.error ?? "Erro ao carregar dados";
+          if (dataRef.current) {
+            setStaleError(msg);
+          } else {
+            setError(msg);
+          }
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         console.error("[fetchData] erro ao chamar getDashboardData:", err);
-        setError(`Erro de conexão: ${message}`);
+        if (dataRef.current) {
+          setStaleError(`Erro de conexão: ${message}`);
+        } else {
+          setError(`Erro de conexão: ${message}`);
+        }
       } finally {
         setIsLoading(false);
         setIsInitialLoad(false);
@@ -352,6 +369,17 @@ export function DashboardContent({
           <TourButton tour={dashboardTour} />
         </div>
       </motion.div>
+
+      {/* Banner de dados desatualizados (stale) */}
+      {staleError ? (
+        <motion.div
+          variants={itemVariants}
+          className="flex items-center gap-2.5 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-2.5 text-sm text-amber-400"
+        >
+          <RefreshCw className="h-3.5 w-3.5 shrink-0" />
+          <span>Dados podem estar desatualizados — {staleError}</span>
+        </motion.div>
+      ) : null}
 
       {/* Filtros (sem account selector — vive no sidebar) */}
       <motion.div variants={itemVariants} data-tour="dashboard-filters">
