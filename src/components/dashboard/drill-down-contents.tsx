@@ -31,7 +31,7 @@ import {
   type AreaChartSeries,
   type BarChartSeries,
 } from "@/components/charts";
-import { fillBuckets, toCumulative, truncateToNow } from "./conversations-line-chart";
+import { buildFullPeriodRows, fillBuckets, toCumulative, truncateToNow } from "./conversations-line-chart";
 import { CHART_COLORS } from "@/lib/charts/colors";
 import { StatusBadge } from "@/components/reports/status-badge";
 import { OpenInChatwoot } from "@/components/reports/open-in-chatwoot";
@@ -211,7 +211,9 @@ const DISTRIBUTION_OPTIONS: { value: DistributionView; label: string }[] = [
 function ReceivedTooltip(props: TooltipContentProps<ValueType, NameType>) {
   const { active, payload, label } = props;
   if (!active || !payload?.length) return null;
-  const windowLabel = (payload[0]?.payload as { windowLabel?: string } | undefined)?.windowLabel;
+  const row = payload[0]?.payload as { windowLabel?: string; isFuture?: boolean } | undefined;
+  if (row?.isFuture) return null;
+  const windowLabel = row?.windowLabel;
   return (
     <div className="rounded-lg border border-border bg-card p-3 shadow-lg">
       <p className="text-sm font-medium text-foreground mb-1">{label}</p>
@@ -233,20 +235,22 @@ function ReceivedTooltip(props: TooltipContentProps<ValueType, NameType>) {
 
 function ReceivedLineChart({ data }: { data: ReceivedDrillDownData }) {
   const chartData = useMemo(() => {
-    const filled = fillBuckets(
+    const raw = fillBuckets(
       data.chart.map((p) => ({ ...p, open: 0, pending: 0 })),
       data.granularity,
       data.tz,
       data.range,
     );
-    return truncateToNow(toCumulative(filled)).map((r) => ({
+    const full = buildFullPeriodRows(truncateToNow(toCumulative(raw)), raw);
+    return full.map((r) => ({
       label: r.label,
       windowLabel: r.windowLabel,
+      isFuture: r.isFuture,
       Novas: r.received,
     }));
   }, [data.chart, data.granularity, data.tz, data.range]);
 
-  const isEmpty = chartData.every((p) => p.Novas === 0);
+  const isEmpty = chartData.every((p) => p.isFuture || p.Novas === 0 || p.Novas === null);
 
   if (isEmpty) {
     return (
@@ -287,6 +291,7 @@ function ReceivedLineChart({ data }: { data: ReceivedDrillDownData }) {
             strokeWidth={2.5}
             dot={false}
             activeDot={{ r: 5, strokeWidth: 0 }}
+            connectNulls={false}
           />
         </LineChart>
       </ResponsiveContainer>
@@ -437,7 +442,9 @@ export function ReceivedDrillDownContent({
 function ResolvedTooltip(props: TooltipContentProps<ValueType, NameType>) {
   const { active, payload, label } = props;
   if (!active || !payload?.length) return null;
-  const windowLabel = (payload[0]?.payload as { windowLabel?: string } | undefined)?.windowLabel;
+  const row = payload[0]?.payload as { windowLabel?: string; isFuture?: boolean } | undefined;
+  if (row?.isFuture) return null;
+  const windowLabel = row?.windowLabel;
   return (
     <div className="rounded-lg border border-border bg-card p-3 shadow-lg">
       <p className="text-sm font-medium text-foreground mb-1">{label}</p>
@@ -459,20 +466,22 @@ function ResolvedTooltip(props: TooltipContentProps<ValueType, NameType>) {
 
 function ResolvedLineChart({ data }: { data: ResolvedDrillDownData }) {
   const chartData = useMemo(() => {
-    const filled = fillBuckets(
+    const raw = fillBuckets(
       data.chart.map((p) => ({ ...p, open: 0, pending: 0 })),
       data.granularity,
       data.tz,
       data.range,
     );
-    return truncateToNow(toCumulative(filled)).map((r) => ({
+    const full = buildFullPeriodRows(truncateToNow(toCumulative(raw)), raw);
+    return full.map((r) => ({
       label: r.label,
       windowLabel: r.windowLabel,
+      isFuture: r.isFuture,
       Resolvidas: r.resolved,
     }));
   }, [data.chart, data.granularity, data.tz, data.range]);
 
-  const isEmpty = chartData.every((p) => p.Resolvidas === 0);
+  const isEmpty = chartData.every((p) => p.isFuture || p.Resolvidas === 0 || p.Resolvidas === null);
 
   if (isEmpty) {
     return (
@@ -513,6 +522,7 @@ function ResolvedLineChart({ data }: { data: ResolvedDrillDownData }) {
             strokeWidth={2.5}
             dot={false}
             activeDot={{ r: 5, strokeWidth: 0 }}
+            connectNulls={false}
           />
         </LineChart>
       </ResponsiveContainer>
