@@ -465,7 +465,7 @@ async function queryContacts(
   if (search) {
     const term = `%${search}%`;
     where.push(
-      `(co.name ILIKE $${++p} OR co.email ILIKE $${p} OR co.phone_number ILIKE $${p})`,
+      `(co.name ILIKE $${++p} OR co.email ILIKE $${p} OR co.phone_number ILIKE $${p} OR co.identifier ILIKE $${p})`,
     );
     params.push(term);
   }
@@ -476,6 +476,7 @@ async function queryContacts(
       co.name,
       co.email,
       co.phone_number,
+      co.identifier,
       co.created_at
     FROM contacts co
     WHERE ${where.join(" AND ")}
@@ -489,6 +490,7 @@ async function queryContacts(
     name: string | null;
     email: string | null;
     phone_number: string | null;
+    identifier: string | null;
     created_at: Date | null;
   }>(sql, params);
 
@@ -499,6 +501,7 @@ async function queryContacts(
       name: r.name,
       email: r.email,
       phone_number: r.phone_number,
+      identifier: r.identifier,
       created_at: r.created_at?.toISOString?.() ?? null,
     })),
   };

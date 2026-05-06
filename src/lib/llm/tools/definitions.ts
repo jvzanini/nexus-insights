@@ -93,13 +93,13 @@ export const NEX_TOOLS: ToolDefinition[] = [
   },
   {
     name: "query_contacts",
-    description: "Busca contatos por nome, telefone ou e-mail (ILIKE parcial).",
+    description: "Busca contatos por nome, telefone, e-mail ou identificador/CPF (ILIKE parcial).",
     parameters: {
       type: "object",
       properties: {
         search: {
           type: "string",
-          description: "Termo de busca aplicado em name, phone_number e email",
+          description: "Termo de busca aplicado em name, phone_number, email e identifier (CPF/ID externo)",
         },
         limit: { type: "integer", default: 20, maximum: 100 },
       },
