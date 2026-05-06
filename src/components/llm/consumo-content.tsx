@@ -5,7 +5,6 @@ import {
   useEffect,
   useMemo,
   useState,
-  useTransition,
 } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import {
@@ -58,7 +57,13 @@ import { PROVIDER_LABELS } from "@/lib/llm/pricing";
 import { formatBrl4, formatUsd4 } from "@/lib/llm/format";
 import { formatDuration } from "@/lib/format/date";
 import { type PeriodKey as LegacyPeriodKey } from "@/lib/reports/period";
-import { getPeriodInTz, type PeriodKey } from "@/lib/datetime-core";
+import {
+  getPeriodInTz,
+  getCanonicalPeriod,
+  type PeriodKey,
+  type CanonicalPeriodLabel,
+} from "@/lib/datetime-core";
+import { PeriodNavigator } from "@/components/dashboard/period-navigator";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { UsageDetailSheet } from "@/components/llm/usage-detail-sheet";
 import { UsageTableFilters } from "@/components/llm/usage-table-filters";
@@ -214,8 +219,13 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
     Record<string, string[]>
   >({});
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isLoading, setIsLoading] = useState(false);
   const [sheetRow, setSheetRow] = useState<UsageDetailRow | null>(null);
+
+  // Navegação do gráfico "Custo por dia"
+  const [chartReferenceDate, setChartReferenceDate] = useState<string | null>(null);
+  const [chartStats, setChartStats] = useState<UsageSummary | null>(null);
+  const [isChartLoading, setIsChartLoading] = useState(false);
 
   // Calcula intervalo efetivo a partir da pill atual.
   const range = useMemo(
@@ -235,6 +245,57 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
     ambiente,
     pageSize,
   ]);
+
+  // Reset navegação do gráfico ao trocar pill.
+  useEffect(() => {
+    setChartReferenceDate(null);
+    setChartStats(null);
+  }, [pill]);
+
+  // Mapeamento pill → tipo de navegação do gráfico.
+  const navigatorPeriod: "dia" | "semana" | "mes" | null =
+    pill === "hoje" ? "dia" :
+    pill === "semana_atual" ? "semana" :
+    pill === "mes_atual" ? "mes" :
+    null;
+
+  // Label canônico para getCanonicalPeriod.
+  const canonicalLabel: CanonicalPeriodLabel | null =
+    pill === "hoje" ? "hoje" :
+    pill === "semana_atual" ? "semana" :
+    pill === "mes_atual" ? "mes" :
+    null;
+
+  // Range efetivo do gráfico (main range ou range navegado).
+  const effectiveChartRange = useMemo(() => {
+    if (!canonicalLabel || !chartReferenceDate) return range;
+    const cp = getCanonicalPeriod({ label: canonicalLabel, tz: TZ, refIso: chartReferenceDate, weekStartsOn: 1 });
+    return { start: cp.start, end: cp.end };
+  }, [canonicalLabel, chartReferenceDate, range]);
+
+  // Próximo período disponível quando o range do gráfico termina antes de agora.
+  const chartNextAvailable = effectiveChartRange.end < new Date();
+
+  // Fetch separado de stats para o gráfico quando navigando.
+  useEffect(() => {
+    if (!chartReferenceDate || !canonicalLabel) {
+      setChartStats(null);
+      return;
+    }
+    let cancelled = false;
+    setIsChartLoading(true);
+    fetchUsageStats({
+      start: effectiveChartRange.start.toISOString(),
+      end: effectiveChartRange.end.toISOString(),
+      provider: globalProvider ?? null,
+    }).then((s) => {
+      if (!cancelled) { setChartStats(s); setIsChartLoading(false); }
+    }).catch(() => {
+      if (!cancelled) setIsChartLoading(false);
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chartReferenceDate, effectiveChartRange.start.getTime(), effectiveChartRange.end.getTime(), globalProvider]);
 
   // Sincroniza filtro global com URL (?provider=...).
   useEffect(() => {
@@ -265,7 +326,8 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
   useEffect(() => {
     let cancelled = false;
     setError(null);
-    startTransition(async () => {
+    setIsLoading(true);
+    const run = async () => {
       try {
         const startIso = range.start.toISOString();
         const endIso = range.end.toISOString();
@@ -295,8 +357,11 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
         const msg =
           err instanceof Error ? err.message : "Falha ao carregar dados.";
         setError(msg);
+      } finally {
+        if (!cancelled) setIsLoading(false);
       }
-    });
+    };
+    void run();
     return () => {
       cancelled = true;
     };
@@ -383,26 +448,29 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
   );
 
   const totalPages = Math.max(1, Math.ceil(detailsTotal / pageSize));
-  const isFirstLoad = stats === null && isPending;
+  const isFirstLoad = stats === null && isLoading;
 
   // ---- Charts data --------------------------------------------------------
 
+  // Stats efetivos para o gráfico de área (navegação tem prioridade).
+  const activeChartStats = chartStats ?? stats;
+
   // v0.31.0: pill="hoje" usa byHour (24 buckets) quando disponível.
-  const isHourly = pill === "hoje" && stats?.byHour !== undefined;
+  const isHourly = pill === "hoje" && activeChartStats?.byHour !== undefined;
 
   const areaData = useMemo<AreaChartData[]>(() => {
-    if (!stats) return [];
-    if (isHourly && stats.byHour) {
-      return stats.byHour.map((h) => ({
+    if (!activeChartStats) return [];
+    if (isHourly && activeChartStats.byHour) {
+      return activeChartStats.byHour.map((h) => ({
         name: `${String(h.hour).padStart(2, "0")}:00`,
         Custo: Number(h.costBrl.toFixed(6)),
       }));
     }
-    return stats.byDay.map((d) => ({
+    return activeChartStats.byDay.map((d) => ({
       name: dayLabelFmt.format(isoLocalToDate(d.day)).replace(".", ""),
       Custo: Number(d.costBrl.toFixed(6)),
     }));
-  }, [stats, isHourly]);
+  }, [activeChartStats, isHourly]);
 
   const providerPieData = useMemo<PieChartData[]>(() => {
     if (!stats) return [];
@@ -495,7 +563,7 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
             aria-label="Filtrar por ambiente"
           />
         </div>
-        {isPending ? (
+        {isLoading ? (
           <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
             Atualizando…
@@ -575,14 +643,31 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
         ))}
       </motion.div>
 
-      {/* Charts grid */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card className="rounded-2xl border border-border bg-muted/30">
-          <CardHeader>
+      {/* Charts grid — custo ocupa 2/3, distribuição 1/3 */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Card className="rounded-2xl border border-border bg-muted/30 lg:col-span-2">
+          <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="flex items-center gap-2">
               <Coins className="h-4 w-4 text-violet-500" />
               {isHourly ? "Custo por hora" : "Custo por dia"}
+              {isChartLoading ? (
+                <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" aria-hidden />
+              ) : null}
             </CardTitle>
+            {navigatorPeriod ? (
+              <PeriodNavigator
+                period={navigatorPeriod}
+                range={{
+                  start: effectiveChartRange.start.toISOString(),
+                  end: effectiveChartRange.end.toISOString(),
+                }}
+                tz={TZ}
+                weekStartsOn={1}
+                referenceDate={chartReferenceDate}
+                nextAvailable={chartNextAvailable}
+                onChange={setChartReferenceDate}
+              />
+            ) : null}
           </CardHeader>
           <CardContent>
             {isFirstLoad ? (
@@ -745,7 +830,7 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
                       colSpan={9}
                       className="py-8 text-center text-sm text-muted-foreground"
                     >
-                      {isPending
+                      {isLoading
                         ? "Carregando…"
                         : "Nenhuma chamada no período."}
                     </TableCell>
@@ -833,7 +918,7 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
                   type="button"
                   aria-label="Página anterior"
                   onClick={() => handlePageChange(Math.max(0, page - 1))}
-                  disabled={page === 0 || isPending}
+                  disabled={page === 0 || isLoading}
                   className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <ChevronLeft className="h-4 w-4" aria-hidden />
@@ -847,7 +932,7 @@ export function ConsumoContent({ minDate: minDateIso }: ConsumoContentProps) {
                   onClick={() =>
                     handlePageChange(Math.min(totalPages - 1, page + 1))
                   }
-                  disabled={page >= totalPages - 1 || isPending}
+                  disabled={page >= totalPages - 1 || isLoading}
                   className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <ChevronRight className="h-4 w-4" aria-hidden />

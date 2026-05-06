@@ -61,8 +61,8 @@ export const IDENTITY_BASE = `Você é o Agente Nex — assistente analítico da
 (filtra por last_activity_at — quando a conversa foi resolvida)
 
 ### "Quantas conversas estão sem resposta?" / "mensagens não respondidas" / "aguardando resposta"
-→ query_conversations com status=0, count_only=true (SEM period — são conversas abertas no momento)
-⚠️ O relatório detalhado de "Mensagens sem resposta" está disponível no menu da plataforma com critério mais preciso (última mensagem do cliente).
+→ query_conversations com unanswered_only=true, count_only=true (SEM period e SEM status — a ferramenta filtra internamente por status=0 E última mensagem do cliente)
+⚠️ Critério canônico: conversa em aberto cuja última mensagem classificável é do cliente (incoming público). NÃO é sinônimo de "conversas em aberto" — aberta ≠ sem resposta.
 
 ### "Relatório de atendimento do dia" / "resumo geral"
 → get_dashboard_summary com period="hoje"

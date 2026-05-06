@@ -18,7 +18,7 @@ export const NEX_TOOLS: ToolDefinition[] = [
   {
     name: "query_conversations",
     description:
-      "Conta ou lista conversas por filtros. IMPORTANTE: o campo 'period' filtra pela data de CRIAÇÃO da conversa (created_at), não pela última atividade. Inboxes = estados brasileiros (ex: 'SP-São Paulo', 'MG-Minas Gerais'). Para perguntas de estado atual sem período, omita 'period'.",
+      "Conta ou lista conversas por filtros. Inboxes = estados brasileiros (ex: 'São Paulo', 'Minas Gerais'). Para perguntas de estado atual sem período, omita 'period'.",
     parameters: {
       type: "object",
       properties: {
@@ -30,7 +30,7 @@ export const NEX_TOOLS: ToolDefinition[] = [
         period: {
           type: "string",
           description:
-            "Filtra conversas pela data de CRIAÇÃO. Valores: 'hoje' | 'ontem' | '7d' | '30d' | 'mes_atual' | 'mes_anterior' | 'semana_atual'. Range customizado: JSON {\"start\":\"ISO\",\"end\":\"ISO\"}. Omita para retornar todas sem filtro de data.",
+            "Filtro de período. Sem status (recebidas/novas): filtra por created_at. Com status (aberta/resolvida/pendente): filtra por last_activity_at. Valores: 'hoje' | 'ontem' | '7d' | '30d' | 'mes_atual' | 'mes_anterior' | 'semana_atual'. Range customizado: JSON {\"start\":\"ISO\",\"end\":\"ISO\"}. Omita para retornar todas sem filtro de data.",
         },
         assignee_name: {
           type: "string",
@@ -53,6 +53,11 @@ export const NEX_TOOLS: ToolDefinition[] = [
           type: "boolean",
           default: false,
           description: "Se true, retorna apenas o total (número). Use sempre que o usuário pedir uma contagem.",
+        },
+        unanswered_only: {
+          type: "boolean",
+          default: false,
+          description: "Se true, filtra apenas conversas SEM RESPOSTA: em aberto cuja última mensagem classificável é do cliente (incoming). Use para 'conversas sem resposta', 'aguardando resposta', 'não respondidas'. Não combine com period — essas conversas existem no momento atual.",
         },
       },
     },
@@ -117,7 +122,7 @@ export const NEX_TOOLS: ToolDefinition[] = [
           enum: ["count", "avg_first_response_time", "avg_reply_time"],
           description: "count=contagem, avg_first_response_time=tempo até 1ª resposta (segundos), avg_reply_time=tempo médio de resposta (segundos)",
         },
-        period: { type: "string", description: "Filtro de período (filtra por created_at das conversas)" },
+        period: { type: "string", description: "Filtro de período. Sem status: filtra por created_at. Com status: filtra por last_activity_at." },
         status: { type: "integer", enum: [0, 1, 2, 3], description: "Filtrar por status" },
         limit: { type: "integer", default: 10, description: "Máximo de grupos retornados" },
       },

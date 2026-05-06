@@ -19,6 +19,7 @@ import "server-only";
 
 import { chatwootQuery } from "@/lib/chatwoot/pool";
 import { getPlatformTz, getPeriodInTz, type PeriodKey } from "@/lib/datetime";
+import { buildLastClassificationMsgCte, MSG_INCOMING } from "@/lib/reports/canonical";
 import { getKnownAccounts } from "@/lib/tenant";
 import { prisma } from "@/lib/prisma";
 import { getActiveLlmConfig } from "@/lib/llm/get-active-config";
@@ -219,6 +220,7 @@ async function queryConversations(
   const labelName = asString(args.label_name);
   const limit = clampLimit(args.limit, 50);
   const countOnly = asBool(args.count_only, false);
+  const unansweredOnly = asBool(args.unanswered_only, false);
   const period = await resolvePeriod(args.period);
 
   const params: unknown[] = [accountId, MATRIX_IA_INBOX_ID];
@@ -255,10 +257,19 @@ async function queryConversations(
     params.push(`%${labelName}%`);
   }
 
+  // "Sem resposta" = em aberto cuja última mensagem classificável é do cliente.
+  // Usa a CTE canônica para evitar subquery ad-hoc (§11 canonical-data-rules).
+  const cte = unansweredOnly ? buildLastClassificationMsgCte() : "";
+  const lcmJoin = unansweredOnly
+    ? `JOIN last_classification_msg lcm ON lcm.conversation_id = c.id AND lcm.message_type = ${MSG_INCOMING}`
+    : "";
+
   if (countOnly) {
     const sql = `
+      ${cte}
       SELECT COUNT(*)::bigint AS total
       FROM conversations c
+      ${lcmJoin}
       LEFT JOIN users u ON u.id = c.assignee_id
       LEFT JOIN inboxes i ON i.id = c.inbox_id
       LEFT JOIN teams t ON t.id = c.team_id
@@ -269,6 +280,7 @@ async function queryConversations(
   }
 
   const sql = `
+    ${cte}
     SELECT
       c.id,
       c.status,
@@ -279,6 +291,7 @@ async function queryConversations(
       t.name AS team_name,
       u.name AS assignee_name
     FROM conversations c
+    ${lcmJoin}
     LEFT JOIN users u ON u.id = c.assignee_id
     LEFT JOIN inboxes i ON i.id = c.inbox_id
     LEFT JOIN teams t ON t.id = c.team_id
