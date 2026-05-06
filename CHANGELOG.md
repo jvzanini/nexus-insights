@@ -1,5 +1,27 @@
 # Changelog
 
+## [v0.51.0] 2026-05-06 — Dashboard: retry pool, stale banner, polling wired, gráfico período completo
+
+### Confiabilidade — conexões PG
+- **Retry com backoff em `queryNexusChat`**: erros transitórios de conexão (`53300 too_many_connections`, `08006`, `08001`, `08P01`, `53200`) são retentados até 3x com delays 200ms/400ms antes de lançar. Elimina o "Não foi possível carregar o dashboard" causado por pico momentâneo de conexões.
+- **Banner âmbar não-destrutivo**: quando um re-poll falha mas já há dados carregados, o dashboard exibe um banner de aviso discreto ("Atualização temporariamente indisponível") sem apagar os dados — experiência degradada mas funcional em vez de tela em branco.
+
+### Polling configurável
+- **Intervalo lido de settings**: `dashboard/page.tsx` lê `polling.live_seconds` (default 30s, mín 5s, máx 300s) e `polling.refresh_button_enabled` de `getAllSettings()` e passa para `DashboardContent`. O hardcode `POLL_INTERVAL = 60_000` foi removido.
+- **Botão refresh condicional**: `DashboardFilters` só renderiza o botão de refresh se `showRefreshButton=true` — controlado pelo setting.
+
+### Configurações — seção Atualização
+- **Controles obsoletos removidos**: `historicalSeconds` (era `polling.historical_seconds`) e `sseEnabled` (era `realtime.sse_enabled`) removidos do `PollingSettingsForm` e da página — nenhum dos dois era lido em lugar algum. Formulário agora mostra apenas os 2 controles que realmente funcionam.
+- **Textos atualizados**: labels e helpers explicam claramente o que cada setting faz no dashboard.
+
+### Gráfico de período completo
+- **Eixo X completo**: `buildFullPeriodRows()` (exportada) constrói o array completo do período — buckets passados com valores acumulados, buckets futuros com `isFuture=true` e séries `null`. O gráfico mostra todas as 24h (modo dia) ou todos os dias (semana/mês); a linha se encerra no presente.
+- **Sem linha nos buckets futuros**: `connectNulls={false}` em cada `<Line>` — Recharts não conecta pontos nulos.
+- **Sem tooltip nos buckets futuros**: `CustomTooltip` retorna `null` quando `isFuture` é truthy.
+- **Aplicado nos drill-downs**: `ReceivedLineChart` e `ResolvedLineChart` dentro dos drill-downs de Novas/Resolvidas usam o mesmo padrão.
+
+---
+
 ## [v0.50.x] 2026-05-06 — Agente Nex: calibração automática com 46 cenários reais (100%)
 
 ### Sistema de auto-calibração
