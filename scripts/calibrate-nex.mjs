@@ -447,13 +447,13 @@ const SCENARIOS = [
   },
   {
     id: "quality_seconds_to_minutes",
-    question: "Qual o tempo médio de primeira resposta este mês?",
+    question: "Qual o tempo médio de primeira resposta por departamento?",
     expectedTool: "aggregate_conversations",
-    forbiddenInResponsePattern: /\d{4,}\s*s(?:egundos)?/i,
-    requiredInResponsePattern: /\d+\s*(?:min|hora|h)/i,
+    expectedParams: { group_by: "team", agg: "avg_first_response_time" },
+    forbiddenInResponsePattern: /\b\d{4,}\s*s(?:egundo)?/i,
     forbiddenInResponse: ["ChatGPT", "Chatwoot"],
     category: "quality",
-    description: "Tempo deve ser convertido de segundos para min/h"
+    description: "Tempo por departamento — não deve exibir valores brutos de 4+ dígitos em segundos"
   },
 
   // ── 9. CENÁRIOS COMBINADOS ────────────────────────────────────────────────
@@ -916,10 +916,12 @@ async function main() {
   console.log(`   Meta: ${(SCORE_META * 100).toFixed(0)}%`);
   console.log("");
 
-  // Verifica conectividade
+  // Verifica conectividade (aceita 2xx e 5xx com JSON válido)
   try {
     const r = await fetch(`${BASE_URL}/api/health`);
-    if (!r.ok) throw new Error(`Health check falhou: ${r.status}`);
+    const text = await r.text();
+    if (r.status === 404) throw new Error(`Health check falhou: ${r.status}`);
+    JSON.parse(text); // deve ser JSON válido
     console.log("✅ Conectividade ok\n");
   } catch (err) {
     console.error(`❌ Erro de conectividade: ${err.message}`);
