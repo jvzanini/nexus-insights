@@ -1,5 +1,28 @@
 # Changelog
 
+## [v0.52.0] 2026-05-06 — Consumo: gráficos full-period, spinner fix, minDate; Agente Nex: CPF, etiquetas, out-of-scope
+
+### Página de Consumo — Gráficos
+- **Full-period em todos os gráficos navegáveis**: "Hoje" gera 24 buckets horários (00:00–23:00); "Esta semana" e "Este mês" geram todos os dias do período. Buckets futuros têm `Custo: null` + `isFuture: true` — sem linha, sem tooltip, sem fill.
+- **Sem flash de tela em branco**: `isLoading` inicializa `true` — o skeleton aparece imediatamente sem a passagem rápida pela empty state.
+- **Spinner corrigido**: `isChartLoading` agora é resetado para `false` quando `chartReferenceDate` fica `null` (ao trocar a pill com navegação ativa) — spinner não fica preso.
+- **Labels do eixo X a cada 2 horas** no modo horário (`xAxisInterval={1}`): exibe "00", "02", "04"…"22" sem sobreposição.
+- **`minDate` no `PeriodNavigator`**: seta esquerda desabilitada quando `range.start <= minDate`. A página de consumo passa `minDate` da primeira chamada — bloqueia navegação para antes de abril/2026.
+
+### `InteractiveAreaChart` — API
+- `xAxisInterval?: number | "preserveStart" | …` — controle do intervalo de labels do eixo X.
+- `AreaChartData` aceita `null` e `boolean` (para `isFuture`) como valores de série.
+- `connectNulls={false}` hardcoded em `<Area>` — nunca conecta gaps.
+- Tooltip suprimido em pontos `isFuture`.
+
+### Agente Nex — Prompt
+- **Out-of-scope em 1ª pessoa**: trocado "Esse tópico está fora do escopo do Agente Nex." → "Desculpe, esse tema está fora do meu escopo de atuação."
+- **Mapeamento obrigatório de etiquetas**: linha explícita que "empreendimento" → `emp`; "academia residencial" → `hg`; "academia comercial" → `acd` — evita passar nome longo para `label_name`.
+- **Busca por CPF/identificador**: `query_contacts` agora também pesquisa `co.identifier` (campo Chatwoot para CPF e IDs externos) via ILIKE. Resultado inclui o campo `identifier`. Tool description e executor atualizados.
+- **Nota sobre atributos personalizados**: guia informa que campos customizados de conversa/contato não são pesquisáveis diretamente — evita alucinação.
+
+---
+
 ## [v0.51.0] 2026-05-06 — Dashboard: retry pool, stale banner, polling wired, gráfico período completo
 
 ### Confiabilidade — conexões PG

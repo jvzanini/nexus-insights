@@ -236,3 +236,5 @@ YYYY-MM-DD HH:MM | agent=<agent-id> | commit=<sha7> | scope=<feat|fix|docs|infra
 2026-05-06 17:15 | agent=claude-dashboard-v051-refresh-chart | commit=7c421c4 | scope=refactor | summary=v0.51.0 (4/6) — seção Atualização: controles obsoletos (historicalSeconds, sseEnabled) removidos do formulário
 2026-05-06 17:20 | agent=claude-dashboard-v051-refresh-chart | commit=fc8d6fb | scope=feat | summary=v0.51.0 (5/6) — buildFullPeriodRows: gráfico principal com eixo X completo, buckets futuros null, connectNulls=false, tooltip suprimido
 2026-05-06 17:25 | agent=claude-dashboard-v051-refresh-chart | commit=040046b | scope=feat | summary=v0.51.0 (6/6) — mesmo padrão full-period aplicado nos drill-down charts (Novas + Resolvidas)
+2026-05-06 19:47 | agent=claude-consumo-nex-v052 | commit=5ee189e | scope=fix | summary=v0.52.0 — gráficos full-period (24h/7d/Nd) em consumo, isChartLoading fix, xAxisInterval, minDate, prompt first-person, etiquetas short-name
+2026-05-06 19:50 | agent=claude-consumo-nex-v052 | commit=8b7a8e3 | scope=fix | summary=v0.52.0 — query_contacts busca identifier/CPF; tools description atualizada
