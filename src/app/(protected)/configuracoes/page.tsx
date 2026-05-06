@@ -81,9 +81,7 @@ export default async function Page() {
 
   const polling = {
     liveSeconds: readNumber(data["polling.live_seconds"], 30),
-    historicalSeconds: readNumber(data["polling.historical_seconds"], 300),
     refreshButtonEnabled: readBoolean(data["polling.refresh_button_enabled"], true),
-    sseEnabled: readBoolean(data["realtime.sse_enabled"], true),
   };
 
   const visibility = {

@@ -175,6 +175,10 @@ export function generateEmptyBuckets(
  * Transforma uma lista de ChartRow em acumulado progressivo (carry-forward).
  * Se hora 7 tem 5 novas e hora 8 tem 0, hora 8 mantém 5.
  * Exportado para uso nos drill-down charts.
+ *
+ * ATENÇÃO: assume que os rows não têm isFuture/null nas séries.
+ * Deve ser chamado sobre rawChartData (fillBuckets), antes de buildFullPeriodRows.
+ * null é tratado como 0 — não reutilize sobre dados que já têm null.
  */
 export function toCumulative(rows: ChartRow[]): ChartRow[] {
   let acc = { received: 0, open: 0, resolved: 0, pending: 0 };
@@ -374,6 +378,8 @@ export function ConversationsLineChart({
     [rawChartData, kpiTotals],
   );
 
+  // rawChartData (fillBuckets) sempre usa 0 (nunca null) — não usar chartData aqui
+  // pois chartData tem null nos buckets futuros e quebraria a checagem.
   const isEmpty = rawChartData.every(
     (p) => p.received === 0 && p.open === 0 && p.resolved === 0 && p.pending === 0,
   );
