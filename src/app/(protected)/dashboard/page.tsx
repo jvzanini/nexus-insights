@@ -10,6 +10,7 @@ import {
   assertAccountAccess,
 } from "@/lib/tenant";
 import { getPlatformTz } from "@/lib/datetime";
+import { getAllSettings } from "@/lib/actions/settings";
 import type { AuthUser } from "@/lib/auth-helpers";
 
 export const metadata = { title: "Dashboard | Nexus Insights" };
@@ -32,12 +33,24 @@ export default async function DashboardPage() {
     teamIds: user.teamIds,
   };
 
-  const [activeAccountId, allAccounts, accessibleIds, tz] = await Promise.all([
+  const [activeAccountId, allAccounts, accessibleIds, tz, rawSettings] = await Promise.all([
     getActiveAccountId(authUser),
     getKnownAccounts(),
     getAccessibleAccountIds(authUser),
     getPlatformTz(),
+    getAllSettings().catch(() => ({ success: false as const, error: "fallback" })),
   ]);
+
+  const settingsMap: Record<string, unknown> =
+    rawSettings.success && rawSettings.data ? rawSettings.data : {};
+
+  const pollIntervalMs = Math.max(
+    5_000,
+    Math.min(300_000, Number(settingsMap["polling.live_seconds"] ?? 30) * 1000),
+  );
+  const showRefreshButton =
+    settingsMap["polling.refresh_button_enabled"] !== false &&
+    settingsMap["polling.refresh_button_enabled"] !== "false";
 
   // Defense-in-depth: garante que a conta resolvida pertence ao escopo do user.
   await assertAccountAccess(authUser, activeAccountId);
@@ -61,6 +74,8 @@ export default async function DashboardPage() {
         connectionId={connectionId}
         initialAccounts={accounts}
         tz={tz}
+        pollIntervalMs={pollIntervalMs}
+        showRefreshButton={showRefreshButton}
       />
     </PageShell>
   );

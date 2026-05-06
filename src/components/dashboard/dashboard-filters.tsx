@@ -9,6 +9,7 @@ interface DashboardFiltersProps {
   isLoading: boolean;
   onPeriodChange: (period: DashboardPeriod) => void;
   onRefresh: () => void;
+  showRefreshButton?: boolean;
 }
 
 const periods: Array<{ value: DashboardPeriod; label: string }> = [
@@ -30,6 +31,7 @@ export function DashboardFilters({
   isLoading,
   onPeriodChange,
   onRefresh,
+  showRefreshButton = true,
 }: DashboardFiltersProps) {
   return (
     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
@@ -52,17 +54,19 @@ export function DashboardFilters({
         </div>
 
         {/* Botão refresh */}
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={onRefresh}
-          disabled={isLoading}
-          data-tour="dashboard-refresh"
-          className="h-9 w-9 rounded-lg border-border bg-card/80 text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer transition-all duration-200"
-          aria-label="Atualizar dashboard"
-        >
-          <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-        </Button>
+        {showRefreshButton ? (
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={onRefresh}
+            disabled={isLoading}
+            data-tour="dashboard-refresh"
+            className="h-9 w-9 rounded-lg border-border bg-card/80 text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer transition-all duration-200"
+            aria-label="Atualizar dashboard"
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+          </Button>
+        ) : null}
       </div>
     </div>
   );

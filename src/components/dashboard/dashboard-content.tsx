@@ -56,6 +56,10 @@ interface DashboardContentProps {
   tz: string;
   /** Lista de contas acessíveis — usada apenas para empty state. */
   initialAccounts: Array<{ id: number; name: string }>;
+  /** Intervalo de polling em ms (lido de settings, padrão 60s). */
+  pollIntervalMs?: number;
+  /** Exibir botão de refresh manual (lido de settings, padrão true). */
+  showRefreshButton?: boolean;
 }
 
 const containerVariants = {
@@ -75,7 +79,6 @@ const itemVariants = {
   },
 };
 
-const POLL_INTERVAL = 60_000;
 
 const WEEKDAYS = [
   "domingo",
@@ -125,7 +128,10 @@ export function DashboardContent({
   connectionId,
   tz,
   initialAccounts,
+  pollIntervalMs,
+  showRefreshButton,
 }: DashboardContentProps) {
+  const effectivePollInterval = pollIntervalMs ?? 60_000;
   const [accountId] = useState(initialAccountId);
   const [period, setPeriod] = useState<DashboardPeriod>("dia");
   /** ISO date — quando trocada via PeriodNavigator, refaz fetch. */
@@ -214,7 +220,7 @@ export function DashboardContent({
 
     timerRef.current = setInterval(() => {
       void fetchData(false);
-    }, POLL_INTERVAL);
+    }, effectivePollInterval);
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -225,7 +231,7 @@ export function DashboardContent({
   function handleRefresh() {
     if (timerRef.current) clearInterval(timerRef.current);
     fetchData(false);
-    timerRef.current = setInterval(() => fetchData(false), POLL_INTERVAL);
+    timerRef.current = setInterval(() => fetchData(false), effectivePollInterval);
   }
 
   function handlePeriodChange(p: DashboardPeriod) {
@@ -388,6 +394,7 @@ export function DashboardContent({
           isLoading={isLoading}
           onPeriodChange={handlePeriodChange}
           onRefresh={handleRefresh}
+          showRefreshButton={showRefreshButton ?? true}
         />
       </motion.div>
 
