@@ -230,9 +230,13 @@ async function queryConversations(
     params.push(status);
   }
   if (period) {
-    where.push(`c.created_at >= $${++p}`);
+    // Resolvidas (status=1): filtrar por last_activity_at (momento da resolução).
+    // Demais: created_at (regra canônica §11 — "Recebidas é a única por created_at").
+    // Open/pending são snapshots; período por created_at serve para "criadas hoje".
+    const periodCol = status === 1 ? "c.last_activity_at" : "c.created_at";
+    where.push(`${periodCol} >= $${++p}`);
     params.push(period.start);
-    where.push(`c.created_at < $${++p}`);
+    where.push(`${periodCol} < $${++p}`);
     params.push(period.end);
   }
   if (assigneeName) {
@@ -548,9 +552,10 @@ async function aggregateConversations(
     params.push(status);
   }
   if (period) {
-    where.push(`c.created_at >= $${++p}`);
+    const periodCol = status === 1 ? "c.last_activity_at" : "c.created_at";
+    where.push(`${periodCol} >= $${++p}`);
     params.push(period.start);
-    where.push(`c.created_at < $${++p}`);
+    where.push(`${periodCol} < $${++p}`);
     params.push(period.end);
   }
 

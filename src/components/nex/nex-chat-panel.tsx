@@ -98,7 +98,7 @@ const MAX_HISTORY = 40;
 const SUGGESTIONS: string[] = [
   "Quantas conversas em aberto agora?",
   "Quais os 5 atendentes mais rápidos esta semana?",
-  "Quantas mensagens não respondidas hoje?",
+  "Quantas conversas foram resolvidas hoje?",
 ];
 
 export function NexChatPanel({
