@@ -106,10 +106,27 @@ export interface RunNexInput {
   promptOverride?: string;
   /** Quando true, pula TODOS os `logUsage` calls (Playground). */
   isPlayground?: boolean;
+  /** Quando true, inclui toolCallsLog + systemPrompt no resultado (calibração). */
+  debugMode?: boolean;
+}
+
+export interface ToolCallLog {
+  tool: string;
+  args: Record<string, unknown>;
+  result: unknown;
 }
 
 export type RunNexResult =
-  | { ok: true; message: string; suggestions: string[]; usage: ChatUsage }
+  | {
+      ok: true;
+      message: string;
+      suggestions: string[];
+      usage: ChatUsage;
+      /** Populado apenas quando debugMode=true */
+      toolCallsLog?: ToolCallLog[];
+      /** Populado apenas quando debugMode=true */
+      systemPrompt?: string;
+    }
   | { ok: false; error: string };
 
 export async function runNexAgent(args: RunNexInput): Promise<RunNexResult> {
@@ -134,6 +151,7 @@ export async function runNexAgent(args: RunNexInput): Promise<RunNexResult> {
       : undefined,
   );
   const systemPrompt = baseSystemPrompt + "\n\n" + companyContext;
+  const toolCallsLog: ToolCallLog[] = [];
 
   const conversation: ChatMessage[] = [
     { role: "system", content: systemPrompt },
@@ -198,7 +216,13 @@ export async function runNexAgent(args: RunNexInput): Promise<RunNexResult> {
     if (!result.toolCalls?.length) {
       // Resposta final — extrai sufixo `[[suggestions]]` se presente (v0.31).
       const { message, suggestions } = extractSuggestions(result.message);
-      return { ok: true, message, suggestions, usage: totalUsage };
+      return {
+        ok: true,
+        message,
+        suggestions,
+        usage: totalUsage,
+        ...(args.debugMode && { toolCallsLog, systemPrompt }),
+      };
     }
 
     // Adiciona assistant com tool_calls.
@@ -217,6 +241,13 @@ export async function runNexAgent(args: RunNexInput): Promise<RunNexResult> {
         excludeMatrixIA,
         args.platformRole ?? null,
       );
+      if (args.debugMode) {
+        toolCallsLog.push({
+          tool: tc.name,
+          args: (tc.arguments ?? {}) as Record<string, unknown>,
+          result: toolResult,
+        });
+      }
       conversation.push({
         role: "tool",
         toolCallId: tc.id,
