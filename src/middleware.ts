@@ -46,7 +46,8 @@ export default auth(async (req) => {
     nextUrl.pathname === "/reset-password" ||
     nextUrl.pathname === "/verify-email" ||
     nextUrl.pathname.startsWith("/api/auth/") ||
-    nextUrl.pathname.startsWith("/api/health");
+    nextUrl.pathname.startsWith("/api/health") ||
+    nextUrl.pathname.startsWith("/api/nex/calibrate");
 
   if (isPublic) return;
 
