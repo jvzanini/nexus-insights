@@ -1,5 +1,22 @@
 # Changelog
 
+## [v0.50.x] 2026-05-06 — Agente Nex: calibração automática com 46 cenários reais (100%)
+
+### Sistema de auto-calibração
+- **Endpoint `/api/nex/calibrate`**: POST interno autenticado por hash do NEXTAUTH_SECRET. Chama `runNexAgent` com `accountId=9` (Matrix) e `debugMode=true` — retorna `toolCallsLog` + `systemPrompt`.
+- **`runNexAgent` debug mode**: nova flag `debugMode` retorna `toolCallsLog[]` (tool, args, resultado) e `systemPrompt` composto para análise externa.
+- **`scripts/calibrate-nex.mjs`**: 46 cenários em 11 categorias. Loop iterativo: avalia → analisa → patches automáticos no IDENTITY_BASE → repete. Score: **82.6% → 100%** em 4 rounds contra produção real.
+
+### IDENTITY_BASE calibrado
+- **Siglas de estado**: mapeamento explícito SP→"São Paulo", MG→"Minas Gerais", RS→"Rio Grande do Sul", etc. para `inbox_name`.
+- **"tempo" desambiguado**: "Como está o tempo em X?" = fora do escopo (clima). "Tempo de resposta" = métrica de atendimento.
+- **Identidade reforçada**: não mencionar ChatGPT/Claude/etc. nem para negar. Exemplo: ❌ "Não sou o ChatGPT" → ✅ "Sou o Agente Nex."
+- **Chatwoot proibido em todas as formas**: parênteses, casual, técnica, informal.
+- **Resolvidas por período**: guia explícito `query_conversations status=1 + period correto`.
+- **Distribuição por inbox**: `aggregate_conversations group_by=inbox`.
+
+---
+
 ## [v0.49.0] 2026-05-06 — Agente Nex: auto-calibração de prompt + filtro por etiqueta + sugestões max 3
 
 ### Agente Nex — Melhorias de prompt e inteligência
