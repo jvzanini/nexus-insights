@@ -82,10 +82,13 @@ export async function getNexusChatPool(connectionId: string): Promise<Pool> {
           ? { rejectUnauthorized: true }
           : false,
     min: 0,
-    max: 2,
-    idleTimeoutMillis: 1_000,
+    // max: 1 — uma conexão por pool; o pool faz fila internamente para queries
+    // concorrentes. Com max: 2 (app) + max: 2 (worker) = 4 conexões simultâneas
+    // podiam exceder o CONNECTION LIMIT do role chatwoot_leitura no PostgreSQL.
+    max: 1,
+    idleTimeoutMillis: 30_000,
     statement_timeout: 30_000,
-    connectionTimeoutMillis: 10_000,
+    connectionTimeoutMillis: 15_000,
     application_name: conn.applicationName,
   });
 
@@ -138,7 +141,8 @@ async function withRetry<T>(
       const code = (err as { code?: string }).code ?? "";
       if (!RETRYABLE_CODES.has(code)) throw err;
       if (attempt < maxAttempts - 1) {
-        await new Promise((r) => setTimeout(r, 200 * 2 ** attempt));
+        const jitter = Math.random() * 150;
+        await new Promise((r) => setTimeout(r, 200 * 2 ** attempt + jitter));
       }
     }
   }
