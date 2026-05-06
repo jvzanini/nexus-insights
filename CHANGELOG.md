@@ -1,5 +1,75 @@
 # Changelog
 
+## [v0.48.1] 2026-05-06 — Corte do gráfico no presente + espaçamento atendentes
+
+### Correções
+- **Gráfico truncado no dia/hora atual**: `truncateToNow()` filtra buckets cujo início UTC > now após `toCumulative`. Gráfico semanal/mensal para no dia atual; horário para na hora atual. Buckets futuros não existem no DOM → mouse sobre o espaço futuro não mostra nada.
+- **Drill-down charts**: mesma lógica aplicada em `ReceivedLineChart` e `ResolvedLineChart` (Novas/Resolvidas no drill-down).
+- **Espaçamento atendentes**: `py-3.5` → `py-5` em `top5-list-card.tsx` — bolinhas dos atendentes com espaço considerável entre si.
+
+---
+
+## [v0.48.0] 2026-05-05 — UX Chart: Novas, acumulado, Hoje, range correto, badges corretos
+
+### Mudanças
+- **"Recebidas" → "Novas"**: série no gráfico, badge da legenda, KPI widget ("Novas conversas"), título do drill-down dialog, seção da tabela no drill-down.
+- **Linhas cumulativas (carry-forward)**: `toCumulative()` transforma os buckets em totais progressivos — se hora 7 tem 5 novas e hora 8 tem 0, hora 8 mantém 5. Aplicado ao gráfico principal e aos drill-down charts.
+- **Badges corretos via `kpiTotals`**: Novas/Resolvidas = soma de eventos (vindo de `stats.received`/`stats.resolved`); Abertas/Pendentes = snapshot atual do KPI (vindo de `byStatus`), não soma dos buckets.
+- **"Dia" → "Hoje"** no seletor de período.
+- **Range semana correto**: `range.end` é exclusive (11/05 00:00) → subtrai 1ms → exibe 10/05.
+- **Total no header do dialog**: Novas (verde) e Resolvidas (azul) mostram o total via `headerExtra` no `DrillDownDialog`.
+
+---
+
+## [v0.47.0] 2026-05-05 — Open+Pending drill-down, Agent drill-down, UX polish
+
+### Novas funcionalidades
+- **`OpenDrillDownContent` refeito**: donut com duas linhas centrais (Abertas / Pendentes), toggle Estado/Departamento/Atendente full-width, paginação. SQL reescrito com status IN (0,2) e 7 queries paralelas.
+- **`AgentDrillDownData` + `getAgentDrillDown`**: drill-down por atendente com donut de status, toggle Estado/Departamento e tabela paginada. Acesso a partir de `Top5ListCard` com `onItemClick`.
+- **`DonutWithCenter` estendido**: aceita `secondaryValue`/`secondaryLabel` para duas linhas no centro.
+- **`Top5ListCard` clicável**: prop `onItemClick(id, name)` — itens viram `<button>` com hover state.
+- **Top agents**: SQL mudado de avg first_response → COUNT conversations (LIMIT 10); título "Atendentes com mais conversas".
+
+### UX polish
+- Ícones dos dialogs: received=verde, resolved=azul, rate=foreground.
+- KPI label font: `text-[13px] font-medium`.
+- "Conversas abertas" → "Conversas abertas e pendentes" (KPI + dialog).
+
+### Cache keys
+- `dashboard-drill-open-canonical-v0.47` (era v0.42).
+- `dashboard-drill-received-canonical-v0.45`, `dashboard-drill-resolved-canonical-v0.45`.
+
+---
+
+## [v0.46.0] 2026-05-05 — Correções visuais e semânticas do dashboard
+
+### Correções
+- Correções visuais em `conversations-line-chart.tsx`, `dashboard-content.tsx` e `drill-down-contents.tsx`.
+- Ajustes semânticos nos drill-down contents.
+- Cache key: `dashboard-drill-down` entries bumped.
+
+---
+
+## [v0.45.0] 2026-05-05 — ReceivedDrillDown: chart + distribuição refatorados
+
+### Mudanças
+- `ReceivedDrillDownContent`: gráfico de linha por hora/dia + toggle Estado/Departamento/Atendente (bar chart horizontal).
+- `dashboard-drill-down.ts`: `getReceivedDrillDown` e `getResolvedDrillDown` enriquecidos com `byTeam`, `byAssignee`, `granularity`, `tz`, `range`, `chart` para suporte ao novo layout.
+- Cache keys: `dashboard-drill-received-canonical-v0.45`, `dashboard-drill-resolved-canonical-v0.45`.
+
+---
+
+## [v0.44.0] 2026-05-05 — Fix bucket formula: timestamp without tz
+
+### Correções
+- **Bug crítico no gráfico semanal/mensal**: Chatwoot armazena timestamps como `timestamp without time zone` (UTC). A fórmula anterior `col AT TIME ZONE $4` interpretava UTC como horário local (BRT), resultando em ~87,5% das conversas no bucket errado (KPI=94, gráfico semanal=9 para o mesmo dia).
+- **Fix**: `(date_trunc('day', (col AT TIME ZONE 'UTC') AT TIME ZONE $4) AT TIME ZONE $4)` — `AT TIME ZONE 'UTC'` converte corretamente o `timestamp without tz` → `timestamptz` antes da troca de fuso.
+- **Badges de total por série**: cada série no gráfico exibe badge com contagem total.
+- **PeriodNavigator tema claro**: fix de cor no tema claro.
+- Cache key: `dashboard-data-canonical-v0.44`.
+
+---
+
 ## [v0.43.0] 2026-05-04 — Correções pós v0.42: gráfico, settings configuráveis, labels
 
 ### Correções
