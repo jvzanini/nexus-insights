@@ -80,7 +80,7 @@ describe("fillBuckets (v0.22.0 G2 sanity)", () => {
       // O bucket das 14h deve ter received=12; os demais 23 buckets = 0.
       const bucket14 = result[14]!;
       expect(bucket14.received).toBe(12);
-      const sumReceived = result.reduce((acc, r) => acc + r.received, 0);
+      const sumReceived = result.reduce((acc, r) => acc + (r.received ?? 0), 0);
       expect(sumReceived).toBe(12);
     });
 
@@ -106,7 +106,7 @@ describe("fillBuckets (v0.22.0 G2 sanity)", () => {
       const bucket01_05 = result[4]!;
       expect(bucket01_05.received).toBe(12);
       // Demais dias zerados.
-      const sumReceived = result.reduce((acc, r) => acc + r.received, 0);
+      const sumReceived = result.reduce((acc, r) => acc + (r.received ?? 0), 0);
       expect(sumReceived).toBe(12);
     });
 
@@ -140,7 +140,7 @@ describe("fillBuckets (v0.22.0 G2 sanity)", () => {
         end: fromZonedTime("2026-05-01T23:59:59.999", TZ).toISOString(),
       };
       const dayResult = fillBuckets(hourly, "hour", TZ, dayRange);
-      const sumDayHourly = dayResult.reduce((acc, r) => acc + r.received, 0);
+      const sumDayHourly = dayResult.reduce((acc, r) => acc + (r.received ?? 0), 0);
 
       const dayAggregate = [
         {

@@ -74,17 +74,20 @@ interface ChartRow {
   windowLabel?: string;
   /** UTC ISO do início do bucket — usado para cortar buckets futuros. */
   bucketIso: string;
-  received: number;
-  open: number;
-  resolved: number;
-  pending: number;
+  /** true quando o bucket ainda está no futuro (sem dados reais). */
+  isFuture?: boolean;
+  received: number | null;
+  open: number | null;
+  resolved: number | null;
+  pending: number | null;
 }
 
 function CustomTooltip(props: TooltipContentProps<ValueType, NameType>) {
   const { active, payload, label } = props;
   if (!active || !payload?.length) return null;
-  const windowLabel = (payload[0]?.payload as { windowLabel?: string } | undefined)
-    ?.windowLabel;
+  const row = payload[0]?.payload as ChartRow | undefined;
+  if (row?.isFuture) return null;
+  const windowLabel = row?.windowLabel;
   return (
     <div className="rounded-lg border border-border bg-card p-3 shadow-lg">
       <p className="text-sm font-medium text-foreground mb-1">{label}</p>
@@ -177,10 +180,10 @@ export function toCumulative(rows: ChartRow[]): ChartRow[] {
   let acc = { received: 0, open: 0, resolved: 0, pending: 0 };
   return rows.map((r) => {
     acc = {
-      received: acc.received + r.received,
-      open: acc.open + r.open,
-      resolved: acc.resolved + r.resolved,
-      pending: acc.pending + r.pending,
+      received: acc.received + (r.received ?? 0),
+      open: acc.open + (r.open ?? 0),
+      resolved: acc.resolved + (r.resolved ?? 0),
+      pending: acc.pending + (r.pending ?? 0),
     };
     return { ...r, ...acc };
   });
@@ -194,6 +197,39 @@ export function toCumulative(rows: ChartRow[]): ChartRow[] {
 export function truncateToNow(rows: ChartRow[]): ChartRow[] {
   const nowIso = new Date().toISOString();
   return rows.filter((r) => r.bucketIso <= nowIso);
+}
+
+/**
+ * Constrói o array completo do período combinando:
+ * - pastRows: buckets passados/presentes com valores acumulados (resultado de truncateToNow(toCumulative(raw)))
+ * - allRawBuckets: todos os buckets do período (sem toCumulative, sem truncate)
+ *
+ * Buckets não presentes em pastRows recebem isFuture=true e séries null,
+ * de modo que Recharts não desenhe linha nem exiba tooltip para eles.
+ * Exportado para testes e reutilização.
+ */
+export function buildFullPeriodRows(
+  pastRows: ChartRow[],
+  allRawBuckets: ChartRow[],
+): ChartRow[] {
+  const pastLookup = new Map<string, ChartRow>();
+  for (const r of pastRows) {
+    pastLookup.set(r.bucketIso, r);
+  }
+  return allRawBuckets.map((bucket) => {
+    const past = pastLookup.get(bucket.bucketIso);
+    if (past) return past;
+    return {
+      label: bucket.label,
+      windowLabel: bucket.windowLabel,
+      bucketIso: bucket.bucketIso,
+      isFuture: true,
+      received: null,
+      open: null,
+      resolved: null,
+      pending: null,
+    };
+  });
 }
 
 /**
@@ -323,17 +359,17 @@ export function ConversationsLineChart({
   );
 
   const chartData = useMemo(
-    () => truncateToNow(toCumulative(rawChartData)),
+    () => buildFullPeriodRows(truncateToNow(toCumulative(rawChartData)), rawChartData),
     [rawChartData],
   );
 
   const seriesTotals = useMemo(
     () =>
       kpiTotals ?? {
-        received: rawChartData.reduce((s, r) => s + r.received, 0),
-        open: rawChartData.reduce((s, r) => s + r.open, 0),
-        resolved: rawChartData.reduce((s, r) => s + r.resolved, 0),
-        pending: rawChartData.reduce((s, r) => s + r.pending, 0),
+        received: rawChartData.reduce((s, r) => s + (r.received ?? 0), 0),
+        open: rawChartData.reduce((s, r) => s + (r.open ?? 0), 0),
+        resolved: rawChartData.reduce((s, r) => s + (r.resolved ?? 0), 0),
+        pending: rawChartData.reduce((s, r) => s + (r.pending ?? 0), 0),
       },
     [rawChartData, kpiTotals],
   );
@@ -473,6 +509,7 @@ export function ConversationsLineChart({
                     strokeWidth={2.5}
                     dot={false}
                     activeDot={{ r: 5, strokeWidth: 0 }}
+                    connectNulls={false}
                   />
                 ))}
               </LineChart>
