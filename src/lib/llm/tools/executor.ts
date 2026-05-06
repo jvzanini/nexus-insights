@@ -230,10 +230,9 @@ async function queryConversations(
     params.push(status);
   }
   if (period) {
-    // Resolvidas (status=1): filtrar por last_activity_at (momento da resolução).
-    // Demais: created_at (regra canônica §11 — "Recebidas é a única por created_at").
-    // Open/pending são snapshots; período por created_at serve para "criadas hoje".
-    const periodCol = status === 1 ? "c.last_activity_at" : "c.created_at";
+    // Regra canônica §11: "Recebidas" (sem status) → created_at.
+    // Abertas (0), Pendentes (2), Resolvidas (1) → last_activity_at.
+    const periodCol = status === undefined ? "c.created_at" : "c.last_activity_at";
     where.push(`${periodCol} >= $${++p}`);
     params.push(period.start);
     where.push(`${periodCol} < $${++p}`);
@@ -552,7 +551,7 @@ async function aggregateConversations(
     params.push(status);
   }
   if (period) {
-    const periodCol = status === 1 ? "c.last_activity_at" : "c.created_at";
+    const periodCol = status === undefined ? "c.created_at" : "c.last_activity_at";
     where.push(`${periodCol} >= $${++p}`);
     params.push(period.start);
     where.push(`${periodCol} < $${++p}`);
