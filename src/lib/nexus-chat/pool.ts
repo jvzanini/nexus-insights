@@ -123,17 +123,42 @@ export async function invalidateNexusChatPool(
   await cached.pool.end().catch(() => {});
 }
 
+const RETRYABLE_CODES = new Set(["53300", "53200", "08006", "08001", "08P01"]);
+
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxAttempts = 3,
+): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      const code = (err as { code?: string }).code ?? "";
+      if (!RETRYABLE_CODES.has(code)) throw err;
+      if (attempt < maxAttempts - 1) {
+        await new Promise((r) => setTimeout(r, 200 * 2 ** attempt));
+      }
+    }
+  }
+  throw lastErr;
+}
+
 /**
  * Wrapper conveniente para `pool.query` — resolve o pool e executa a query.
  * Substitui `getChatwootPool().query(...)` em todos os call-sites.
+ * Retry automático com backoff exponencial para erros de conexão PG (53300, etc).
  */
 export async function queryNexusChat<T extends Record<string, unknown>>(
   connectionId: string,
   sql: string,
   params: unknown[] = [],
 ): Promise<QueryResult<T>> {
-  const pool = await getNexusChatPool(connectionId);
-  return pool.query<T>(sql, params);
+  return withRetry(async () => {
+    const pool = await getNexusChatPool(connectionId);
+    return pool.query<T>(sql, params);
+  });
 }
 
 if (!globalForPool.__nexusChatJanitor) {
