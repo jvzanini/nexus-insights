@@ -165,7 +165,7 @@ describe("composeSystemPrompt — suggestions_enabled (v0.31)", () => {
     );
     expect(out).toMatch(/## Sugestões clicáveis/);
     expect(out).toMatch(/\[\[suggestions\]\]:/);
-    expect(out).toMatch(/máximo 4 sugestões/i);
+    expect(out).toMatch(/Máximo 3 sugestões/i);
   });
 
   it("NÃO injeta instrução quando suggestionsEnabled=false", () => {
@@ -184,6 +184,7 @@ describe("composeSystemPrompt — suggestions_enabled (v0.31)", () => {
       [],
       [],
     );
-    expect(out).not.toMatch(/## Sugestões clicáveis/);
+    expect(out).not.toMatch(/## Sugestões clicáveis\b(?!\s*\(HABILITADAS\))/);
+    expect(out).not.toMatch(/\[\[suggestions\]\]/);
   });
 });

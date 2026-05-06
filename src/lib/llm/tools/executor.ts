@@ -216,6 +216,7 @@ async function queryConversations(
   const assigneeName = asString(args.assignee_name);
   const inboxName = asString(args.inbox_name);
   const teamName = asString(args.team_name);
+  const labelName = asString(args.label_name);
   const limit = clampLimit(args.limit, 50);
   const countOnly = asBool(args.count_only, false);
   const period = await resolvePeriod(args.period);
@@ -245,6 +246,10 @@ async function queryConversations(
   if (teamName) {
     where.push(`t.name ILIKE $${++p}`);
     params.push(`%${teamName}%`);
+  }
+  if (labelName) {
+    where.push(`c.cached_label_list ILIKE $${++p}`);
+    params.push(`%${labelName}%`);
   }
 
   if (countOnly) {
@@ -574,8 +579,8 @@ async function aggregateConversations(
     };
   }
 
-  if (agg === "avg_first_response_time") {
-    // Usa reporting_events.name = 'first_response' (segundos).
+  if (agg === "avg_first_response_time" || agg === "avg_reply_time") {
+    const eventName = agg === "avg_reply_time" ? "reply_time" : "first_response";
     let periodReClause = "";
     const params2: unknown[] = [accountId, MATRIX_IA_INBOX_ID];
     let pp = 2;
@@ -597,7 +602,7 @@ async function aggregateConversations(
       ${joinClause}
       WHERE re.account_id = $1
         AND ${matrixClause}
-        AND re.name = 'first_response'
+        AND re.name = '${eventName}'
         AND re.value IS NOT NULL
         ${periodReClause}
       GROUP BY ${groupExpr}, ${labelExpr}

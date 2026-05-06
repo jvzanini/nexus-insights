@@ -1,5 +1,21 @@
 # Changelog
 
+## [v0.49.0] 2026-05-06 — Agente Nex: auto-calibração de prompt + filtro por etiqueta + sugestões max 3
+
+### Agente Nex — Melhorias de prompt e inteligência
+- **IDENTITY_BASE reescrito**: guia completo de seleção de ferramenta (qual tool usar para cada tipo de pergunta), mapeamento do negócio Matrix (inboxes=estados, departamentos, etiquetas), semântica explícita de período (`created_at` vs `last_activity_at`), regra clara sobre get_dashboard_summary (em_aberto/pendentes = snapshot total, não filtrado por período), formato de resposta (max 5 itens em listas, converter segundos).
+- **Filtro por etiqueta (label_name)**: `query_conversations` agora aceita `label_name` — busca ILIKE em `cached_label_list`. Permite perguntas como "conversas com etiqueta 'falhou'" ou "quantas têm label emp".
+- **`avg_reply_time`** adicionada como opção de `agg` em `aggregate_conversations` — usa `reporting_events.name = 'reply_time'` (tempo médio de todas as respostas, não só a primeira).
+- **Sugestões max 3** (era 4): `MAX_SUGGESTIONS` reduzido de 4 para 3; `MAX_SUGGESTION_LEN` de 80 para 60 chars. Prompt de sugestões reescrito com exemplo explícito de formato, regra de máximo 3, e instrução de quando NÃO sugerir.
+- **Sugestões desabilitadas**: quando `suggestionsEnabled=false`, IDENTITY_BASE instrui explicitamente a não sugerir follow-ups no texto. Quando habilitadas, todas as sugestões são exclusivamente via botões — nunca no texto.
+- **Descrições das tools** melhoradas: period = filtra `created_at`, get_dashboard_summary avisa sobre limitação, get_top_agents explica cada metric, aggregate_conversations documenta os dois tipos de agg de tempo.
+
+### Validação
+- 21 queries SQL testadas diretamente no banco Chatwoot: grupos de snapshot, período, filtro por estado, etiqueta, atendentes, tempos, semana e isolamento Matrix IA. Todos passaram.
+- Script de validação em `scripts/test-nex-queries.mjs`.
+
+---
+
 ## [v0.48.1] 2026-05-06 — Corte do gráfico no presente + espaçamento atendentes
 
 ### Correções

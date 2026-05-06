@@ -41,8 +41,8 @@ const MAX_PROMPT_OVERRIDE_LEN = 50_000;
  * OU `\n` antes. Sem flag `s` (compatível ES2017).
  */
 const SUGGESTIONS_RE = /(?:^|\n)\[\[suggestions\]\]:([^\n]+?)(?:\n|$)/;
-const MAX_SUGGESTIONS = 4;
-const MAX_SUGGESTION_LEN = 80;
+const MAX_SUGGESTIONS = 3;
+const MAX_SUGGESTION_LEN = 60;
 
 /**
  * Extrai sugestões do sufixo `[[suggestions]]:item1|item2|...` quando

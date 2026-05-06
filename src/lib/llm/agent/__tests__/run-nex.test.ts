@@ -221,13 +221,13 @@ describe("extractSuggestions (v0.31)", () => {
     ]);
   });
 
-  it("cap 4 sugestões — descarta excesso", () => {
+  it("cap 3 sugestões — descarta excesso (v0.49)", () => {
     const r = extractSuggestions("ok\n[[suggestions]]:a|b|c|d|e|f");
-    expect(r.suggestions).toEqual(["a", "b", "c", "d"]);
+    expect(r.suggestions).toEqual(["a", "b", "c"]);
   });
 
-  it("descarta sugestões > 80 chars", () => {
-    const tooLong = "a".repeat(81);
+  it("descarta sugestões > 60 chars (v0.49)", () => {
+    const tooLong = "a".repeat(61);
     const r = extractSuggestions(`ok\n[[suggestions]]:short|${tooLong}|other`);
     expect(r.suggestions).toEqual(["short", "other"]);
   });

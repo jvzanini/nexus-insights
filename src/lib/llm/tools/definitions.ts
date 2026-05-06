@@ -18,37 +18,41 @@ export const NEX_TOOLS: ToolDefinition[] = [
   {
     name: "query_conversations",
     description:
-      "Lista ou conta conversas do Chatwoot. Use para perguntas sobre conversas em aberto, resolvidas, pendentes, ou para listar conversas por filtro (atendente, inbox/estado, departamento, período).",
+      "Conta ou lista conversas por filtros. IMPORTANTE: o campo 'period' filtra pela data de CRIAÇÃO da conversa (created_at), não pela última atividade. Inboxes = estados brasileiros (ex: 'SP-São Paulo', 'MG-Minas Gerais'). Para perguntas de estado atual sem período, omita 'period'.",
     parameters: {
       type: "object",
       properties: {
         status: {
           type: "integer",
-          description: "Status Chatwoot: 0=open, 1=resolved, 2=pending, 3=snoozed",
+          description: "Status: 0=em aberto (open), 1=resolvida, 2=pendente, 3=adiada (snoozed)",
           enum: [0, 1, 2, 3],
         },
         period: {
           type: "string",
           description:
-            "Período em linguagem natural: 'hoje' | 'ontem' | '7d' | '30d' | 'mes_atual' | 'mes_anterior' | 'semana_atual'. Para range customizado, passe JSON {\"start\":ISO,\"end\":ISO}.",
+            "Filtra conversas pela data de CRIAÇÃO. Valores: 'hoje' | 'ontem' | '7d' | '30d' | 'mes_atual' | 'mes_anterior' | 'semana_atual'. Range customizado: JSON {\"start\":\"ISO\",\"end\":\"ISO\"}. Omita para retornar todas sem filtro de data.",
         },
         assignee_name: {
           type: "string",
-          description: "Nome (parcial) do atendente — busca por ILIKE em users.name",
+          description: "Nome (parcial) do atendente responsável (busca ILIKE)",
         },
         inbox_name: {
           type: "string",
-          description: "Nome (parcial) da inbox/estado — busca por ILIKE em inboxes.name",
+          description: "Nome (parcial) da inbox / estado brasileiro (ex: 'São Paulo', 'MG', 'Bahia'). Busca ILIKE.",
         },
         team_name: {
           type: "string",
-          description: "Nome (parcial) do departamento — busca por ILIKE em teams.name",
+          description: "Nome (parcial) do departamento/team (ex: 'financeiro', 'comercial'). Busca ILIKE.",
         },
-        limit: { type: "integer", default: 50, maximum: 200 },
+        label_name: {
+          type: "string",
+          description: "Nome exato ou parcial da etiqueta/label (ex: 'falhou', 'emp', 'concluído'). Busca ILIKE em cached_label_list.",
+        },
+        limit: { type: "integer", default: 50, maximum: 200, description: "Máximo de linhas retornadas (ignorado quando count_only=true)" },
         count_only: {
           type: "boolean",
           default: false,
-          description: "Se true, retorna apenas o total agregado",
+          description: "Se true, retorna apenas o total (número). Use sempre que o usuário pedir uma contagem.",
         },
       },
     },
@@ -99,29 +103,23 @@ export const NEX_TOOLS: ToolDefinition[] = [
   {
     name: "aggregate_conversations",
     description:
-      "Agrega conversas com COUNT/AVG agrupado por inbox, team, assignee, status, priority, dia ou hora.",
+      "Agrega conversas com contagem ou tempo médio de resposta, agrupado por inbox/estado, departamento, atendente, status, prioridade, dia ou hora. Use para rankings e distribuições. 'avg_first_response_time' = tempo até primeira resposta do atendente. 'avg_reply_time' = tempo médio de todas as respostas.",
     parameters: {
       type: "object",
       properties: {
         group_by: {
           type: "string",
-          enum: [
-            "inbox",
-            "team",
-            "assignee",
-            "status",
-            "priority",
-            "day",
-            "hour",
-          ],
+          enum: ["inbox", "team", "assignee", "status", "priority", "day", "hour"],
+          description: "Dimensão de agrupamento: inbox=estado, team=departamento, assignee=atendente",
         },
         agg: {
           type: "string",
-          enum: ["count", "avg_first_response_time"],
+          enum: ["count", "avg_first_response_time", "avg_reply_time"],
+          description: "count=contagem, avg_first_response_time=tempo até 1ª resposta (segundos), avg_reply_time=tempo médio de resposta (segundos)",
         },
-        period: { type: "string" },
-        status: { type: "integer", enum: [0, 1, 2, 3] },
-        limit: { type: "integer", default: 10 },
+        period: { type: "string", description: "Filtro de período (filtra por created_at das conversas)" },
+        status: { type: "integer", enum: [0, 1, 2, 3], description: "Filtrar por status" },
+        limit: { type: "integer", default: 10, description: "Máximo de grupos retornados" },
       },
       required: ["group_by", "agg"],
     },
@@ -129,16 +127,17 @@ export const NEX_TOOLS: ToolDefinition[] = [
   {
     name: "get_top_agents",
     description:
-      "Top N atendentes por velocidade de primeira resposta ou volume de conversas.",
+      "Ranking de atendentes: mais rápidos na primeira resposta (fastest), com mais conversas abertas (most_open) ou mais resoluções (most_resolved). Para 'melhor atendente', use fastest. Para 'atendente com mais conversas abertas', use most_open.",
     parameters: {
       type: "object",
       properties: {
         metric: {
           type: "string",
           enum: ["fastest", "most_open", "most_resolved"],
+          description: "fastest=menor tempo de 1ª resposta, most_open=mais conversas abertas, most_resolved=mais conversas resolvidas",
         },
-        period: { type: "string" },
-        limit: { type: "integer", default: 5 },
+        period: { type: "string", description: "Período para filtrar (para fastest: data do evento; para most_resolved: last_activity_at)" },
+        limit: { type: "integer", default: 5, description: "Quantos atendentes retornar (padrão: 5)" },
       },
       required: ["metric"],
     },
@@ -146,11 +145,11 @@ export const NEX_TOOLS: ToolDefinition[] = [
   {
     name: "get_dashboard_summary",
     description:
-      "Snapshot rápido do operacional: total de conversas em aberto/pendentes/resolvidas no período, top inbox e top atendente.",
+      "Resumo operacional rápido. ATENÇÃO: 'em_aberto' e 'pendentes' são SEMPRE contagem atual total (snapshot do momento), independente do período informado. Apenas 'resolvidas_no_periodo' respeita o filtro de período. Use para relatório geral do dia ou visão rápida. Para contar abertas/pendentes em um período específico, use query_conversations com status e period.",
     parameters: {
       type: "object",
       properties: {
-        period: { type: "string", default: "hoje" },
+        period: { type: "string", default: "hoje", description: "Período para contar resolvidas (opened/pending sempre são snapshot total)" },
       },
     },
   },
