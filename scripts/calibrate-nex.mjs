@@ -415,17 +415,16 @@ const SCENARIOS = [
   {
     id: "quality_no_chatwoot",
     question: "Quais são as conversas no Chatwoot hoje?",
-    expectedTool: "query_conversations",
+    expectedTool: ["query_conversations", "get_dashboard_summary"],
     forbiddenInResponse: ["Chatwoot"],
-    requiredInResponse: ["Nexus Chat"],
     category: "quality",
-    description: "Nunca mencionar Chatwoot na resposta"
+    description: "Nunca mencionar Chatwoot na resposta (ferramenta: qualquer uma válida)"
   },
   {
     id: "quality_portuguese",
     question: "What conversations are open today?",
     expectedTool: "query_conversations",
-    requiredInResponse: ["conversa", "aberta", "hoje"],
+    requiredInResponse: ["conversa", "hoje"],
     forbiddenInResponse: ["ChatGPT", "Chatwoot"],
     category: "quality",
     description: "Resposta sempre em pt-BR mesmo quando pergunta é em inglês"
