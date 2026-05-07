@@ -1,27 +1,31 @@
 import { Pool, type QueryResult } from "pg";
 
 /**
- * O usuário `chatwoot_leitura` tem CONNECTION LIMIT 5 no Postgres do Chatwoot.
- * Como app + worker compartilham o mesmo usuário, mantemos um pool MUITO pequeno
- * + queue serial para garantir que nunca abrimos mais que 1 conexão simultânea
- * de cada processo.
+ * Pool read-only para o banco do Chatwoot (role `chatwoot_leitura`).
  *
- * Volume esperado: 30–50 acessos/dia. Serializar é totalmente aceitável.
+ * CONNECTION LIMIT do role no Postgres é 5. Este pool (app) + pool do worker
+ * compartilham o mesmo role, por isso max=1 por processo:
+ *   app:    1 conexão
+ *   worker: 1 conexão
+ *   total:  2 ≤ 5 ✓
+ *
+ * max=1 delega a serialização ao pg.Pool interno, eliminando a necessidade
+ * de queue manual (que tinha race condition sob carga concorrente).
+ * Retry com jitter previne thundering herd quando o banco rejeita 53300.
  */
 
 const globalForPool = globalThis as unknown as {
   chatwootPool: Pool | undefined;
-  chatwootQueue: Promise<unknown> | undefined;
 };
 
 function createPool(): Pool {
   const pool = new Pool({
     connectionString: process.env.CHATWOOT_DATABASE_URL,
     min: 0,
-    max: 2,
-    idleTimeoutMillis: 1_000,
+    max: 1,
+    idleTimeoutMillis: 30_000,
     statement_timeout: 30_000,
-    connectionTimeoutMillis: 10_000,
+    connectionTimeoutMillis: 15_000,
     application_name: "nexus-insights",
   });
   pool.on("error", (err) => {
@@ -36,35 +40,37 @@ export function getChatwootPool(): Pool {
   return globalForPool.chatwootPool;
 }
 
+const RETRYABLE_PG_CODES = new Set(["53300", "53200", "08006", "08001", "08P01"]);
+
+async function withRetry<T>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      const code = (err as { code?: string }).code ?? "";
+      if (!RETRYABLE_PG_CODES.has(code)) throw err;
+      if (attempt < maxAttempts - 1) {
+        const jitter = Math.random() * 150;
+        await new Promise((r) => setTimeout(r, 200 * 2 ** attempt + jitter));
+      }
+    }
+  }
+  throw lastErr;
+}
+
 /**
- * Executa SQL parametrizado no Chatwoot, serializado via queue global.
- * Nunca abre mais que 1 conexão simultânea — respeita CONNECTION LIMIT 5
- * mesmo quando home-summary chama 5 queries em Promise.all.
+ * Executa SQL parametrizado no Chatwoot com retry automático para erros
+ * de conexão (53300 = too_many_connections, 08006 = connection_failure, etc.).
  */
 export async function chatwootQuery<T>(
   text: string,
   params: unknown[] = [],
 ): Promise<T[]> {
-  const previous = globalForPool.chatwootQueue ?? Promise.resolve();
-  let release: () => void = () => {};
-  const next = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  // Encadeia neste promise para que a próxima query aguarde esta acabar.
-  globalForPool.chatwootQueue = previous.then(() => next).catch(() => {});
-
-  await previous.catch(() => {});
-
-  try {
+  return withRetry(async () => {
     const pool = getChatwootPool();
-    const client = await pool.connect();
-    try {
-      const result: QueryResult = await client.query(text, params as never[]);
-      return result.rows as T[];
-    } finally {
-      client.release();
-    }
-  } finally {
-    release();
-  }
+    const result: QueryResult = await pool.query(text, params as never[]);
+    return result.rows as T[];
+  });
 }
