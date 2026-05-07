@@ -1,5 +1,25 @@
 # Changelog
 
+## [v0.53.0] 2026-05-07 — Agente Nex: semântica de período, label exact-match, unanswered status=0
+
+### Agente Nex — Semântica de período corrigida
+- **`periodCol` padrão trocado para `last_activity_at`** em `query_conversations` e `aggregate_conversations`. Antes, queries sem `status` usavam `created_at` (novas conversas), o que fazia "quantas conversas hoje?" retornar ~5 em vez de ~32. Agora retorna conversas com atividade no período.
+- **Novo parâmetro `received_metric`** (boolean, padrão `false`): quando `true`, usa `created_at` — exclusivo para a métrica "Recebidas/Novas". IDENTITY_BASE atualizado para orientar o agente.
+- **`group_by=day/hour`** em `aggregate_conversations` também usa `last_activity_at` por padrão (idem `received_metric` controla). Distribuição por dia/hora agora reflete atividade, não criação.
+
+### Agente Nex — Label exact-match
+- **Matching por fronteira de vírgula**: de `cached_label_list ILIKE '%emp%'` para `(',' || cached_label_list || ',') ILIKE '%,emp,%'`. Elimina falsos positivos: `emp` não casa mais com `template`, `empreendimento`, etc.
+- Tool definition `label_name` atualizada para deixar claro que é nome EXATO (nome curto).
+
+### Agente Nex — `unanswered_only` força `status=0`
+- Quando `unanswered_only=true` sem status explícito, o executor agora injeta `c.status = 0` automaticamente. Antes contava conversas resolvidas/pendentes sem resposta, inflando o resultado.
+
+### IDENTITY_BASE
+- Semântica de período reescrita: "conversas hoje" = `last_activity_at`; "novas/recebidas" = `received_metric=true`.
+- Guia "sem resposta" reforçado: snapshot atual, não combinar com period.
+
+---
+
 ## [v0.52.0] 2026-05-06 — Consumo: gráficos full-period, spinner fix, minDate; Agente Nex: CPF, etiquetas, out-of-scope
 
 ### Página de Consumo — Gráficos
