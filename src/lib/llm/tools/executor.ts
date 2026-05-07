@@ -221,6 +221,9 @@ async function queryConversations(
   const limit = clampLimit(args.limit, 50);
   const countOnly = asBool(args.count_only, false);
   const unansweredOnly = asBool(args.unanswered_only, false);
+  // received_metric=true → filtra por created_at (conversas novas/recebidas).
+  // Padrão false → last_activity_at (conversas com atividade no período).
+  const receivedMetric = asBool(args.received_metric, false);
   const period = await resolvePeriod(args.period);
 
   const params: unknown[] = [accountId, MATRIX_IA_INBOX_ID];
@@ -231,10 +234,12 @@ async function queryConversations(
     where.push(`c.status = $${++p}`);
     params.push(status);
   }
+  // unanswered_only sem status explícito → forçar status=0 (conversas em aberto).
+  if (unansweredOnly && status === undefined) {
+    where.push(`c.status = 0`);
+  }
   if (period) {
-    // Regra canônica §11: "Recebidas" (sem status) → created_at.
-    // Abertas (0), Pendentes (2), Resolvidas (1) → last_activity_at.
-    const periodCol = status === undefined ? "c.created_at" : "c.last_activity_at";
+    const periodCol = receivedMetric ? "c.created_at" : "c.last_activity_at";
     where.push(`${periodCol} >= $${++p}`);
     params.push(period.start);
     where.push(`${periodCol} < $${++p}`);
@@ -253,8 +258,9 @@ async function queryConversations(
     params.push(`%${teamName}%`);
   }
   if (labelName) {
-    where.push(`c.cached_label_list ILIKE $${++p}`);
-    params.push(`%${labelName}%`);
+    // Matching exato por fronteira de vírgula — evita "emp" casar com "template".
+    where.push(`(',' || c.cached_label_list || ',') ILIKE $${++p}`);
+    params.push(`%,${labelName},%`);
   }
 
   // "Sem resposta" = em aberto cuja última mensagem classificável é do cliente.
@@ -517,6 +523,9 @@ async function aggregateConversations(
   const status = asInt(args.status);
   const period = await resolvePeriod(args.period);
   const limit = clampLimit(args.limit, 10);
+  // received_metric=true → usa created_at (novas conversas). Padrão: last_activity_at.
+  const receivedMetric = asBool(args.received_metric, false);
+  const dateCol = receivedMetric ? "c.created_at" : "c.last_activity_at";
 
   let groupExpr: string;
   let labelExpr: string;
@@ -547,12 +556,12 @@ async function aggregateConversations(
       labelExpr = "c.priority::text";
       break;
     case "day":
-      groupExpr = "DATE_TRUNC('day', c.created_at)";
-      labelExpr = "DATE_TRUNC('day', c.created_at)::text";
+      groupExpr = `DATE_TRUNC('day', ${dateCol})`;
+      labelExpr = `DATE_TRUNC('day', ${dateCol})::text`;
       break;
     case "hour":
-      groupExpr = "EXTRACT(HOUR FROM c.created_at)";
-      labelExpr = "EXTRACT(HOUR FROM c.created_at)::text";
+      groupExpr = `EXTRACT(HOUR FROM ${dateCol})`;
+      labelExpr = `EXTRACT(HOUR FROM ${dateCol})::text`;
       break;
     default:
       return { error: `group_by inválido: ${groupBy}` };
@@ -567,10 +576,9 @@ async function aggregateConversations(
     params.push(status);
   }
   if (period) {
-    const periodCol = status === undefined ? "c.created_at" : "c.last_activity_at";
-    where.push(`${periodCol} >= $${++p}`);
+    where.push(`${dateCol} >= $${++p}`);
     params.push(period.start);
-    where.push(`${periodCol} < $${++p}`);
+    where.push(`${dateCol} < $${++p}`);
     params.push(period.end);
   }
 

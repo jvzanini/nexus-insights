@@ -30,7 +30,7 @@ export const NEX_TOOLS: ToolDefinition[] = [
         period: {
           type: "string",
           description:
-            "Filtro de período. Sem status (recebidas/novas): filtra por created_at. Com status (aberta/resolvida/pendente): filtra por last_activity_at. Valores: 'hoje' | 'ontem' | '7d' | '30d' | 'mes_atual' | 'mes_anterior' | 'semana_atual'. Range customizado: JSON {\"start\":\"ISO\",\"end\":\"ISO\"}. Omita para retornar todas sem filtro de data.",
+            "Filtro de período aplicado em last_activity_at (padrão) ou created_at (quando received_metric=true). Valores: 'hoje' | 'ontem' | '7d' | '30d' | 'mes_atual' | 'mes_anterior' | 'semana_atual'. Range customizado: JSON {\"start\":\"ISO\",\"end\":\"ISO\"}. Omita para retornar todas sem filtro de data.",
         },
         assignee_name: {
           type: "string",
@@ -46,7 +46,12 @@ export const NEX_TOOLS: ToolDefinition[] = [
         },
         label_name: {
           type: "string",
-          description: "Nome exato ou parcial da etiqueta/label (ex: 'falhou', 'emp', 'concluído'). Busca ILIKE em cached_label_list.",
+          description: "Nome EXATO da etiqueta/label (ex: 'falhou', 'emp', 'acd', 'hg'). Matching por fronteira — 'emp' NÃO casa com 'template'. Use sempre o nome curto.",
+        },
+        received_metric: {
+          type: "boolean",
+          default: false,
+          description: "Se true, filtra por created_at (conversas NOVAS/RECEBIDAS criadas no período). Padrão false = filtra por last_activity_at (conversas com atividade no período). Use true APENAS para métricas de 'conversas novas' ou 'recebidas'.",
         },
         limit: { type: "integer", default: 50, maximum: 200, description: "Máximo de linhas retornadas (ignorado quando count_only=true)" },
         count_only: {
@@ -57,7 +62,7 @@ export const NEX_TOOLS: ToolDefinition[] = [
         unanswered_only: {
           type: "boolean",
           default: false,
-          description: "Se true, filtra apenas conversas SEM RESPOSTA: em aberto cuja última mensagem classificável é do cliente (incoming). Use para 'conversas sem resposta', 'aguardando resposta', 'não respondidas'. Não combine com period — essas conversas existem no momento atual.",
+          description: "Se true, filtra apenas conversas SEM RESPOSTA (status=0 automático): em aberto cuja última mensagem classificável é do cliente (incoming). Use para 'conversas sem resposta', 'aguardando resposta'. NÃO combine com period — são conversas atualmente sem resposta.",
         },
       },
     },
@@ -122,8 +127,13 @@ export const NEX_TOOLS: ToolDefinition[] = [
           enum: ["count", "avg_first_response_time", "avg_reply_time"],
           description: "count=contagem, avg_first_response_time=tempo até 1ª resposta (segundos), avg_reply_time=tempo médio de resposta (segundos)",
         },
-        period: { type: "string", description: "Filtro de período. Sem status: filtra por created_at. Com status: filtra por last_activity_at." },
+        period: { type: "string", description: "Filtro de período. Padrão: last_activity_at. Com received_metric=true: created_at." },
         status: { type: "integer", enum: [0, 1, 2, 3], description: "Filtrar por status" },
+        received_metric: {
+          type: "boolean",
+          default: false,
+          description: "Se true, filtra por created_at e agrupa por data de criação (novas/recebidas). Padrão false = last_activity_at.",
+        },
         limit: { type: "integer", default: 10, description: "Máximo de grupos retornados" },
       },
       required: ["group_by", "agg"],
