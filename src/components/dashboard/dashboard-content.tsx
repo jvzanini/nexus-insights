@@ -9,7 +9,6 @@ import {
   LayoutDashboard,
   MessageSquare,
   PieChart as PieChartIcon,
-  RefreshCw,
   TrendingUp,
   Users,
 } from "lucide-react";
@@ -140,7 +139,6 @@ export function DashboardContent({
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const [staleError, setStaleError] = useState<string | null>(null);
   const dataRef = useRef<DashboardSnapshot | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -189,11 +187,10 @@ export function DashboardContent({
         if (result.success && result.data) {
           setData(result.data);
           setError(null);
-          setStaleError(null);
         } else {
           const msg = result.error ?? "Erro ao carregar dados";
           if (dataRef.current) {
-            setStaleError(msg);
+            window.location.reload();
           } else {
             setError(msg);
           }
@@ -202,7 +199,7 @@ export function DashboardContent({
         const message = err instanceof Error ? err.message : String(err);
         console.error("[fetchData] erro ao chamar getDashboardData:", err);
         if (dataRef.current) {
-          setStaleError(`Erro de conexão: ${message}`);
+          window.location.reload();
         } else {
           setError(`Erro de conexão: ${message}`);
         }
@@ -376,16 +373,6 @@ export function DashboardContent({
         </div>
       </motion.div>
 
-      {/* Banner de dados desatualizados (stale) */}
-      {staleError ? (
-        <motion.div
-          variants={itemVariants}
-          className="flex items-center gap-2.5 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-2.5 text-sm text-amber-400"
-        >
-          <RefreshCw className="h-3.5 w-3.5 shrink-0" />
-          <span>Dados podem estar desatualizados — {staleError}</span>
-        </motion.div>
-      ) : null}
 
       {/* Filtros (sem account selector — vive no sidebar) */}
       <motion.div variants={itemVariants} data-tour="dashboard-filters">
@@ -442,7 +429,7 @@ export function DashboardContent({
           icon={MessageSquare}
           iconBg="bg-amber-500/10"
           iconColor="text-amber-400"
-          label="Conversas abertas e pendentes"
+          label="Conversas em atendimento"
           subtitle="com atividade no período"
           value={stats.open.toLocaleString("pt-BR")}
           trend={trendFor(stats.comparison.open, "%")}
@@ -609,8 +596,8 @@ export function DashboardContent({
       <DrillDownDialog
         open={drillDown === "open"}
         onOpenChange={(o) => (o ? setDrillDown("open") : closeDrillDown())}
-        title="Conversas abertas e pendentes"
-        subtitle="Criadas no período, pendentes e ainda em aberto"
+        title="Conversas em atendimento"
+        subtitle="Em aberto ou pendentes no momento"
         icon={MessageSquare}
         iconColor="text-amber-400"
         iconBg="bg-amber-500/10"

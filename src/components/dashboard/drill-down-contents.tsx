@@ -754,14 +754,12 @@ export function OpenDrillDownContent({
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <DrillDownSection
           title="Distribuição por status"
-          description="Abertas e pendentes agora"
+          description="Em atendimento agora"
         >
           <DonutWithCenter
             data={pieData}
-            centerLabel="Abertas"
-            centerValue={openCount.toLocaleString("pt-BR")}
-            secondaryLabel="Pendentes"
-            secondaryValue={pendingCount.toLocaleString("pt-BR")}
+            centerLabel="Total"
+            centerValue={(openCount + pendingCount).toLocaleString("pt-BR")}
             height={280}
             emptyMessage="Sem conversas abertas ou pendentes"
           />
@@ -804,7 +802,7 @@ export function OpenDrillDownContent({
       <DrillDownSection
         title={
           <>
-            Conversas pendentes e em aberto agora
+            Conversas em atendimento agora
             <TotalBadge n={data.total} />
           </>
         }
@@ -830,10 +828,10 @@ export function OpenDrillDownContent({
 /* -------------------------- Status genérico (v0.13.0) -------------------------- */
 
 const STATUS_LABEL: Record<0 | 1 | 2 | 3, string> = {
-  0: "Aberto",
-  1: "Resolvido",
+  0: "Aberta",
+  1: "Resolvida",
   2: "Pendente",
-  3: "Adiado",
+  3: "Adiada",
 };
 
 export function StatusDrillDownContent({

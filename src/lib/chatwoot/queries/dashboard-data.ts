@@ -77,7 +77,7 @@ export type DashboardStatusCode = 0 | 1 | 2 | 3;
 
 export interface DashboardByStatus {
   status: DashboardStatusCode;
-  label: "Aberto" | "Resolvido" | "Pendente" | "Adiado";
+  label: "Aberta" | "Resolvida" | "Pendente" | "Adiada";
   count: number;
 }
 
@@ -196,10 +196,10 @@ function pctDiff(current: number, previous: number): number | null {
 }
 
 const STATUS_LABELS: Record<DashboardStatusCode, DashboardByStatus["label"]> = {
-  0: "Aberto",
-  1: "Resolvido",
+  0: "Aberta",
+  1: "Resolvida",
   2: "Pendente",
-  3: "Adiado",
+  3: "Adiada",
 };
 
 export async function dashboardData(

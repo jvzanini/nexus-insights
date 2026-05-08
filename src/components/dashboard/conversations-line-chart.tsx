@@ -42,7 +42,7 @@ const SERIES: readonly SeriesDef[] = [
   { key: "received", label: "Novas", color: "#22c55e" },
   { key: "pending", label: "Pendentes", color: "#8b5cf6" },
   { key: "resolved", label: "Resolvidas", color: "#3b82f6" },
-  { key: "open", label: "Abertas", color: "#f59e0b" },
+  { key: "open", label: "Em atendimento", color: "#f59e0b" },
 ];
 
 const STORAGE_KEY = "dashboard.chart.visibleSeries";

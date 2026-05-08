@@ -114,8 +114,8 @@ export function KpiClickableCard({
         `${label}: ${value}.${effectiveSubtitle ? ` ${effectiveSubtitle}.` : ""} Clique para ver detalhes.`
       }
       className={cn(
-        "group relative flex w-full flex-col rounded-xl border border-border bg-card p-5 text-left",
-        "min-h-[8rem] cursor-pointer outline-none",
+        "group relative flex w-full flex-col rounded-xl border border-border bg-card p-4 text-left",
+        "min-h-[6rem] cursor-pointer outline-none",
         "transition-[border-color,box-shadow] duration-200",
         "hover:border-violet-500/30 hover:shadow-lg hover:shadow-violet-500/5",
         "focus-visible:border-violet-500/40 focus-visible:ring-2 focus-visible:ring-violet-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
@@ -141,11 +141,11 @@ export function KpiClickableCard({
           ) : null}
           <div
             className={cn(
-              "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
               iconBg,
             )}
           >
-            <Icon className={cn("h-5 w-5", iconColor)} aria-hidden />
+            <Icon className={cn("h-4 w-4", iconColor)} aria-hidden />
           </div>
         </div>
       </div>
@@ -153,7 +153,7 @@ export function KpiClickableCard({
       {/* Hint "ver detalhes" — discreto, alinhado à direita, abaixo da linha topo */}
       <span
         aria-hidden
-        className="mt-1 self-end inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-violet-400/80 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100"
+        className="mt-3 self-end inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-violet-400/80 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100"
       >
         ver detalhes
         <ArrowRight className="h-3 w-3" />
@@ -161,7 +161,7 @@ export function KpiClickableCard({
 
       {/* Valor + trend + subtitle */}
       <div className="mt-3">
-        <p className="font-heading text-3xl font-bold tracking-tight tabular-nums text-foreground">
+        <p className="font-heading text-2xl font-bold tracking-tight tabular-nums text-foreground">
           {value}
         </p>
         {trend ? (

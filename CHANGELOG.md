@@ -1,5 +1,25 @@
 # Changelog
 
+## [v0.54.0] 2026-05-08 — Dashboard: Em atendimento, donut Total, auto-reload, cards menores
+
+### Dashboard — Nomenclatura "Em atendimento"
+- **"Abertas" → "Em atendimento"** em todo o dashboard: legenda do gráfico de linhas, KPI card label, DrillDown title/subtitle e título da seção de lista. O status interno (código 0 = open) não foi alterado.
+
+### Dashboard — OpenDrillDown donut
+- **Centro do donut exibe "Total"** (soma de abertas + pendentes) em vez de duas linhas separadas ("69 Abertas / 5 Pendentes"). Hover nos slices continua mostrando o breakdown individual.
+
+### Dashboard — Auto-reload em dado desatualizado
+- **Banner de stale removido**: ao detectar falha de fetch com dados existentes, a página recarrega automaticamente via `window.location.reload()` sem exibir paths de server action ao usuário.
+
+### Dashboard — KpiClickableCard reduzido
+- Padding `p-5 → p-4`, min-height `8rem → 6rem`, valor `text-3xl → text-2xl`, ícone `h-9/w-9 → h-8/w-8` — cards menos volumosos na grade.
+- "ver detalhes" com espaçamento `mt-1 → mt-3` para separar melhor do ícone.
+
+### Dashboard — Status no feminino
+- `STATUS_LABELS` em `dashboard-data.ts` e `STATUS_LABEL` em `drill-down-contents.tsx`: Aberto→Aberta, Resolvido→Resolvida, Adiado→Adiada (Pendente permanece). Union type TypeScript atualizado.
+
+---
+
 ## [v0.53.0] 2026-05-07 — Agente Nex: semântica de período, label exact-match, unanswered status=0
 
 ### Agente Nex — Semântica de período corrigida
