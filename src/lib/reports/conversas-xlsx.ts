@@ -29,7 +29,7 @@ const FIXED_HEADERS = [
   "Documento",
   "País",
   "Estado/Cidade",
-  "Estado",
+  "Caixa de entrada",
   "Departamento",
   "Atendente",
   "Status",

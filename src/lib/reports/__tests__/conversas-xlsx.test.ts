@@ -73,7 +73,7 @@ describe("conversas-xlsx", () => {
         "Documento",
         "País",
         "Estado/Cidade",
-        "Estado",
+        "Caixa de entrada",
         "Departamento",
         "Atendente",
         "Status",
@@ -87,14 +87,14 @@ describe("conversas-xlsx", () => {
     );
   });
 
-  it("País e Estado/Cidade ficam logo após Documento e antes de Estado (inbox)", async () => {
+  it("País e Estado/Cidade ficam logo após Documento e antes de Caixa de entrada (inbox)", async () => {
     const { buffer } = await buildConversasXlsxBuffer({ rows: [baseRow] });
     const { rows } = await loadRowsFromBuffer(buffer);
     const header = rows[0] as string[];
     const docIdx = header.indexOf("Documento");
     expect(header[docIdx + 1]).toBe("País");
     expect(header[docIdx + 2]).toBe("Estado/Cidade");
-    expect(header[docIdx + 3]).toBe("Estado");
+    expect(header[docIdx + 3]).toBe("Caixa de entrada");
   });
 
   it("preenche País e Estado/Cidade do contato nas células corretas", async () => {
