@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.55.2] 2026-06-05 — Export XLSX: colunas País/Estado-Cidade + headers legíveis
+
+Ajustes na planilha exportada do Relatório de Conversas (somente no arquivo XLSX; a tela não muda):
+- **Novas colunas `País` e `Estado/Cidade`** (do contato), logo após `Documento`.
+- Coluna `Estado` (que sempre foi o nome da inbox) **renomeada para `Caixa de entrada`** — só na planilha.
+- **Headers de atributos dinâmicos** passam de `Atr: wpp_id` para `Atributo: Wpp Id` (prefixo `Atributo:` + nome legível, sem underline, Title Case).
+
+---
+
 ## [v0.55.1] 2026-06-05 — Conversas: integração completa de País/Estado-Cidade (contador, chips, export)
 
 Correção da v0.55.0: os filtros País e Estado/Cidade existiam mas não estavam integrados em todos os consumidores do `FilterState`.
