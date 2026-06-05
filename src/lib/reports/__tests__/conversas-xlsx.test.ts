@@ -2,7 +2,10 @@
 // 2026-05-01-relatorio-conversas-revamp.md.
 
 import ExcelJS from "exceljs";
-import { buildConversasXlsxBuffer } from "@/lib/reports/conversas-xlsx";
+import {
+  buildConversasXlsxBuffer,
+  prettifyAttrKey,
+} from "@/lib/reports/conversas-xlsx";
 import type { ConversaRow } from "@/lib/chatwoot/queries/conversas-list";
 
 const baseRow: ConversaRow = {
@@ -58,7 +61,7 @@ describe("conversas-xlsx", () => {
     expect(view?.ySplit).toBe(1);
   });
 
-  it("inclui as 14 colunas fixas", async () => {
+  it("inclui as 16 colunas fixas (com País e Estado/Cidade após Documento)", async () => {
     const { buffer } = await buildConversasXlsxBuffer({ rows: [baseRow] });
     const { rows } = await loadRowsFromBuffer(buffer);
     const header = rows[0];
@@ -68,6 +71,8 @@ describe("conversas-xlsx", () => {
         "Nome",
         "WhatsApp",
         "Documento",
+        "País",
+        "Estado/Cidade",
         "Estado",
         "Departamento",
         "Atendente",
@@ -82,7 +87,49 @@ describe("conversas-xlsx", () => {
     );
   });
 
-  it("inclui colunas dinâmicas Atr:<chave> em ordem alfabética", async () => {
+  it("País e Estado/Cidade ficam logo após Documento e antes de Estado (inbox)", async () => {
+    const { buffer } = await buildConversasXlsxBuffer({ rows: [baseRow] });
+    const { rows } = await loadRowsFromBuffer(buffer);
+    const header = rows[0] as string[];
+    const docIdx = header.indexOf("Documento");
+    expect(header[docIdx + 1]).toBe("País");
+    expect(header[docIdx + 2]).toBe("Estado/Cidade");
+    expect(header[docIdx + 3]).toBe("Estado");
+  });
+
+  it("preenche País e Estado/Cidade do contato nas células corretas", async () => {
+    const row: ConversaRow = {
+      ...baseRow,
+      contact: {
+        ...baseRow.contact,
+        country: "Brasil",
+        estado: "MG-Minas Gerais",
+      },
+    };
+    const { buffer } = await buildConversasXlsxBuffer({ rows: [row] });
+    const { rows } = await loadRowsFromBuffer(buffer);
+    const header = rows[0] as string[];
+    const dataRow = rows[1] as unknown[];
+    const paisIdx = header.indexOf("País");
+    const estadoCidadeIdx = header.indexOf("Estado/Cidade");
+    expect(dataRow[paisIdx]).toBe("Brasil");
+    expect(dataRow[estadoCidadeIdx]).toBe("MG-Minas Gerais");
+  });
+
+  it("País/Estado/Cidade null viram — nas células correspondentes", async () => {
+    const row: ConversaRow = {
+      ...baseRow,
+      contact: { ...baseRow.contact, country: null, estado: null },
+    };
+    const { buffer } = await buildConversasXlsxBuffer({ rows: [row] });
+    const { rows } = await loadRowsFromBuffer(buffer);
+    const header = rows[0] as string[];
+    const dataRow = rows[1] as unknown[];
+    expect(dataRow[header.indexOf("País")]).toBe("—");
+    expect(dataRow[header.indexOf("Estado/Cidade")]).toBe("—");
+  });
+
+  it("inclui colunas dinâmicas Atributo: <Nome Legível> em ordem alfabética", async () => {
     const { buffer } = await buildConversasXlsxBuffer({
       rows: [
         baseRow,
@@ -97,9 +144,27 @@ describe("conversas-xlsx", () => {
     const { rows } = await loadRowsFromBuffer(buffer);
     const header = rows[0] as string[];
     const atrCols = header.filter(
-      (c) => typeof c === "string" && c.startsWith("Atr:"),
+      (c) => typeof c === "string" && c.startsWith("Atributo:"),
     );
-    expect(atrCols).toEqual(["Atr: cpf", "Atr: plano", "Atr: unidade"]);
+    expect(atrCols).toEqual([
+      "Atributo: Cpf",
+      "Atributo: Plano",
+      "Atributo: Unidade",
+    ]);
+  });
+
+  it("custom_attribute status_atendimento vira header 'Atributo: Status Atendimento' (não 'Atr:')", async () => {
+    const row: ConversaRow = {
+      ...baseRow,
+      custom_attributes: { status_atendimento: "aberto" },
+    };
+    const { buffer } = await buildConversasXlsxBuffer({ rows: [row] });
+    const { rows } = await loadRowsFromBuffer(buffer);
+    const header = rows[0] as string[];
+    expect(header).toContain("Atributo: Status Atendimento");
+    expect(
+      header.some((c) => typeof c === "string" && c.startsWith("Atr:")),
+    ).toBe(false);
   });
 
   it("traduz status/prioridade pt-BR", async () => {
@@ -154,7 +219,7 @@ describe("conversas-xlsx", () => {
     const { rows: parsed } = await loadRowsFromBuffer(buffer);
     const header = parsed[0] as string[];
     const atrCount = header.filter(
-      (c) => typeof c === "string" && c.startsWith("Atr:"),
+      (c) => typeof c === "string" && c.startsWith("Atributo:"),
     ).length;
     expect(atrCount).toBe(50);
     expect(droppedAttrCount).toBeGreaterThan(0);
@@ -191,6 +256,28 @@ describe("conversas-xlsx", () => {
     const dataRow = rows[1] as unknown[];
     const dashCount = dataRow.filter((v) => v === "—").length;
     expect(dashCount).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe("prettifyAttrKey", () => {
+  it("converte snake_case em Title Case", () => {
+    expect(prettifyAttrKey("wpp_id")).toBe("Wpp Id");
+    expect(prettifyAttrKey("nome_id")).toBe("Nome Id");
+    expect(prettifyAttrKey("status_atendimento")).toBe("Status Atendimento");
+  });
+
+  it("converte kebab-case em Title Case", () => {
+    expect(prettifyAttrKey("message-api")).toBe("Message Api");
+  });
+
+  it("colapsa espaços múltiplos e dá trim", () => {
+    expect(prettifyAttrKey("  status__atendimento  ")).toBe(
+      "Status Atendimento",
+    );
+  });
+
+  it("normaliza maiúsculas/minúsculas para Title Case", () => {
+    expect(prettifyAttrKey("MESSAGE_API")).toBe("Message Api");
   });
 });
 
