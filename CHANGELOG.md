@@ -1,5 +1,22 @@
 # Changelog
 
+## [v0.55.0] 2026-06-05 — Conversas: País e Estado/Cidade do contato (drilldown + filtros)
+
+### Relatório de Conversas — País e Estado/Cidade
+- **Drilldown** ganha duas linhas novas após `ATRIBUTOS`: **`PAÍS`** e **`ESTADO/CIDADE`**, lidas de `contacts.additional_attributes` (`country`/`city`) do Chatwoot. Contato sem dado mostra `—`.
+- **Filtros novos** `País` e `Estado/Cidade` (multi-select) no modal de filtros, em ambos os modos **Simples** e **Avançado**, logo após `Documento`.
+
+### Normalização canônica (`src/lib/reports/location.ts`)
+- Fonte única da verdade para padronizar os valores sujos do banco. **País**: `Brazil`/variações → `Brasil`. **Estado**: sempre `UF-Nome` (ex.: `MG-Minas Gerais`), por precedência nome → sigla UF → cidade conhecida (capitais + frequentes) → fallback `ZZ-Outros Estados`.
+- Match de nome de estado com **fronteira de palavra** (evita falsos-positivos tipo `Paratinga`→Pará). 37+ casos cobertos por testes.
+
+### Arquitetura
+- Filtro 100% **client-side** no pipeline da tabela (`matchLocation`, após `documentTypes` e antes do modo Avançado) — sem tocar SQL/WHERE. Normalização aplicada uma vez no mapping de `conversas-list.ts` → `ConversaRow.contact.{country,estado}`.
+- Opções dos filtros **derivadas das linhas carregadas**; valores selecionados fora do período atual são preservados (visíveis e desmarcáveis).
+- Spec/plano: `docs/superpowers/specs/2026-06-05-conversas-pais-estado-cidade-design.md`, `docs/superpowers/plans/2026-06-05-conversas-pais-estado-cidade.md`.
+
+---
+
 ## [v0.54.0] 2026-05-08 — Dashboard: Em atendimento, donut Total, auto-reload, cards menores
 
 ### Dashboard — Nomenclatura "Em atendimento"
