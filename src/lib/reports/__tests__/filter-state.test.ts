@@ -22,6 +22,8 @@ function makeState(overrides: Partial<FilterState> = {}): FilterState {
     priorities: [],
     labelIds: [],
     documentTypes: [],
+    countries: [],
+    estados: [],
     mode: "simple",
     ...overrides,
   };
@@ -454,6 +456,59 @@ describe("diffFilterStates v0.32 — DiffOptions", () => {
     const a = makeState({ documentTypes: ["cpf", "none"] });
     const b = makeState({ documentTypes: ["cpf", "none"] });
     expect(diffFilterStates(a, b)).toBe(0);
+  });
+});
+
+describe("FilterState — countries/estados (localização)", () => {
+  it("EMPTY tem countries [] e estados []", () => {
+    expect(EMPTY_FILTER_STATE.countries).toEqual([]);
+    expect(EMPTY_FILTER_STATE.estados).toEqual([]);
+  });
+
+  it("serializa countries e estados separados por vírgula", () => {
+    const state = makeState({
+      countries: ["Brasil"],
+      estados: ["MG-Minas Gerais", "ZZ-Outros Estados"],
+    });
+    const sp = serializeFilterState(state);
+    expect(sp.get("countries")).toBe("Brasil");
+    expect(sp.get("estados")).toBe("MG-Minas Gerais,ZZ-Outros Estados");
+  });
+
+  it("deserializa countries e estados de volta para arrays exatos", () => {
+    const sp = serializeFilterState(
+      makeState({
+        countries: ["Brasil"],
+        estados: ["MG-Minas Gerais", "ZZ-Outros Estados"],
+      }),
+    );
+    const restored = deserializeFilterState(sp);
+    expect(restored.countries).toEqual(["Brasil"]);
+    expect(restored.estados).toEqual(["MG-Minas Gerais", "ZZ-Outros Estados"]);
+  });
+
+  it("arrays vazios não emitem os params countries/estados", () => {
+    const sp = serializeFilterState(
+      makeState({ countries: [], estados: [] }),
+    );
+    expect(sp.has("countries")).toBe(false);
+    expect(sp.has("estados")).toBe(false);
+  });
+
+  it("URL sem countries/estados deserializa para arrays vazios", () => {
+    const sp = new URLSearchParams("period=hoje");
+    const state = deserializeFilterState(sp);
+    expect(state.countries).toEqual([]);
+    expect(state.estados).toEqual([]);
+  });
+
+  it("trim em valores e descarta vazios", () => {
+    const sp = new URLSearchParams(
+      "period=hoje&countries= Brasil , &estados=MG-Minas Gerais, ,ZZ-Outros Estados",
+    );
+    const state = deserializeFilterState(sp);
+    expect(state.countries).toEqual(["Brasil"]);
+    expect(state.estados).toEqual(["MG-Minas Gerais", "ZZ-Outros Estados"]);
   });
 });
 

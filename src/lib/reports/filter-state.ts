@@ -29,6 +29,10 @@ export interface FilterState {
   labelIds: number[];
   /** Filtro por tipo de documento (CPF/CNPJ/Sem). Multi-select OR. Default []. */
   documentTypes: DocumentTypeFilter[];
+  /** Filtro por país canônico (ex.: "Brasil"). Multi-select OR. Default []. */
+  countries: string[];
+  /** Filtro por estado canônico "UF-Nome" (ex.: "MG-Minas Gerais"). Multi-select OR. Default []. */
+  estados: string[];
   search?: string;
   /** Modo simples (padrão) usa multi-selects nativos; advanced usa where-clause builder. */
   mode: FilterMode;
@@ -47,6 +51,8 @@ export const EMPTY_FILTER_STATE: FilterState = {
   priorities: [],
   labelIds: [],
   documentTypes: [],
+  countries: [],
+  estados: [],
   mode: "simple",
 };
 
@@ -72,6 +78,8 @@ export function serializeFilterState(state: FilterState): URLSearchParams {
   if (state.documentTypes && state.documentTypes.length) {
     p.set("docTypes", state.documentTypes.join(","));
   }
+  if (state.countries?.length) p.set("countries", state.countries.join(","));
+  if (state.estados?.length) p.set("estados", state.estados.join(","));
   if (state.search?.trim()) p.set("q", state.search.trim());
   if (state.mode === "advanced") {
     p.set("mode", "advanced");
@@ -124,6 +132,13 @@ export function deserializeFilterState(params: URLSearchParams): FilterState {
         .filter(isDocumentTypeFilter)
     : [];
 
+  const countries =
+    params.get("countries")?.split(",").map((s) => s.trim()).filter(Boolean) ??
+    [];
+  const estados =
+    params.get("estados")?.split(",").map((s) => s.trim()).filter(Boolean) ??
+    [];
+
   const modeRaw = params.get("mode");
   const mode: FilterMode = modeRaw === "advanced" ? "advanced" : "simple";
 
@@ -146,6 +161,8 @@ export function deserializeFilterState(params: URLSearchParams): FilterState {
     priorities: parseIds(params.get("priority")),
     labelIds: parseIds(params.get("label")),
     documentTypes,
+    countries,
+    estados,
     search: params.get("q") ?? undefined,
     mode,
     conditionGroup,
@@ -179,6 +196,8 @@ export function diffFilterStates(
   if (a.priorities.join(",") !== b.priorities.join(",")) diff++;
   if (a.labelIds.join(",") !== b.labelIds.join(",")) diff++;
   if ((a.documentTypes ?? []).join(",") !== (b.documentTypes ?? []).join(",")) diff++;
+  if ((a.countries ?? []).join(",") !== (b.countries ?? []).join(",")) diff++;
+  if ((a.estados ?? []).join(",") !== (b.estados ?? []).join(",")) diff++;
   if (!opts.ignoreSearch && (a.search ?? "") !== (b.search ?? "")) diff++;
   if (!opts.ignoreMode && a.mode !== b.mode) diff++;
   if (
