@@ -149,12 +149,12 @@ export function ConversasPageClient({
   // Opções de País/Estado derivadas das linhas do período (distintas,
   // ordenadas). Alimentam os MultiSelect do <FiltersDialog>.
   const countryOptions = useMemo(
-    () => buildLocationOptions(initialRows, "country"),
-    [initialRows],
+    () => buildLocationOptions(initialRows, "country", filterState.countries),
+    [initialRows, filterState.countries],
   );
   const estadoOptions = useMemo(
-    () => buildLocationOptions(initialRows, "estado"),
-    [initialRows],
+    () => buildLocationOptions(initialRows, "estado", filterState.estados),
+    [initialRows, filterState.estados],
   );
 
   return (

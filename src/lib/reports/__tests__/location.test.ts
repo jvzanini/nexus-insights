@@ -125,4 +125,10 @@ describe("normalizeEstado", () => {
   it("colapsa espaços múltiplos", () => {
     expect(normalizeEstado("  São    Paulo  ")).toBe("SP-São Paulo");
   });
+  it("'Paratinga' (cidade BA) → fallback (não casar 'para' por substring)", () => {
+    expect(normalizeEstado("Paratinga")).toBe("ZZ-Outros Estados");
+  });
+  it("'Acreúna' (cidade GO) → fallback (não casar 'acre' por substring)", () => {
+    expect(normalizeEstado("Acreúna")).toBe("ZZ-Outros Estados");
+  });
 });

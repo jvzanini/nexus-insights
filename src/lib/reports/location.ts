@@ -62,6 +62,16 @@ function canonical(uf: string, nome: string): string {
   return `${uf}-${nome}`;
 }
 
+/**
+ * Match de substring com fronteira de palavra. `haystack` e `needle` devem
+ * estar lowercase sem acento. Evita falsos-positivos como "Paratinga" casar
+ * "para" (Pará) ou "Acreúna" casar "acre".
+ */
+function wordBoundaryIncludes(haystack: string, needle: string): boolean {
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^a-z])${escaped}($|[^a-z])`).test(haystack);
+}
+
 const UF_SET = new Set(ESTADOS.map((e) => e.uf));
 const ESTADO_BY_UF = new Map(ESTADOS.map((e) => [e.uf, e]));
 
@@ -137,9 +147,10 @@ export function normalizeEstado(raw: string | null | undefined): string | null {
 
   const valueDeburr = deburr(value);
 
-  // 3. Nome de estado completo presente (substring deburrada). Mais longo vence.
+  // 3. Nome de estado completo presente (substring deburrada, com fronteira de
+  // palavra). Mais longo vence.
   for (const e of ESTADOS_BY_NAME_LEN) {
-    if (valueDeburr.includes(e.deburr)) {
+    if (wordBoundaryIncludes(valueDeburr, e.deburr)) {
       return canonical(e.uf, e.nome);
     }
   }
@@ -209,11 +220,17 @@ function ufPrefix(label: string): string {
 export function buildLocationOptions(
   rows: ReadonlyArray<{ contact: { country: string | null; estado: string | null } }>,
   field: "country" | "estado",
+  ensure: string[] = [],
 ): LocationOption[] {
   const distinct = new Set<string>();
   for (const r of rows) {
     const value = r.contact[field];
     if (value != null) distinct.add(value);
+  }
+  // União com valores selecionados ausentes do dataset: garante que um filtro
+  // ativo permaneça visível/desmarcável no MultiSelect.
+  for (const v of ensure) {
+    if (v != null && v !== "") distinct.add(v);
   }
 
   const values = [...distinct];
@@ -231,9 +248,7 @@ export function buildLocationOptions(
 
       // Ambos conhecidos: ordena pela posição da UF em ESTADOS.
       if (aOrder != null && bOrder != null) return aOrder - bOrder;
-      // Desconhecidos (não esperado) vêm antes dos conhecidos? Não: a regra é
-      // "antes do ZZ, em ordem alfabética". Conhecidos já vêm ordenados por UF;
-      // desconhecidos entram alfabeticamente entre si e relativos aos conhecidos.
+      // valores não-canônicos não devem ocorrer pós-normalização; ordenados alfabeticamente por robustez
       if (aOrder == null && bOrder == null) return a.localeCompare(b, "pt-BR");
       // Um conhecido, outro não: mantém estabilidade ordenando por nome.
       return a.localeCompare(b, "pt-BR");

@@ -62,6 +62,43 @@ describe("buildLocationOptions — estado", () => {
       buildLocationOptions([row(null, null), row(null, null)], "estado"),
     ).toEqual([]);
   });
+
+  it("ensure inclui valor ausente das rows na posição correta de UF, com id válido", () => {
+    const rows: Row[] = [
+      row(null, "SP-São Paulo"),
+      row(null, "BA-Bahia"),
+    ];
+    // RS não está nas rows; deve entrar entre PR/PE e SP pela posição da UF.
+    expect(
+      buildLocationOptions(rows, "estado", ["RS-Rio Grande do Sul"]),
+    ).toEqual([
+      { id: 1, name: "BA-Bahia" },
+      { id: 2, name: "RS-Rio Grande do Sul" },
+      { id: 3, name: "SP-São Paulo" },
+    ]);
+  });
+
+  it("ensure com valor já presente nas rows não duplica", () => {
+    const rows: Row[] = [
+      row(null, "SP-São Paulo"),
+      row(null, "BA-Bahia"),
+    ];
+    expect(buildLocationOptions(rows, "estado", ["BA-Bahia"])).toEqual([
+      { id: 1, name: "BA-Bahia" },
+      { id: 2, name: "SP-São Paulo" },
+    ]);
+  });
+
+  it("ensure omitido mantém comportamento idêntico", () => {
+    const rows: Row[] = [
+      row(null, "SP-São Paulo"),
+      row(null, "BA-Bahia"),
+    ];
+    expect(buildLocationOptions(rows, "estado")).toEqual([
+      { id: 1, name: "BA-Bahia" },
+      { id: 2, name: "SP-São Paulo" },
+    ]);
+  });
 });
 
 describe("buildLocationOptions — country", () => {
