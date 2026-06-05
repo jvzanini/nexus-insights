@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.55.3] 2026-06-05 — Export XLSX: header de atributo com a chave original
+
+- Os headers de atributos dinâmicos voltam a usar a **chave crua** do Chatwoot, mantendo só o prefixo: `Atributo: status_atendimento`, `Atributo: wpp_id` (em vez do Title Case "Atributo: Status Atendimento"). Mantém consistência com como os atributos aparecem na plataforma.
+
+---
+
 ## [v0.55.2] 2026-06-05 — Export XLSX: colunas País/Estado-Cidade + headers legíveis
 
 Ajustes na planilha exportada do Relatório de Conversas (somente no arquivo XLSX; a tela não muda):
