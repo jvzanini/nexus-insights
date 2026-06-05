@@ -14,6 +14,8 @@ const baseRow: ConversaRow = {
     phone_number: "+55 11 91234-5678",
     identifier: "12345678900",
     additional_attributes: null,
+    country: null,
+    estado: null,
   },
   inbox: { id: 1, name: "WhatsApp" },
   team: { id: 1, name: "Suporte" },

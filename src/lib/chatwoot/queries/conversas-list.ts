@@ -29,6 +29,7 @@ import { withChatwootResilience } from "../resilience";
 import { withCache } from "@/lib/cache/pull-through";
 import { cacheKey, hashFilters } from "@/lib/cache/keys";
 import { buildBaseFilter, type ReportFilters } from "../filters";
+import { normalizeCountry, normalizeEstado } from "@/lib/reports/location";
 import {
   buildLastClassificationMsgCte,
   buildLastIncomingPublicMsgCte,
@@ -52,6 +53,8 @@ export interface ConversaRow {
     phone_number: string | null;
     identifier: string | null;
     additional_attributes: Record<string, unknown> | null;
+    country: string | null;
+    estado: string | null;
   };
   inbox: { id: number; name: string | null };
   team: { id: number | null; name: string | null };
@@ -124,6 +127,8 @@ interface RawRow {
   contact_phone_number: string | null;
   contact_identifier: string | null;
   contact_additional_attributes: Record<string, unknown> | null;
+  contact_country_raw: string | null;
+  contact_estado_raw: string | null;
   inbox_id: number;
   inbox_name: string | null;
   team_id: number | null;
@@ -268,6 +273,8 @@ export async function conversasList(args: {
               ct.phone_number AS contact_phone_number,
               ct.identifier AS contact_identifier,
               ct.additional_attributes AS contact_additional_attributes,
+              ct.additional_attributes->>'country' AS contact_country_raw,
+              ct.additional_attributes->>'city'    AS contact_estado_raw,
               c.inbox_id,
               ix.name AS inbox_name,
               c.team_id,
@@ -349,6 +356,8 @@ export async function conversasList(args: {
               phone_number: r.contact_phone_number,
               identifier: r.contact_identifier,
               additional_attributes: r.contact_additional_attributes,
+              country: normalizeCountry(r.contact_country_raw),
+              estado: normalizeEstado(r.contact_estado_raw),
             },
             inbox: { id: r.inbox_id, name: r.inbox_name },
             team: { id: r.team_id, name: r.team_name },

@@ -25,6 +25,8 @@ const baseRow = (id: number, display: number): ConversaRow => ({
     phone_number: null,
     identifier: null,
     additional_attributes: null,
+    country: null,
+    estado: null,
   },
   inbox: { id: 1, name: "WA" },
   team: { id: null, name: null },

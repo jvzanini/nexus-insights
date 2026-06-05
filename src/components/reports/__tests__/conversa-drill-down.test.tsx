@@ -17,6 +17,8 @@ const baseRow: ConversaRow = {
     phone_number: "+5511912345678",
     identifier: null,
     additional_attributes: null,
+    country: null,
+    estado: null,
   },
   inbox: { id: 1, name: "WA" },
   team: { id: null, name: null },

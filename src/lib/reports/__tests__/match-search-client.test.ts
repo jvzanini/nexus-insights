@@ -15,6 +15,8 @@ const baseRow: ConversaRow = {
     phone_number: "+5511987654321",
     identifier: "07041511111",
     additional_attributes: null,
+    country: null,
+    estado: null,
   },
   inbox: { id: 1, name: "AP-Amapá" },
   team: { id: 1, name: "Comercial" },
