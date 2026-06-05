@@ -6,7 +6,7 @@
 
 ## Versão atual em produção
 
-**v0.55.0** — commitada e deployada em 2026-06-05. Health: `status=ok`, db ~25ms, redis ok, chatwoot ok.
+**v0.55.1** — commitada e deployada em 2026-06-05. Health: `status=ok`, db ~25ms, redis ok, chatwoot ok.
 
 ---
 
@@ -14,7 +14,7 @@
 
 | Componente | Estado | Observação |
 |---|---|---|
-| App Next.js | ✅ Live | v0.55.0 |
+| App Next.js | ✅ Live | v0.55.1 |
 | Worker BullMQ (polling delta) | ✅ Live | polling 30s per-connection |
 | Pré-agregação | ✅ Live | refresh on-demand + cron 30min fallback |
 | Banco (Prisma + Postgres) | ✅ | leitura direta Chatwoot (read-only) |
@@ -27,6 +27,7 @@
 
 | Versão | Data | Descrição |
 |---|---|---|
+| v0.55.1 | 2026-06-05 | Conversas: integração completa de País/Estado-Cidade (badge contador, chips ativos, export XLSX, reset) |
 | v0.55.0 | 2026-06-05 | Conversas: País e Estado/Cidade do contato (drilldown + filtros Simples/Avançado), normalização canônica `location.ts` |
 | v0.54.0 | 2026-05-08 | Dashboard: "Em atendimento", donut Total, auto-reload, cards menores |
 | v0.53.0 | 2026-05-07 | Agente Nex: semântica de período, label exact-match, unanswered status=0 |

@@ -1,5 +1,17 @@
 # Changelog
 
+## [v0.55.1] 2026-06-05 — Conversas: integração completa de País/Estado-Cidade (contador, chips, export)
+
+Correção da v0.55.0: os filtros País e Estado/Cidade existiam mas não estavam integrados em todos os consumidores do `FilterState`.
+
+- **Badge contador "Filtros"** agora soma `countries`/`estados` (antes ignorava — mostrava 22 em vez de 24).
+- **Chips de filtros ativos** na toolbar passam a exibir `País` e `Estado/Cidade` (com popover "+N" e remoção via X).
+- **Exportar XLSX** agora aplica os filtros de país/estado (antes exportava ignorando-os) — `matchLocation` no pipeline de `conversas-export.ts`, props propagadas até a server action.
+- **Reset "Filtros somente"** (chip X) zera `countries`/`estados`.
+- Testes: +8 (chips país/estado, export filtrando por país e por estado).
+
+---
+
 ## [v0.55.0] 2026-06-05 — Conversas: País e Estado/Cidade do contato (drilldown + filtros)
 
 ### Relatório de Conversas — País e Estado/Cidade
