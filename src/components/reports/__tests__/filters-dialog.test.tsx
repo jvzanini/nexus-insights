@@ -19,6 +19,8 @@ describe("FiltersDialog (modo simples)", () => {
     teams: [],
     assignees: [],
     labels: [{ id: 5, name: "VIP" }],
+    countries: [],
+    estados: [],
   };
 
   beforeEach(() => jest.clearAllMocks());
@@ -64,6 +66,8 @@ describe("FiltersDialog v0.23 — sections fechadas + Limpar isolado + header di
     teams: [{ id: 10, name: "Suporte" }],
     assignees: [{ id: 100, name: "Ana" }],
     labels: [{ id: 5, name: "VIP" }],
+    countries: [],
+    estados: [],
   };
 
   beforeEach(() => jest.clearAllMocks());
@@ -181,6 +185,8 @@ describe("FiltersDialog v0.32 T8 — AlertDialog ao trocar de tab com dados", ()
     teams: [{ id: 10, name: "Suporte" }],
     assignees: [{ id: 100, name: "Ana" }],
     labels: [{ id: 5, name: "VIP" }],
+    countries: [],
+    estados: [],
   };
 
   beforeEach(() => jest.clearAllMocks());
@@ -258,6 +264,8 @@ describe("FiltersDialog v0.32 T9 — Limpar todos respeita tab ativo", () => {
     teams: [{ id: 10, name: "Suporte" }],
     assignees: [{ id: 100, name: "Ana" }],
     labels: [{ id: 5, name: "VIP" }],
+    countries: [],
+    estados: [],
   };
 
   beforeEach(() => jest.clearAllMocks());

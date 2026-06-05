@@ -631,6 +631,10 @@ export function AdvancedFilters({
         teams={teams}
         assignees={assignees}
         labels={labels}
+        // TODO(filtros-pais-estado): a próxima task deriva e injeta as
+        // options reais de País/Estado-Cidade. Placeholders [] por ora.
+        countries={[]}
+        estados={[]}
       />
 
       <SortingDialog

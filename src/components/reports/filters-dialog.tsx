@@ -13,7 +13,9 @@ import {
   Building2,
   FileText,
   Filter,
+  Globe,
   Inbox,
+  MapPin,
   RotateCcw,
   Tag,
   User,
@@ -100,7 +102,9 @@ type SimpleSectionKey =
   | "statuses"
   | "priorities"
   | "labelIds"
-  | "documentTypes";
+  | "documentTypes"
+  | "countries"
+  | "estados";
 
 // Monta a lista de campos do query builder com base nos metadados disponíveis.
 // Cada campo declara seu tipo (string|number|select|multi_select|date) que dita
@@ -110,11 +114,15 @@ function buildFields({
   teams,
   assignees,
   labels,
+  countries,
+  estados,
 }: {
   inboxes: MetaItem[];
   teams: MetaItem[];
   assignees: MetaItem[];
   labels: MetaItem[];
+  countries: MetaItem[];
+  estados: MetaItem[];
 }): ConditionFieldDef[] {
   return [
     {
@@ -183,6 +191,18 @@ function buildFields({
       label: "WhatsApp",
       type: "string",
     },
+    {
+      key: "contact.country",
+      label: "País",
+      type: "multi_select",
+      options: countries.map((c) => ({ value: c.name, label: c.name })),
+    },
+    {
+      key: "contact.estado",
+      label: "Estado/Cidade",
+      type: "multi_select",
+      options: estados.map((e) => ({ value: e.name, label: e.name })),
+    },
   ];
 }
 
@@ -202,6 +222,8 @@ interface Props {
   teams: MetaItem[];
   assignees: MetaItem[];
   labels: MetaItem[];
+  countries: MetaItem[];
+  estados: MetaItem[];
 }
 
 export function FiltersDialog({
@@ -213,6 +235,8 @@ export function FiltersDialog({
   teams,
   assignees,
   labels,
+  countries,
+  estados,
 }: Props) {
   const [draft, setDraft] = useState<FilterState>(applied);
   // Accordion mutex: apenas uma seção do Modo Simples aberta por vez.
@@ -264,6 +288,8 @@ export function FiltersDialog({
           priorities: [],
           labelIds: [],
           documentTypes: [],
+          countries: [],
+          estados: [],
         };
       }
       return { ...prev, conditionGroup: undefined };
@@ -280,7 +306,9 @@ export function FiltersDialog({
         draft.statuses.length > 0 ||
         draft.priorities.length > 0 ||
         draft.labelIds.length > 0 ||
-        (draft.documentTypes ?? []).length > 0
+        (draft.documentTypes ?? []).length > 0 ||
+        (draft.countries ?? []).length > 0 ||
+        (draft.estados ?? []).length > 0
       : !!draft.conditionGroup &&
         (draft.conditionGroup.items?.length ?? 0) > 0;
 
@@ -298,7 +326,9 @@ export function FiltersDialog({
       s.statuses.length > 0 ||
       s.priorities.length > 0 ||
       s.labelIds.length > 0 ||
-      (s.documentTypes ?? []).length > 0
+      (s.documentTypes ?? []).length > 0 ||
+      (s.countries ?? []).length > 0 ||
+      (s.estados ?? []).length > 0
     );
   }
 
@@ -333,6 +363,8 @@ export function FiltersDialog({
         next.priorities = [];
         next.labelIds = [];
         next.documentTypes = [];
+        next.countries = [];
+        next.estados = [];
       } else {
         // Sai do Avançado → limpa o conditionGroup
         next.conditionGroup = undefined;
@@ -558,6 +590,67 @@ export function FiltersDialog({
                   inline
                 />
               </CollapsibleSection>
+
+              <CollapsibleSection
+                title="País"
+                count={(draft.countries ?? []).length}
+                open={openSection === "countries"}
+                onOpenChange={makeSectionToggle("countries")}
+                icon={
+                  <Globe className="h-4 w-4 text-muted-foreground" aria-hidden />
+                }
+              >
+                <MultiSelectCheckbox
+                  label="País"
+                  options={countries}
+                  value={(draft.countries ?? [])
+                    .map(
+                      (name) => countries.find((o) => o.name === name)?.id,
+                    )
+                    .filter((x): x is number => x != null)}
+                  onChange={(ids) =>
+                    update(
+                      "countries",
+                      ids
+                        .map((id) => countries.find((o) => o.id === id)?.name)
+                        .filter((x): x is string => x != null),
+                    )
+                  }
+                  emptyLabel="Nenhum país disponível."
+                  inline
+                />
+              </CollapsibleSection>
+
+              <CollapsibleSection
+                title="Estado/Cidade"
+                count={(draft.estados ?? []).length}
+                open={openSection === "estados"}
+                onOpenChange={makeSectionToggle("estados")}
+                icon={
+                  <MapPin
+                    className="h-4 w-4 text-muted-foreground"
+                    aria-hidden
+                  />
+                }
+              >
+                <MultiSelectCheckbox
+                  label="Estado/Cidade"
+                  options={estados}
+                  value={(draft.estados ?? [])
+                    .map((name) => estados.find((o) => o.name === name)?.id)
+                    .filter((x): x is number => x != null)}
+                  onChange={(ids) =>
+                    update(
+                      "estados",
+                      ids
+                        .map((id) => estados.find((o) => o.id === id)?.name)
+                        .filter((x): x is string => x != null),
+                    )
+                  }
+                  emptyLabel="Nenhum estado disponível."
+                  inline
+                />
+              </CollapsibleSection>
             </TabsContent>
 
             <TabsContent
@@ -565,7 +658,14 @@ export function FiltersDialog({
               className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1"
             >
               <ConditionalFilters
-                fields={buildFields({ inboxes, teams, assignees, labels })}
+                fields={buildFields({
+                  inboxes,
+                  teams,
+                  assignees,
+                  labels,
+                  countries,
+                  estados,
+                })}
                 initial={draft.conditionGroup}
                 onChange={(g) => update("conditionGroup", g)}
                 hideActions
