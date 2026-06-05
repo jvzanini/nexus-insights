@@ -61,6 +61,7 @@ import {
   matchDocumentTypes,
   type DocumentTypeFilter,
 } from "@/lib/reports/match-document-types";
+import { matchLocation } from "@/lib/reports/match-location";
 import type { FetchConversasInput } from "@/lib/actions/reports/conversas";
 import type { ConversaRow } from "@/lib/chatwoot/queries/conversas-list";
 import type { SortRule } from "@/components/reports/sorting-dialog";
@@ -103,6 +104,8 @@ interface ConversasTableProps {
    * só UI; v0.35 cabeia a pipeline (bug fix).
    */
   documentTypes?: DocumentTypeFilter[];
+  countries?: string[];
+  estados?: string[];
 }
 
 type SortDirection = "asc" | "desc";
@@ -543,6 +546,8 @@ export function ConversasTable({
   conditionGroup,
   searchClient,
   documentTypes,
+  countries,
+  estados,
 }: ConversasTableProps) {
   // Alias interno — preserva todos os consumers já existentes (OpenIdLink,
   // HighlightedText em colunas, ConversaDrillDown, Field) que recebem
@@ -657,16 +662,21 @@ export function ConversasTable({
     [searchedRows, documentTypes],
   );
 
+  const locFilteredRows = useMemo(
+    () => matchLocation(docFilteredRows, countries ?? [], estados ?? []),
+    [docFilteredRows, countries, estados],
+  );
+
   const filteredRows = useMemo(() => {
     if (
       !conditionGroup ||
       !conditionGroup.items ||
       conditionGroup.items.length === 0
     ) {
-      return docFilteredRows;
+      return locFilteredRows;
     }
-    return applyConditions(docFilteredRows, conditionGroup);
-  }, [docFilteredRows, conditionGroup]);
+    return applyConditions(locFilteredRows, conditionGroup);
+  }, [locFilteredRows, conditionGroup]);
 
   // ---- Ordenação aplicada no client (estável). -----
   const sortedRows = useMemo(() => {
