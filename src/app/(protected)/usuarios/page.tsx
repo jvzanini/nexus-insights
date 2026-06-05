@@ -10,7 +10,10 @@ export const dynamic = "force-dynamic";
 export default async function UsuariosPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.platformRole === "viewer") redirect("/dashboard");
+  // TEMP (2026-06-05): acesso restrito a super_admin a pedido do usuário.
+  // Para reabrir a admin/manager, voltar para:
+  // if (user.platformRole === "viewer") redirect("/dashboard");
+  if (user.platformRole !== "super_admin") redirect("/dashboard");
 
   // CurrentUser e AuthUser têm a mesma forma a partir do shape do session.
   return (

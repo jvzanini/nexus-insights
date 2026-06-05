@@ -125,7 +125,10 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Usuários",
     href: "/usuarios",
     icon: Users,
-    visibleTo: ["super_admin", "admin", "manager"],
+    // TEMP (2026-06-05): restrito a super_admin a pedido do usuário.
+    // Para reabrir a admin/manager, voltar para:
+    // visibleTo: ["super_admin", "admin", "manager"],
+    visibleTo: ["super_admin"],
     section: "admin",
   },
   {
