@@ -1,12 +1,12 @@
 # STATUS — Nexus Insights (Matrix Fitness Group)
 
-> Última atualização: 2026-05-06
+> Última atualização: 2026-06-05
 
 ---
 
 ## Versão atual em produção
 
-**v0.48.1** — commitada e deployada em 2026-05-06.
+**v0.55.0** — commitada e deployada em 2026-06-05. Health: `status=ok`, db ~25ms, redis ok, chatwoot ok.
 
 ---
 
@@ -14,7 +14,7 @@
 
 | Componente | Estado | Observação |
 |---|---|---|
-| App Next.js | ✅ Live | v0.48.1 |
+| App Next.js | ✅ Live | v0.55.0 |
 | Worker BullMQ (polling delta) | ✅ Live | polling 30s per-connection |
 | Pré-agregação | ✅ Live | refresh on-demand + cron 30min fallback |
 | Banco (Prisma + Postgres) | ✅ | leitura direta Chatwoot (read-only) |
@@ -27,6 +27,13 @@
 
 | Versão | Data | Descrição |
 |---|---|---|
+| v0.55.0 | 2026-06-05 | Conversas: País e Estado/Cidade do contato (drilldown + filtros Simples/Avançado), normalização canônica `location.ts` |
+| v0.54.0 | 2026-05-08 | Dashboard: "Em atendimento", donut Total, auto-reload, cards menores |
+| v0.53.0 | 2026-05-07 | Agente Nex: semântica de período, label exact-match, unanswered status=0 |
+| v0.52.0 | 2026-05-06 | Consumo full-period; Agente Nex: CPF, etiquetas, out-of-scope |
+| v0.51.0 | 2026-05-06 | Dashboard: retry pool, stale banner, polling wired, gráfico período completo |
+| v0.50.x | 2026-05-06 | Agente Nex: calibração automática (46 cenários, 100%) |
+| v0.49.0 | 2026-05-06 | Agente Nex: auto-calibração de prompt + filtro etiqueta + sugestões max 3 |
 | v0.48.1 | 2026-05-06 | `truncateToNow()`: gráfico para no dia/hora atual; espaçamento atendentes |
 | v0.48.0 | 2026-05-05 | "Novas", acumulado carry-forward, "Hoje", range semana, badges kpiTotals |
 | v0.47.0 | 2026-05-05 | Open+Pending drill-down refeito, agent drill-down por atendente |
