@@ -2,10 +2,7 @@
 // 2026-05-01-relatorio-conversas-revamp.md.
 
 import ExcelJS from "exceljs";
-import {
-  buildConversasXlsxBuffer,
-  prettifyAttrKey,
-} from "@/lib/reports/conversas-xlsx";
+import { buildConversasXlsxBuffer } from "@/lib/reports/conversas-xlsx";
 import type { ConversaRow } from "@/lib/chatwoot/queries/conversas-list";
 
 const baseRow: ConversaRow = {
@@ -129,7 +126,7 @@ describe("conversas-xlsx", () => {
     expect(dataRow[header.indexOf("Estado/Cidade")]).toBe("—");
   });
 
-  it("inclui colunas dinâmicas Atributo: <Nome Legível> em ordem alfabética", async () => {
+  it("inclui colunas dinâmicas Atributo: <chave crua> em ordem alfabética", async () => {
     const { buffer } = await buildConversasXlsxBuffer({
       rows: [
         baseRow,
@@ -147,13 +144,13 @@ describe("conversas-xlsx", () => {
       (c) => typeof c === "string" && c.startsWith("Atributo:"),
     );
     expect(atrCols).toEqual([
-      "Atributo: Cpf",
-      "Atributo: Plano",
-      "Atributo: Unidade",
+      "Atributo: cpf",
+      "Atributo: plano",
+      "Atributo: unidade",
     ]);
   });
 
-  it("custom_attribute status_atendimento vira header 'Atributo: Status Atendimento' (não 'Atr:')", async () => {
+  it("custom_attribute status_atendimento vira header 'Atributo: status_atendimento' (chave crua, não 'Atr:')", async () => {
     const row: ConversaRow = {
       ...baseRow,
       custom_attributes: { status_atendimento: "aberto" },
@@ -161,7 +158,7 @@ describe("conversas-xlsx", () => {
     const { buffer } = await buildConversasXlsxBuffer({ rows: [row] });
     const { rows } = await loadRowsFromBuffer(buffer);
     const header = rows[0] as string[];
-    expect(header).toContain("Atributo: Status Atendimento");
+    expect(header).toContain("Atributo: status_atendimento");
     expect(
       header.some((c) => typeof c === "string" && c.startsWith("Atr:")),
     ).toBe(false);
@@ -256,28 +253,6 @@ describe("conversas-xlsx", () => {
     const dataRow = rows[1] as unknown[];
     const dashCount = dataRow.filter((v) => v === "—").length;
     expect(dashCount).toBeGreaterThanOrEqual(4);
-  });
-});
-
-describe("prettifyAttrKey", () => {
-  it("converte snake_case em Title Case", () => {
-    expect(prettifyAttrKey("wpp_id")).toBe("Wpp Id");
-    expect(prettifyAttrKey("nome_id")).toBe("Nome Id");
-    expect(prettifyAttrKey("status_atendimento")).toBe("Status Atendimento");
-  });
-
-  it("converte kebab-case em Title Case", () => {
-    expect(prettifyAttrKey("message-api")).toBe("Message Api");
-  });
-
-  it("colapsa espaços múltiplos e dá trim", () => {
-    expect(prettifyAttrKey("  status__atendimento  ")).toBe(
-      "Status Atendimento",
-    );
-  });
-
-  it("normaliza maiúsculas/minúsculas para Title Case", () => {
-    expect(prettifyAttrKey("MESSAGE_API")).toBe("Message Api");
   });
 });
 

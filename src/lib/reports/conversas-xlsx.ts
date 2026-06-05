@@ -82,22 +82,6 @@ function joinLabels(labels: ConversaRow["labels"]): string {
   return labels.map((l) => l.name).join(", ");
 }
 
-/**
- * Converte uma chave de custom_attribute em rótulo legível:
- * troca `_`/`-` por espaço, colapsa espaços, trim e aplica Title Case.
- * Ex.: `wpp_id` → "Wpp Id", `status_atendimento` → "Status Atendimento".
- */
-export function prettifyAttrKey(key: string): string {
-  return key
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .split(" ")
-    .filter((w) => w.length > 0)
-    .map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase())
-    .join(" ");
-}
-
 function attrToCell(value: unknown): string {
   if (value == null || value === "") return "";
   if (
@@ -158,7 +142,9 @@ export async function buildConversasXlsxBuffer(
     MAX_DYNAMIC_ATTR_COLS,
   );
 
-  const dynamicHeaders = attrKeys.map((k) => `Atributo: ${prettifyAttrKey(k)}`);
+  // Prefixo "Atributo: " + a chave crua do custom_attribute, exatamente como
+  // aparece na plataforma (ex.: "Atributo: status_atendimento"). Sem reformatar.
+  const dynamicHeaders = attrKeys.map((k) => `Atributo: ${k}`);
   const headers = [...FIXED_HEADERS, ...dynamicHeaders];
 
   // v0.35 fix: header via addRow direto. Setar `ws.columns = [...]` em ExcelJS
