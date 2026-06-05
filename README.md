@@ -187,7 +187,7 @@ Verificar deploy: `curl https://insights.nexusai360.com/api/health`
 
 9 sub-páginas em `/relatorios`:
 
-- **Conversas** — lista detalhada com query builder (E/OU), ordenação cadeia, drill-down inline, sticky toolbar/thead, exportação XLSX (14 colunas fixas + dinâmicas top-50 por frequência), virtualização via `@tanstack/react-virtual`.
+- **Conversas** — lista detalhada com query builder (E/OU), ordenação cadeia, drill-down inline (inclui **País** e **Estado/Cidade** do contato, normalizados via `src/lib/reports/location.ts`), filtros **País** e **Estado/Cidade** (Simples + Avançado), sticky toolbar/thead, exportação XLSX (14 colunas fixas + dinâmicas top-50 por frequência), virtualização via `@tanstack/react-virtual`.
 - **Distribuição** — pie chart por status/equipe/inbox.
 - **Equipe** — heatmap por equipe x período.
 - **Mensagens não respondidas** — drill-down por equipe + tabela paginada.
