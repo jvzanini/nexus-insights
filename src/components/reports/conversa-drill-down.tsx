@@ -19,9 +19,9 @@ interface Props {
 }
 
 /**
- * ConversaDrillDown — painel inline com 3 seções (WhatsApp / Etiquetas /
- * Atributos). Cada seção é uma linha com rótulo à esquerda (min-w 100px)
- * e conteúdo flex-wrap à direita.
+ * ConversaDrillDown — painel inline com seções (WhatsApp / Etiquetas /
+ * Atributos / País / Estado-Cidade). Cada seção é uma linha com rótulo à
+ * esquerda (min-w 100px) e conteúdo flex-wrap à direita.
  *
  * v0.19 polish:
  * - border-l-2 violet/30 + bg-muted/20 (marker discreto sem inundar de cor).
@@ -130,6 +130,34 @@ export function ConversaDrillDown({ row, searchTerm }: Props) {
             ) : null}
           </div>
         )}
+      </div>
+
+      {/* País */}
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className="min-w-[100px] pt-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          País
+        </span>
+        <span className="text-[13px] text-foreground/90">
+          {row.contact.country ? (
+            <HighlightedText text={row.contact.country} term={searchTerm} />
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
+        </span>
+      </div>
+
+      {/* Estado/Cidade */}
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className="min-w-[100px] pt-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Estado/Cidade
+        </span>
+        <span className="text-[13px] text-foreground/90">
+          {row.contact.estado ? (
+            <HighlightedText text={row.contact.estado} term={searchTerm} />
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
+        </span>
       </div>
     </div>
   );

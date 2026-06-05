@@ -136,6 +136,42 @@ describe("ConversaDrillDown — 3 seções inline", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("País e Estado/Cidade preenchidos → texto aparece", () => {
+    render(
+      <ConversaDrillDown
+        row={{
+          ...baseRow,
+          contact: {
+            ...baseRow.contact,
+            country: "Brasil",
+            estado: "MG-Minas Gerais",
+          },
+        }}
+        accountId={9}
+      />,
+    );
+    expect(screen.getByText(/^País$/)).toBeInTheDocument();
+    expect(screen.getByText(/Estado\/Cidade/)).toBeInTheDocument();
+    expect(screen.getByText("Brasil")).toBeInTheDocument();
+    expect(screen.getByText("MG-Minas Gerais")).toBeInTheDocument();
+  });
+
+  it("País e Estado/Cidade nulos → linhas mostram '—'", () => {
+    render(
+      <ConversaDrillDown
+        row={{
+          ...baseRow,
+          contact: { ...baseRow.contact, country: null, estado: null },
+        }}
+        accountId={9}
+      />,
+    );
+    const paisSection = screen.getByText(/^País$/).closest("div");
+    expect(paisSection?.textContent).toMatch(/—/);
+    const estadoSection = screen.getByText(/Estado\/Cidade/).closest("div");
+    expect(estadoSection?.textContent).toMatch(/—/);
+  });
+
   it("container tem border-l violet sutil + animação fade-in", () => {
     const { container } = render(
       <ConversaDrillDown row={baseRow} accountId={9} />,
