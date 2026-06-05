@@ -47,6 +47,8 @@ const baseProps = {
   teams: [],
   assignees: [],
   labels: [],
+  countries: [],
+  estados: [],
   initial: EMPTY_FILTER_STATE,
   sortStack: [],
   onSortStackChange: () => {},

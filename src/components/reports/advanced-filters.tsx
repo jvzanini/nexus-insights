@@ -55,6 +55,7 @@ import {
   type PeriodKey as ExtendedPeriodKey,
 } from "@/lib/reports/period";
 import type { MetaItem } from "@/lib/chatwoot/queries/meta-cache";
+import type { LocationOption } from "@/lib/reports/location";
 import type { QuickFilterKey } from "@/lib/reports/quick-filters";
 import type {
   FilterPreset,
@@ -93,6 +94,10 @@ export interface AdvancedFiltersProps {
   assignees: MetaItem[];
   /** Etiquetas (labels) da conta — usadas tanto no modo Simples como no Avançado. */
   labels: MetaItem[];
+  /** Opções de País derivadas das linhas (distintas, ordenadas). */
+  countries: LocationOption[];
+  /** Opções de Estado derivadas das linhas (distintas, ordenadas). */
+  estados: LocationOption[];
   initial: FilterState;
   /** Conta ativa — usada para limitar o calendário ao primeiro registro do banco. */
   accountId?: number;
@@ -139,6 +144,8 @@ export function AdvancedFilters({
   teams,
   assignees,
   labels,
+  countries,
+  estados,
   initial,
   accountId,
   sortStack,
@@ -631,10 +638,8 @@ export function AdvancedFilters({
         teams={teams}
         assignees={assignees}
         labels={labels}
-        // TODO(filtros-pais-estado): a próxima task deriva e injeta as
-        // options reais de País/Estado-Cidade. Placeholders [] por ora.
-        countries={[]}
-        estados={[]}
+        countries={countries}
+        estados={estados}
       />
 
       <SortingDialog

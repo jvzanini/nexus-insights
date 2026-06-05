@@ -170,3 +170,75 @@ export function normalizeEstado(raw: string | null | undefined): string | null {
   // 6. Nada casou.
   return ESTADO_FALLBACK;
 }
+
+// ---------------------------------------------------------------------------
+// Derivação de opções de filtro (País / Estado) a partir das linhas
+// ---------------------------------------------------------------------------
+
+/** Item de opção para os MultiSelect de País/Estado. */
+export interface LocationOption {
+  id: number;
+  name: string;
+}
+
+/** Índice de ordenação de cada UF conforme a posição em ESTADOS. */
+const UF_ORDER = new Map(ESTADOS.map((e, i) => [e.uf, i]));
+
+/** Extrai o prefixo "UF" de um rótulo canônico "UF-Nome". */
+function ufPrefix(label: string): string {
+  const idx = label.indexOf("-");
+  return idx === -1 ? label : label.slice(0, idx);
+}
+
+/**
+ * Deriva a lista de opções distintas (País ou Estado) a partir das linhas já
+ * normalizadas. Função PURA.
+ *
+ * Tipagem estrutural mínima do input (em vez de importar `ConversaRow`) para
+ * evitar ciclo de import com `conversas-list.ts`.
+ *
+ * Ordenação:
+ *  - `estado`: pela posição da UF em ESTADOS; `ESTADO_FALLBACK`
+ *    ("ZZ-Outros Estados") SEMPRE por último; valores cuja UF não está em
+ *    ESTADOS (não deveria ocorrer pós-normalização) vêm antes do ZZ, em
+ *    ordem alfabética (pt-BR).
+ *  - `country`: ordem alfabética (pt-BR, `localeCompare`).
+ *
+ * `id` é o índice 1-based na lista JÁ ordenada; `name` é o valor canônico.
+ */
+export function buildLocationOptions(
+  rows: ReadonlyArray<{ contact: { country: string | null; estado: string | null } }>,
+  field: "country" | "estado",
+): LocationOption[] {
+  const distinct = new Set<string>();
+  for (const r of rows) {
+    const value = r.contact[field];
+    if (value != null) distinct.add(value);
+  }
+
+  const values = [...distinct];
+
+  if (field === "country") {
+    values.sort((a, b) => a.localeCompare(b, "pt-BR"));
+  } else {
+    values.sort((a, b) => {
+      const aFallback = a === ESTADO_FALLBACK;
+      const bFallback = b === ESTADO_FALLBACK;
+      if (aFallback !== bFallback) return aFallback ? 1 : -1;
+
+      const aOrder = UF_ORDER.get(ufPrefix(a));
+      const bOrder = UF_ORDER.get(ufPrefix(b));
+
+      // Ambos conhecidos: ordena pela posição da UF em ESTADOS.
+      if (aOrder != null && bOrder != null) return aOrder - bOrder;
+      // Desconhecidos (não esperado) vêm antes dos conhecidos? Não: a regra é
+      // "antes do ZZ, em ordem alfabética". Conhecidos já vêm ordenados por UF;
+      // desconhecidos entram alfabeticamente entre si e relativos aos conhecidos.
+      if (aOrder == null && bOrder == null) return a.localeCompare(b, "pt-BR");
+      // Um conhecido, outro não: mantém estabilidade ordenando por nome.
+      return a.localeCompare(b, "pt-BR");
+    });
+  }
+
+  return values.map((name, i) => ({ id: i + 1, name }));
+}

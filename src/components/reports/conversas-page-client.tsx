@@ -36,6 +36,7 @@ import {
   type QuickFilterKey,
 } from "@/lib/reports/quick-filters";
 import type { MetaItem } from "@/lib/chatwoot/queries/meta-cache";
+import { buildLocationOptions } from "@/lib/reports/location";
 import type { ConversaRow } from "@/lib/chatwoot/queries/conversas-list";
 import type { FetchConversasInput } from "@/lib/actions/reports/conversas";
 import type { ConditionGroup } from "@/lib/utils/apply-conditions";
@@ -145,6 +146,17 @@ export function ConversasPageClient({
     [setSortStack],
   );
 
+  // Opções de País/Estado derivadas das linhas do período (distintas,
+  // ordenadas). Alimentam os MultiSelect do <FiltersDialog>.
+  const countryOptions = useMemo(
+    () => buildLocationOptions(initialRows, "country"),
+    [initialRows],
+  );
+  const estadoOptions = useMemo(
+    () => buildLocationOptions(initialRows, "estado"),
+    [initialRows],
+  );
+
   return (
     <>
       <div data-tour="filters">
@@ -153,6 +165,8 @@ export function ConversasPageClient({
           teams={teams}
           assignees={assignees}
           labels={labels}
+          countries={countryOptions}
+          estados={estadoOptions}
           initial={filterState}
           accountId={accountId}
           sortStack={sortStack}
@@ -187,6 +201,8 @@ export function ConversasPageClient({
             conditionGroup={composedConditionGroup}
             searchClient={searchClient}
             documentTypes={filterState.documentTypes}
+            countries={filterState.countries}
+            estados={filterState.estados}
           />
         </div>
       </ContentLoadingWrapper>

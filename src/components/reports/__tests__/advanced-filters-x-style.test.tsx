@@ -49,6 +49,8 @@ const baseProps = {
   teams: [],
   assignees: [],
   labels: [],
+  countries: [],
+  estados: [],
   initial: { ...EMPTY_FILTER_STATE, inboxIds: [1] },
   sortStack: [{ key: "name" as const, direction: "asc" as const }],
   onSortStackChange: () => {},
