@@ -1,5 +1,13 @@
 # Changelog
 
+## [v0.55.4] 2026-06-05 — RBAC: menu/rota "Usuários" restritos a super_admin (temporário)
+
+- **Menu "Usuários" oculto** para admin/manager/viewer — visível apenas para `super_admin` (`nav.ts`, `visibleTo: ["super_admin"]`).
+- **Rota `/usuarios` protegida**: não-super_admin é redirecionado para `/dashboard` (antes só `viewer` era barrado).
+- Mudança **temporária e reversível** (comentários no código indicam como reabrir para admin/manager).
+
+---
+
 ## [v0.55.3] 2026-06-05 — Export XLSX: header de atributo com a chave original
 
 - Os headers de atributos dinâmicos voltam a usar a **chave crua** do Chatwoot, mantendo só o prefixo: `Atributo: status_atendimento`, `Atributo: wpp_id` (em vez do Title Case "Atributo: Status Atendimento"). Mantém consistência com como os atributos aparecem na plataforma.
