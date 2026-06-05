@@ -184,6 +184,8 @@ export function ConversasPageClient({
           onSearchClientChange={setSearchClient}
           exportConditionGroup={composedConditionGroup}
           exportDocumentTypes={filterState.documentTypes}
+          exportCountries={filterState.countries}
+          exportEstados={filterState.estados}
         />
       </div>
 

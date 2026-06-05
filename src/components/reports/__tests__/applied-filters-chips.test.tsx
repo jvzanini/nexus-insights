@@ -235,6 +235,87 @@ describe("AppliedFiltersChips", () => {
     expect(onRemove).toHaveBeenCalledWith("documentTypes");
   });
 
+  it("renderiza chip País quando countries preenchido (1 valor)", () => {
+    render(
+      <AppliedFiltersChips
+        meta={META}
+        applied={makeApplied({ countries: ["Brasil"] })}
+        onRemove={() => {}}
+        onClearAll={() => {}}
+      />,
+    );
+    expect(screen.getByText(/País: Brasil/)).toBeInTheDocument();
+  });
+
+  it("renderiza chip Estado/Cidade quando estados preenchido (1 valor)", () => {
+    render(
+      <AppliedFiltersChips
+        meta={META}
+        applied={makeApplied({ estados: ["MG-Minas Gerais"] })}
+        onRemove={() => {}}
+        onClearAll={() => {}}
+      />,
+    );
+    expect(screen.getByText(/Estado\/Cidade: MG-Minas Gerais/)).toBeInTheDocument();
+  });
+
+  it("renderiza chip Estado/Cidade com sufixo +N quando 2+ valores", () => {
+    const onRemoveOneString = jest.fn();
+    render(
+      <AppliedFiltersChips
+        meta={META}
+        applied={makeApplied({
+          estados: ["MG-Minas Gerais", "SP-São Paulo", "RJ-Rio de Janeiro"],
+        })}
+        onRemove={() => {}}
+        onClearAll={() => {}}
+        onRemoveOneString={onRemoveOneString}
+      />,
+    );
+    const trigger = screen
+      .getAllByRole("button")
+      .find((b) => /Estado\/Cidade: MG-Minas Gerais/.test(b.textContent ?? ""));
+    expect(trigger).toBeTruthy();
+    expect(trigger?.textContent).toMatch(/\+2/);
+  });
+
+  it("X do chip País chama onRemove('countries')", () => {
+    const onRemove = jest.fn();
+    render(
+      <AppliedFiltersChips
+        meta={META}
+        applied={makeApplied({ countries: ["Brasil"] })}
+        onRemove={onRemove}
+        onClearAll={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Remover País/ }));
+    expect(onRemove).toHaveBeenCalledWith("countries");
+  });
+
+  it("popover +N de estados remove valor string via onRemoveOneString", () => {
+    const onRemoveOneString = jest.fn();
+    render(
+      <AppliedFiltersChips
+        meta={META}
+        applied={makeApplied({
+          estados: ["MG-Minas Gerais", "SP-São Paulo"],
+        })}
+        onRemove={() => {}}
+        onClearAll={() => {}}
+        onRemoveOneString={onRemoveOneString}
+      />,
+    );
+    const trigger = screen
+      .getAllByRole("button")
+      .find((b) => /Estado\/Cidade: MG-Minas Gerais/.test(b.textContent ?? ""));
+    fireEvent.click(trigger!);
+    fireEvent.click(
+      screen.getByRole("button", { name: /Remover SP-São Paulo/ }),
+    );
+    expect(onRemoveOneString).toHaveBeenCalledWith("estados", "SP-São Paulo");
+  });
+
   it("Etiquetas seguem padrão summarize (sem parênteses)", () => {
     render(
       <AppliedFiltersChips

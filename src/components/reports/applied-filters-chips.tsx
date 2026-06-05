@@ -52,6 +52,11 @@ interface Props {
   onClearAll: () => void;
   /** Remove individual de um id de um grupo (popover do chip +N). */
   onRemoveOne?: (key: keyof FilterState, id: number) => void;
+  /**
+   * Remove individual de um valor string (country/estado) via popover +N.
+   * Diferente de `onRemoveOne`, o valor já é o próprio label canônico.
+   */
+  onRemoveOneString?: (key: "countries" | "estados", value: string) => void;
   /** Critérios de ordenação aplicados (opcional). */
   sortStack?: SortRule[];
   sortOptions?: SortRuleOption[];
@@ -118,6 +123,17 @@ function summarize(
   return `${label}: ${get(first)} +${ids.length - 1}`;
 }
 
+/**
+ * Variante de `summarize` para valores STRING (country/estado), onde o próprio
+ * valor já é o label — sem lookup id → name.
+ */
+function summarizeStrings(label: string, values: string[]): string {
+  if (values.length === 0) return "";
+  const first = values[0]!;
+  if (values.length === 1) return `${label}: ${first}`;
+  return `${label}: ${first} +${values.length - 1}`;
+}
+
 interface ResolvedItem {
   id: number;
   name: string;
@@ -170,6 +186,7 @@ export function AppliedFiltersChips({
   onRemove,
   onClearAll,
   onRemoveOne,
+  onRemoveOneString,
   sortStack,
   sortOptions,
   onRemoveSort,
@@ -177,7 +194,12 @@ export function AppliedFiltersChips({
   quickFilters,
   onRemoveQuick,
 }: Props) {
-  const chips: Array<{ key: keyof FilterState; label: string }> = [];
+  // `stringValues` presente apenas para country/estado (chips de valor string).
+  const chips: Array<{
+    key: keyof FilterState;
+    label: string;
+    stringValues?: string[];
+  }> = [];
 
   if (applied.inboxIds.length) {
     chips.push({
@@ -220,6 +242,20 @@ export function AppliedFiltersChips({
     chips.push({
       key: "documentTypes",
       label: summarize("Documento", docIds, DOC_TYPE_LABELS),
+    });
+  }
+  if (applied.countries && applied.countries.length) {
+    chips.push({
+      key: "countries",
+      label: summarizeStrings("País", applied.countries),
+      stringValues: applied.countries,
+    });
+  }
+  if (applied.estados && applied.estados.length) {
+    chips.push({
+      key: "estados",
+      label: summarizeStrings("Estado/Cidade", applied.estados),
+      stringValues: applied.estados,
     });
   }
 
@@ -273,6 +309,41 @@ export function AppliedFiltersChips({
       ))}
 
       {chips.map((c) => {
+        const groupName = c.label.split(":")[0]?.trim() ?? c.label;
+
+        // Caminho dedicado para country/estado: valores STRING (o próprio valor
+        // já é o label). Não passa pelo esquema de ids numéricos.
+        if (c.stringValues) {
+          const stringKey = c.key as "countries" | "estados";
+          if (c.stringValues.length >= 2 && onRemoveOneString) {
+            return (
+              <FilterChipListPopover
+                key={c.key as string}
+                groupLabel={groupName}
+                items={c.stringValues.map((v) => ({ id: v, name: v }))}
+                onRemoveOne={(id) => onRemoveOneString(stringKey, id as string)}
+                onRemoveAll={() => onRemove(c.key)}
+              />
+            );
+          }
+          return (
+            <span
+              key={c.key as string}
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-border/60 bg-muted/40 px-2.5 py-1 text-xs text-foreground"
+            >
+              <span className="truncate">{c.label}</span>
+              <button
+                type="button"
+                onClick={() => onRemove(c.key)}
+                aria-label={`Remover ${groupName}`}
+                className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
+              >
+                <X className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </span>
+          );
+        }
+
         const ids = (() => {
           switch (c.key) {
             case "inboxIds":
@@ -293,7 +364,6 @@ export function AppliedFiltersChips({
               return [];
           }
         })();
-        const groupName = c.label.split(":")[0]?.trim() ?? c.label;
 
         // 2+ items + onRemoveOne disponível: usa popover.
         if (ids.length >= 2 && onRemoveOne) {
@@ -302,7 +372,7 @@ export function AppliedFiltersChips({
               key={c.key as string}
               groupLabel={groupName}
               items={resolveItems(c.key, ids, meta)}
-              onRemoveOne={(id) => onRemoveOne(c.key, id)}
+              onRemoveOne={(id) => onRemoveOne(c.key, id as number)}
               onRemoveAll={() => onRemove(c.key)}
             />
           );

@@ -9,6 +9,7 @@ import { getActiveConnectionId } from "@/lib/reports/active-connection";
 import { matchSearchClient } from "@/lib/reports/match-search-client";
 import { applyConditions } from "@/lib/utils/apply-conditions";
 import { matchDocumentTypes } from "@/lib/reports/match-document-types";
+import { matchLocation } from "@/lib/reports/match-location";
 import { sortConversasByStack } from "@/lib/reports/sort-conversas";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
 import type { AuthUser } from "@/lib/auth-helpers";
@@ -37,6 +38,16 @@ export interface ExportConversasInput {
    * documento"). Server replica via `matchDocumentTypes`.
    */
   documentTypes?: DocumentTypeFilter[];
+  /**
+   * País(es) do contato (valores canônicos string, ex.: "Brasil"). Server
+   * replica o filtro client-side via `matchLocation`.
+   */
+  countries?: string[];
+  /**
+   * Estado(s)/cidade(s) do contato (valores canônicos string, ex.:
+   * "MG-Minas Gerais"). Server replica o filtro via `matchLocation`.
+   */
+  estados?: string[];
   /**
    * v0.32 — ordenação client-side (stack de SortRules). Server replica via
    * `sortConversasByStack` (DRY com a tabela).
@@ -165,6 +176,9 @@ export async function exportConversasAction(
     }
     if (args.documentTypes && args.documentTypes.length > 0) {
       rows = matchDocumentTypes(rows, args.documentTypes);
+    }
+    if (args.countries?.length || args.estados?.length) {
+      rows = matchLocation(rows, args.countries ?? [], args.estados ?? []);
     }
     if (args.sortStack && args.sortStack.length > 0) {
       rows = sortConversasByStack(rows, args.sortStack);

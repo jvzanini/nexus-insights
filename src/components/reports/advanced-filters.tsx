@@ -137,6 +137,16 @@ export interface AdvancedFiltersProps {
    * ao `<ExportButton>` para incluí-lo no XLSX.
    */
   exportDocumentTypes?: DocumentTypeFilter[];
+  /**
+   * País(es) (valores string) aplicados na tabela. Propagado ao
+   * `<ExportButton>` para incluí-lo no XLSX.
+   */
+  exportCountries?: string[];
+  /**
+   * Estado(s)/cidade(s) (valores string) aplicados na tabela. Propagado ao
+   * `<ExportButton>` para incluí-lo no XLSX.
+   */
+  exportEstados?: string[];
 }
 
 export function AdvancedFilters({
@@ -163,6 +173,8 @@ export function AdvancedFilters({
   onSearchClientChange,
   exportConditionGroup,
   exportDocumentTypes,
+  exportCountries,
+  exportEstados,
 }: AdvancedFiltersProps) {
   const router = useRouter();
   const { startTransition } = useFilterTransition();
@@ -218,6 +230,8 @@ export function AdvancedFilters({
       applied.priorities.length +
       applied.labelIds.length +
       (applied.documentTypes ?? []).length +
+      (applied.countries ?? []).length +
+      (applied.estados ?? []).length +
       (applied.mode === "advanced" &&
       applied.conditionGroup?.items?.length
         ? 1
@@ -286,6 +300,8 @@ export function AdvancedFilters({
       priorities: [],
       labelIds: [],
       documentTypes: [],
+      countries: [],
+      estados: [],
       conditionGroup: undefined,
     };
     setApplied(next);
@@ -350,6 +366,12 @@ export function AdvancedFilters({
         case "documentTypes":
           next.documentTypes = [];
           break;
+        case "countries":
+          next.countries = [];
+          break;
+        case "estados":
+          next.estados = [];
+          break;
         default:
           return;
       }
@@ -400,6 +422,23 @@ export function AdvancedFilters({
         }
         default:
           return;
+      }
+      setApplied(next);
+      setDraft(next);
+      pushUrl(next);
+    },
+    [applied, pushUrl],
+  );
+
+  // Remove individual de country/estado via popover de chip +N. Diferente de
+  // handleRemoveOne (ids numéricos), aqui o "id" é o próprio valor string.
+  const handleRemoveOneString = useCallback(
+    (key: "countries" | "estados", value: string) => {
+      const next: FilterState = { ...applied };
+      if (key === "countries") {
+        next.countries = (applied.countries ?? []).filter((x) => x !== value);
+      } else {
+        next.estados = (applied.estados ?? []).filter((x) => x !== value);
       }
       setApplied(next);
       setDraft(next);
@@ -581,6 +620,8 @@ export function AdvancedFilters({
           searchClient={searchClient}
           conditionGroup={exportConditionGroup}
           documentTypes={exportDocumentTypes}
+          countries={exportCountries}
+          estados={exportEstados}
           sortStack={sortStack}
         />
       </div>
@@ -591,6 +632,7 @@ export function AdvancedFilters({
         applied={applied}
         onRemove={handleRemoveGroup}
         onRemoveOne={handleRemoveOne}
+        onRemoveOneString={handleRemoveOneString}
         onClearAll={handleReset}
         sortStack={sortStack}
         sortOptions={SORT_OPTIONS}

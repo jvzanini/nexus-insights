@@ -10,7 +10,11 @@ import {
 } from "@/components/ui/popover";
 
 interface ResolvedItem {
-  id: number;
+  /**
+   * Chave do item. Numérica para grupos com ids (inbox/team/etc.); string para
+   * country/estado, onde o próprio valor canônico já é a chave (sem lookup).
+   */
+  id: number | string;
   name: string;
 }
 
@@ -20,7 +24,7 @@ interface FilterChipListPopoverProps {
   /** Items resolvidos com nome (caller faz o lookup id → name). */
   items: ResolvedItem[];
   /** Remove um item específico sem fechar o popover. */
-  onRemoveOne: (id: number) => void;
+  onRemoveOne: (id: number | string) => void;
   /** Remove o grupo inteiro (chip desmonta). */
   onRemoveAll: () => void;
 }

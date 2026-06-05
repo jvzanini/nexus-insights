@@ -282,6 +282,112 @@ describe("exportConversasAction", () => {
       expect(typeof r.base64).toBe("string");
     });
 
+    it("aplica countries quando fornecido (filtra por país do contato)", async () => {
+      const rows = [
+        buildRow(1, {
+          contact: {
+            id: 1,
+            name: "BR",
+            phone_number: null,
+            identifier: null,
+            additional_attributes: null,
+            country: "Brasil",
+            estado: "MG-Minas Gerais",
+          },
+        }),
+        buildRow(2, {
+          contact: {
+            id: 2,
+            name: "AR",
+            phone_number: null,
+            identifier: null,
+            additional_attributes: null,
+            country: "Argentina",
+            estado: null,
+          },
+        }),
+      ];
+      (conversasList as jest.Mock).mockResolvedValue({
+        data: { rows, nextCursor: null },
+        stale: false,
+        cached: false,
+      });
+      const r = await exportConversasAction({
+        filters: baseFilters,
+        accountId: 9,
+        countries: ["Brasil"],
+      });
+      // pipeline filtra para 1 row (Brasil) → planilha gerada
+      expect(r.error).toBeUndefined();
+      expect(typeof r.base64).toBe("string");
+    });
+
+    it("aplica estados quando fornecido (filtra por estado do contato)", async () => {
+      const rows = [
+        buildRow(1, {
+          contact: {
+            id: 1,
+            name: "MG",
+            phone_number: null,
+            identifier: null,
+            additional_attributes: null,
+            country: "Brasil",
+            estado: "MG-Minas Gerais",
+          },
+        }),
+        buildRow(2, {
+          contact: {
+            id: 2,
+            name: "SP",
+            phone_number: null,
+            identifier: null,
+            additional_attributes: null,
+            country: "Brasil",
+            estado: "SP-São Paulo",
+          },
+        }),
+      ];
+      (conversasList as jest.Mock).mockResolvedValue({
+        data: { rows, nextCursor: null },
+        stale: false,
+        cached: false,
+      });
+      const r = await exportConversasAction({
+        filters: baseFilters,
+        accountId: 9,
+        estados: ["SP-São Paulo"],
+      });
+      expect(r.error).toBeUndefined();
+      expect(typeof r.base64).toBe("string");
+    });
+
+    it("retorna erro quando país/estado zeram o resultado", async () => {
+      const rows = [
+        buildRow(1, {
+          contact: {
+            id: 1,
+            name: "BR",
+            phone_number: null,
+            identifier: null,
+            additional_attributes: null,
+            country: "Brasil",
+            estado: "MG-Minas Gerais",
+          },
+        }),
+      ];
+      (conversasList as jest.Mock).mockResolvedValue({
+        data: { rows, nextCursor: null },
+        stale: false,
+        cached: false,
+      });
+      const r = await exportConversasAction({
+        filters: baseFilters,
+        accountId: 9,
+        countries: ["Argentina"],
+      });
+      expect(r.error).toBe("Sem conversas para exportar");
+    });
+
     it("ignora pipeline quando args extras ausentes (backward-compat)", async () => {
       (conversasList as jest.Mock).mockResolvedValue({
         data: { rows: [fixtureRow(1)], nextCursor: null },

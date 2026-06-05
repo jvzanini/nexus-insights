@@ -37,6 +37,16 @@ interface ExportButtonProps {
    */
   documentTypes?: DocumentTypeFilter[];
   /**
+   * País(es) do contato aplicados na tabela (valores string). Server replica
+   * via `matchLocation` quando array não-vazio.
+   */
+  countries?: string[];
+  /**
+   * Estado(s)/cidade(s) do contato aplicados na tabela (valores string).
+   * Server replica via `matchLocation` quando array não-vazio.
+   */
+  estados?: string[];
+  /**
    * v0.32 — stack de ordenação client-side. Server replica via
    * `sortConversasByStack` antes de gerar o XLSX (DRY com a tabela).
    */
@@ -79,6 +89,8 @@ export function ExportButton({
   searchClient,
   conditionGroup,
   documentTypes,
+  countries,
+  estados,
   sortStack,
 }: ExportButtonProps) {
   const [pending, startTransition] = useTransition();
@@ -97,6 +109,8 @@ export function ExportButton({
           searchClient: searchClient && searchClient.trim() ? searchClient : undefined,
           conditionGroup,
           documentTypes,
+          countries,
+          estados,
           sortStack,
         });
         if (result.error) {
