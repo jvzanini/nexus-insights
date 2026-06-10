@@ -10,10 +10,12 @@
 
 const store = new Map<string, string>();
 const mockGet = jest.fn(async (k: string) => store.get(k) ?? null);
-const mockSet = jest.fn(async (k: string, v: string) => {
-  store.set(k, v);
-  return "OK";
-});
+const mockSet = jest.fn(
+  async (k: string, v: string, ..._rest: unknown[]) => {
+    store.set(k, v);
+    return "OK";
+  },
+);
 const mockDel = jest.fn(async (k: string) => {
   store.delete(k);
   return 1;
@@ -22,7 +24,7 @@ const mockDel = jest.fn(async (k: string) => {
 jest.mock("@/lib/redis", () => ({
   redis: {
     get: (...a: [string]) => mockGet(...a),
-    set: (...a: [string, string]) => mockSet(...a),
+    set: (...a: [string, string, ...unknown[]]) => mockSet(...a),
     del: (...a: [string]) => mockDel(...a),
   },
 }));
@@ -77,5 +79,34 @@ describe("withCache — single-flight", () => {
     await withCache({ key: "k3", ttlSeconds: 30, fetcher });
 
     expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("withCache — cópia last-good (${key}:last)", () => {
+  it("grava `${key}:last` (TTL longo) além do cache fresco ao ter sucesso", async () => {
+    const fetcher = jest.fn(async () => ({ data: { n: 7 }, stale: false }));
+
+    await withCache({ key: "kx", ttlSeconds: 30, fetcher });
+
+    // cópia fresca de curta duração
+    expect(store.has("kx")).toBe(true);
+    // cópia "último dado bom" para o fallback de resiliência
+    expect(store.has("kx:last")).toBe(true);
+    const last = JSON.parse(store.get("kx:last")!);
+    expect(last.d).toEqual({ n: 7 });
+    // o set do :last usa TTL longo (>= 1h), não o ttlSeconds curto
+    const lastSetCall = mockSet.mock.calls.find((c) => c[0] === "kx:last");
+    expect(lastSetCall).toBeDefined();
+    expect(lastSetCall![3]).toBeGreaterThanOrEqual(3600);
+  });
+
+  it("NÃO sobrescreve `${key}:last` quando o resultado é stale", async () => {
+    store.set("ky:last", JSON.stringify({ d: { n: 1 }, t: "old" }));
+    const fetcher = jest.fn(async () => ({ data: { n: 999 }, stale: true }));
+
+    await withCache({ key: "ky", ttlSeconds: 30, fetcher });
+
+    const last = JSON.parse(store.get("ky:last")!);
+    expect(last.d).toEqual({ n: 1 }); // preservado
   });
 });

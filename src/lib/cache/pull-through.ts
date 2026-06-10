@@ -20,6 +20,14 @@ type FetcherResult<T> = { data: T; stale: boolean; error?: string };
  */
 const inFlight = new Map<string, Promise<FetcherResult<unknown>>>();
 
+/**
+ * TTL da cópia "último dado bom" (`${key}:last`). Bem maior que o TTL fresco
+ * (30s): é o que `withChatwootResilience` serve quando o Chatwoot falha (ex.:
+ * too many connections for role), garantindo dashboard/relatórios SEMPRE com
+ * dado em vez de erro. 24h é folgado para qualquer pico/restart.
+ */
+const LAST_GOOD_TTL_SECONDS = 24 * 60 * 60;
+
 export async function withCache<T>(args: {
   key: string;
   ttlSeconds: number;
@@ -45,11 +53,18 @@ export async function withCache<T>(args: {
     flight = (async (): Promise<FetcherResult<T>> => {
       const result = await args.fetcher();
       if (!result.stale) {
+        const payload = JSON.stringify({
+          d: result.data,
+          t: new Date().toISOString(),
+        });
+        // Cache fresco de curta duração + cópia "último dado bom" de longa
+        // duração (fallback de resiliência lido por withChatwootResilience).
+        await redis.set(args.key, payload, "EX", args.ttlSeconds);
         await redis.set(
-          args.key,
-          JSON.stringify({ d: result.data, t: new Date().toISOString() }),
+          `${args.key}:last`,
+          payload,
           "EX",
-          args.ttlSeconds,
+          LAST_GOOD_TTL_SECONDS,
         );
       }
       return result;
