@@ -182,3 +182,51 @@ describe("queryNexusChat", () => {
     ).rejects.toThrow("syntax error");
   });
 });
+
+describe("queryNexusChat — retry de erros transitórios", () => {
+  beforeEach(() => {
+    mockQuery.mockReset();
+    findUniqueMock.mockResolvedValue(baseConn);
+  });
+
+  it("retenta timeout de checkout do pool e sucede na 2ª tentativa", async () => {
+    // Erro do pg.Pool quando o pool max:1 está saturado: Error genérico
+    // SEM `.code` — antes do fix isso relançava sem retry e derrubava o
+    // dashboard/relatórios com "erro ao carregar".
+    mockQuery
+      .mockRejectedValueOnce(new Error("timeout exceeded when trying to connect"))
+      .mockResolvedValueOnce({ rows: [{ a: 1 }], rowCount: 1 });
+
+    const result = await queryNexusChat<{ a: number }>(
+      "uuid-1",
+      "SELECT 1 AS a",
+      [],
+    );
+
+    expect(result.rows).toEqual([{ a: 1 }]);
+    expect(mockQuery).toHaveBeenCalledTimes(2);
+  });
+
+  it("retenta erro de socket transitório (ECONNRESET)", async () => {
+    const netErr = Object.assign(new Error("read ECONNRESET"), {
+      code: "ECONNRESET",
+    });
+    mockQuery
+      .mockRejectedValueOnce(netErr)
+      .mockResolvedValueOnce({ rows: [{ a: 1 }], rowCount: 1 });
+
+    const result = await queryNexusChat<{ a: number }>("uuid-1", "SELECT 1", []);
+
+    expect(result.rows).toEqual([{ a: 1 }]);
+    expect(mockQuery).toHaveBeenCalledTimes(2);
+  });
+
+  it("NÃO retenta erro de SQL (syntax error) — relança na 1ª tentativa", async () => {
+    mockQuery.mockRejectedValue(new Error('syntax error at or near "BAD"'));
+
+    await expect(queryNexusChat("uuid-1", "BAD", [])).rejects.toThrow(
+      "syntax error",
+    );
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+  });
+});
