@@ -1,176 +1,29 @@
-# Coordenação multi-agente
+# Fluxo de trabalho deste projeto
 
-> **Regra absoluta deste projeto.** Há ≥ 2 sessões Claude trabalhando no repositório ao mesmo tempo. Sem este protocolo: conflito de merge, sobrescrita de trabalho, deploys empilhando, build quebrando em produção.
+> **Decisão do dono (João, 2026-06-10):** este projeto trabalha **sempre direto na `main`**, em **uma única sessão por vez**. **Não usar worktrees, não criar a pasta `branches/`, não criar branches de feature.** O protocolo multi-agente/worktrees de outros projetos **NÃO se aplica aqui** (sobrescreve qualquer regra global em contrário).
 
-## Visão geral
+## Como trabalhar
 
-Três peças, todas em arquivos **separados por agente** para minimizar conflitos no próprio sistema de coordenação:
+1. **Tudo na `main`.** Editar, commitar e pushar direto na `main`. Sem branch intermediária, sem PR, sem worktree.
+2. **Commits atômicos** por unidade de trabalho (um assunto por commit), com mensagem clara (Conventional Commits: `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`).
+3. **Antes de pushar:** `npx tsc --noEmit` + `npm test` da área tocada verdes; e `gh run list --limit 5` para não empilhar deploys (push em `main` dispara build → Portainer redeploy).
+4. **Deploy:** push em `main` → GitHub Actions (`build.yml`) builda, sobe pro GHCR e redeploya no Portainer. Depois, `portainer-fix.yml -f app_version=vX.Y.Z` carimba o `APP_VERSION` (o build não seta sozinho). Validar `/api/health`.
+5. **Documentação canônica a cada release:** `CHANGELOG.md`, `STATUS.md`, e uma linha em `docs/agents/HISTORY.md`.
 
-1. **`docs/agents/active/`** — quem está trabalhando AGORA.
-2. **`docs/agents/HISTORY.md`** — o que já foi feito (append-only).
-3. **`AGENTS.md` (raiz)** — checklist obrigatório antes de qualquer ação.
+## `docs/agents/HISTORY.md` (mantido)
 
----
-
-## Peça 1: `docs/agents/active/` (work-in-progress)
-
-### Início da sessão (obrigatório)
-
-Antes de tocar em qualquer arquivo de código, criar:
+Log **append-only**, uma linha por commit/release relevante. Formato:
 
 ```
-docs/agents/active/<agent-id>.md
+2026-06-10 13:10 | agent=claude-main | commit=<sha7> | scope=<feat|fix|docs|infra|release|revert> | summary=<1 linha>
 ```
 
-Onde `<agent-id>` é um nome único da sessão. Sugestão de naming:
+Serve de rastro cronológico do que mudou e por quê — útil para retomar contexto entre sessões.
 
-- `claude-<topico-curto>` — ex: `claude-preagregacao`, `claude-conversas-poderoso`, `claude-dashboard-v010`.
-- Se rodar 2 sessões do mesmo tópico: adicionar sufixo numérico ou data.
+## O que foi descontinuado
 
-### Conteúdo do arquivo
+- `docs/agents/active/` (arquivos de sessão ativa) — **não usar**.
+- Worktrees em `branches/<slug>/`, `agente start/end/handoff` — **não usar neste projeto**.
+- Checklist de coordenação entre 2–3 sessões simultâneas — **não se aplica** (sessão única).
 
-```markdown
----
-agent: claude-<topico>
-started_at: 2026-04-30T14:23-03:00
-target_version: v0.X.0
-status: in_progress | blocked | review
----
-
-## Tópico
-<uma linha resumindo o que está sendo feito>
-
-## Arquivos que provavelmente vou tocar
-- src/lib/...
-- src/components/...
-- prisma/...
-
-## Arquivos compartilhados que VOU modificar
-> Listar aqui se vou tocar algum dos arquivos da seção "Arquivos com alta
-> probabilidade de conflito" do `AGENTS.md`. Se aparecer aqui o mesmo
-> arquivo em 2 agentes ativos: PARAR e coordenar.
-- package.json (bump de versão)
-- CHANGELOG.md (entrada da release)
-
-## Decisões / contexto importante
-- ...
-
-## Bloqueios
-- (vazio se nenhum)
-```
-
-### Fim da sessão
-
-**DELETAR o próprio arquivo de `active/`** quando terminar. Ninguém deleta arquivo dos outros — espera o agente concluir.
-
-Se não houver outro agente pra registrar o término (ex: sessão Claude Code terminada sem cleanup), arquivo "fantasma" pode ficar. Solução: TTL informal de 24h. Se `started_at` > 24h, considerar abandonado e pode ser deletado por outro agente como housekeeping (com nota no `HISTORY.md`).
-
----
-
-## Peça 2: `docs/agents/HISTORY.md` (append-only)
-
-### Quando registrar
-
-A cada **commit relevante** (não a cada commit trivial). Critérios de "relevante":
-- Bump de versão.
-- Migration Prisma.
-- Modificação em arquivos compartilhados (lista no `AGENTS.md`).
-- Novo arquivo em `docs/superpowers/{specs,plans}/`.
-- Resolução de bloqueio mencionado em outro `active/*.md`.
-
-### Formato
-
-Sempre ao final do arquivo, **append only**:
-
-```
-2026-04-30 14:23 | agent=claude-preagregacao | commit=ecbc3c4 | scope=infra | summary=Hotfix Bad Gateway (Dockerfile chown + seed Prisma 7 + instrumentation handlers)
-```
-
-Campos:
-- **timestamp** ISO curto local.
-- **agent**: o `<agent-id>` do `active/`.
-- **commit**: SHA curto do commit (`git log -1 --format=%h`).
-- **scope**: feat | fix | docs | infra | release | revert.
-- **summary**: 1 linha. Se mais detalhes, linkar pro CHANGELOG.
-
-### Conflito ao append
-
-Append em arquivo é raro de conflitar — mas se acontecer (`<<<<<<` no merge), o resolver MANUAL é:
-- Manter ambas as linhas (são entradas independentes).
-- Reordenar por timestamp se necessário.
-
----
-
-## Peça 3: Checklist obrigatório
-
-Está em `AGENTS.md` raiz. Resumido aqui:
-
-### Antes de qualquer mudança em arquivo
-1. `git fetch origin main && git status`
-2. `ls docs/agents/active/` — ver quem está trabalhando.
-3. Para cada arquivo `active/*.md` ALHEIO, ler — entender o tópico do outro.
-4. `git log -10 --oneline` — ver atividade recente.
-5. Se vou tocar arquivo compartilhado: `git log -3 --oneline -- <arquivo>`.
-
-### Antes de commit
-1. `git fetch origin main` de novo.
-2. Se há commits remotos novos: `git pull --rebase origin main`.
-3. Stage **APENAS** seus arquivos. Nunca `git add -A`.
-4. Rodar `npm run typecheck`.
-5. Rodar `npm test` da área tocada.
-
-### Antes de push (deploy automático)
-1. `gh run list --limit 5` — ver builds em curso.
-2. Se há build queued/in-progress de outro agente: aguardar terminar.
-3. Atualizar HISTORY.md com sua entrada.
-4. `git push origin main`.
-
-### Resolução de conflitos detectados
-- Mesmo arquivo em 2 `active/*.md`: parar, decidir quem segue, o outro espera ou pivota.
-- Build em curso de outro: esperar.
-- Commit recente do outro em arquivo que vou tocar: pull, ler diff, decidir se ainda faz sentido fazer minha alteração.
-
----
-
-## Diagrama de fluxo
-
-```
-Sessão começa
-    ↓
-git fetch + ler active/ + ler HISTORY tail
-    ↓
-Há overlap com outro agente?
-    ├─ SIM → pivota OU espera (declarar bloqueio em active/)
-    └─ NÃO ↓
-Criar docs/agents/active/<agent-id>.md
-    ↓
-Trabalho (TDD, etc)
-    ↓
-A cada commit relevante:
-    ├─ git fetch + sync se necessário
-    ├─ commit
-    └─ append em HISTORY.md
-    ↓
-Antes de push → gh run list → esperar se há build alheio
-    ↓
-push
-    ↓
-Sessão termina → DELETAR active/<agent-id>.md
-```
-
----
-
-## Quando NÃO usar (exceções)
-
-- Sessões de **leitura pura** (consulta, debug informacional, rodar `gh workflow run` de leitura) podem pular a criação do `active/*.md`.
-- **Hotfix urgente** (produção fora do ar): pode pular o checklist mas deve registrar em `HISTORY.md` no mesmo commit.
-
----
-
-## Quando atualizar este documento
-
-- A regra mudou.
-- Apareceu um padrão de conflito que não foi previsto aqui.
-- Adicionou um arquivo novo à lista "alta probabilidade de conflito".
-
-Mudanças neste documento devem ser commitadas separadamente, com escopo `docs(agents)`.
+As **regras de runtime** (ex.: Server Actions só exportam `async` — ver `AGENTS.md`) continuam **valendo**.

@@ -99,7 +99,7 @@ docs/
 ├── STATUS.md                    # estado atual da plataforma
 ├── runbooks/                    # ops + features (escopo-por-empresa, agente-nex-audio, etc)
 ├── superpowers/{specs,plans}/   # spec/plan workflow rigoroso (atual + ativos)
-└── agents/                      # protocolo multi-agente (active/ + HISTORY.md)
+└── agents/                      # HISTORY.md (log append-only) + fluxo de trabalho
 
 design-system/                   # tokens de design (cores, tipografia, espaçamento)
 docker/                          # Dockerfile · docker-compose.yml · entrypoints
@@ -278,18 +278,16 @@ Padrão TDD: test first → red → minimal impl → green → commit. Cobertura
 
 ---
 
-## 🤝 Coordenação multi-agente
+## 🤝 Fluxo de trabalho — direto na `main`
 
-Há regularmente **2-3 sessões Claude trabalhando em paralelo** no repositório. Sem protocolo: conflito de merge, sobrescrita de trabalho, deploys empilhando.
+> **Decisão do dono (2026-06-10):** este projeto trabalha **sempre direto na `main`**, em **sessão única**. **Sem worktrees, sem pasta `branches/`, sem branches de feature, sem PRs internos.** O protocolo global de worktrees não se aplica aqui.
 
-**Protocolo completo:** `docs/agents/_README.md`. Resumo:
+1. Editar, commitar e pushar direto na `main` (commits atômicos, Conventional Commits).
+2. Antes de pushar: `npx tsc --noEmit` + `npm test` da área tocada; `gh run list --limit 5` (não empilhar deploys — push dispara build → Portainer redeploy).
+3. Após o build: `portainer-fix.yml -f app_version=vX.Y.Z` carimba o `APP_VERSION`; validar `/api/health`.
+4. A cada release: `CHANGELOG.md`, `STATUS.md` e uma linha em `docs/agents/HISTORY.md`.
 
-1. Antes de qualquer mudança: criar `docs/agents/active/<agent-id>.md` declarando arquivos compartilhados.
-2. Antes de cada commit: `git fetch origin main && git pull --rebase`.
-3. Stage **APENAS** seus arquivos (nunca `git add -A`).
-4. Append linha em `docs/agents/HISTORY.md` em commits relevantes.
-5. Antes de push: `gh run list --limit 5` (não empilhar deploys).
-6. Final: deletar `active/<meu-id>.md`.
+Detalhes: `docs/agents/_README.md` e `AGENTS.md`.
 
 ---
 
@@ -313,7 +311,7 @@ Memory absoluta: `~/.claude/projects/<proj>/memory/MEMORY.md` (recente → antig
 ## 📚 Documentação
 
 - **CLAUDE.md** — regras supremas do projeto (idioma · skills obrigatórias · double-check · padrões arquiteturais · deploy).
-- **AGENTS.md** — checklist obrigatório multi-agente.
+- **AGENTS.md** — fluxo de trabalho (direto na `main`) + regras de runtime (Next.js 16).
 - **docs/STATUS.md** — estado atual + release notes consolidadas.
 - **docs/runbooks/** — operações e features (escopo-por-empresa, agente-nex-audio-e-kb-url, etc).
 - **docs/superpowers/{specs,plans}/** — workflow rigoroso (atual ativo).

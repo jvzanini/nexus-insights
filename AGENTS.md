@@ -1,106 +1,26 @@
 # AGENTS.md
 
-## Coordenação multi-agente (REGRA ABSOLUTA)
+## Fluxo de trabalho (REGRA ABSOLUTA deste projeto)
 
-> **Hoje há 2–3 sessões Claude trabalhando simultaneamente neste repositório, em features distintas.**
-> Sem este protocolo, dá conflito de merge, sobrescrita de trabalho, commits que quebram o build, deploys empilhando.
+> **Decisão do dono (João, 2026-06-10):** trabalhar **sempre direto na `main`**, em **sessão única**. **Sem worktrees, sem pasta `branches/`, sem branches de feature, sem PRs internos.** O protocolo multi-agente/worktrees de outros projetos **NÃO se aplica aqui** e sobrescreve qualquer regra global em contrário. Detalhes em `docs/agents/_README.md`.
 
-### Protocolo completo
+### Ciclo de cada alteração
 
-O protocolo está descrito em **`docs/agents/_README.md`**. Resumo aqui — e os arquivos que materializam:
+1. **Editar direto na `main`.** Investigar → implementar (TDD quando há código testável) → validar.
+2. **Validar antes de commitar:** `npx tsc --noEmit` + `npm test` (ao menos da área tocada) verdes.
+3. **Commits atômicos** (um assunto por commit), Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`, `chore:`).
+4. **Registrar** uma linha em `docs/agents/HISTORY.md` a cada commit/release relevante (formato no `_README.md`).
+5. **Atualizar docs canônicas** numa release: `CHANGELOG.md`, `STATUS.md`.
 
-- **`docs/agents/active/<agent-id>.md`** — quem está trabalhando agora (1 arquivo por agente, criado no início, deletado no fim).
-- **`docs/agents/HISTORY.md`** — log append-only do que foi feito (1 linha por commit relevante).
-- **Este `AGENTS.md`** — checklist obrigatório (abaixo).
+### Antes de PUSH (push em `main` dispara deploy)
 
-### Início da sessão (obrigatório)
+> Push em `main` → GitHub Actions (`build.yml`) builda → GHCR → Portainer redeploy. Pushes em sequência empilham builds (~5 min cada). Evitar pushes redundantes.
 
-1. `git fetch origin main && git status` — pegar o estado mais recente do remoto.
-2. `git log --oneline HEAD..origin/main` (commits remotos novos) e `git log --oneline -10` (atividade recente).
-3. `ls docs/agents/active/` — quais agentes estão ativos.
-4. Para cada `docs/agents/active/<other-agent>.md` ALHEIO: ler, entender o tópico do outro, identificar arquivos compartilhados.
-5. `tail -30 docs/agents/HISTORY.md` — atividade recente registrada.
-6. Se houver mudanças remotas: `git pull --rebase origin main`.
-7. **Criar `docs/agents/active/<meu-agent-id>.md`** descrevendo o que vou fazer.
-
-### Antes de QUALQUER mudança em arquivo
-
-- Se ainda não criei `docs/agents/active/<meu-id>.md` — criar AGORA.
-- Verificar se outro `active/*.md` declarou o mesmo arquivo na seção "Arquivos compartilhados que VOU modificar". Se sim → **PARAR e coordenar**.
-
-### Antes de mexer em arquivo compartilhado
-
-Estes arquivos têm alta probabilidade de conflito porque toda feature toca neles:
-
-- `package.json` (versão, dependências)
-- `CHANGELOG.md`
-- `docs/STATUS.md`
-- `CLAUDE.md`
-- `AGENTS.md`
-- `prisma/schema.prisma`
-- `src/lib/queue.ts`
-- `src/worker/index.ts`
-- `src/components/layout/sidebar.tsx`
-
-Antes de tocar:
-1. `git log -3 --oneline -- <arquivo>` — ver quem mexeu recente.
-2. Se commit muito recente (< 30 min), provável que outro agente esteja trabalhando nesse arquivo agora. Avaliar:
-   - Se a mudança é independente: pode prosseguir.
-   - Se há sobreposição: **PARAR**, esperar o outro agente terminar (até 1h).
-3. Se vai bumpar versão (`package.json`): leia o número atual antes — pode ter sido bumpado por outro agente.
-
-### Antes de commitar
-
-1. **`git fetch origin main`** de novo.
-2. Se há commits remotos novos durante seu trabalho:
-   - `git pull --rebase origin main`.
-   - Resolver conflitos manualmente (não force-push).
-   - Re-rodar `npm run typecheck` e `npm test`.
-3. Stage **APENAS** os arquivos que você modificou para a sua feature. **Nunca** `git add -A` ou `git add .` — pega trabalho dos outros.
-4. Se aparecer untracked file que não é seu: deixar quieto. Outro agente vai commitar.
-5. **Append uma linha em `docs/agents/HISTORY.md`** quando o commit é "relevante" (bump de versão, migration, mudança em arquivo compartilhado, novo spec/plan, fix urgente). Veja formato no `_README.md`.
-
-### Antes de PUSH (deploy automático)
-
-> Push em `main` dispara CI → Portainer redeploy. Múltiplos pushes em sequência empilham builds (~5 min cada) e o último ganha. Cuidado.
-
-1. `gh run list --limit 5` — verificar se há build queued/in-progress.
-2. Se há build de outro agente em curso:
-   - Esperar terminar OU
-   - Confirmar que o seu push não conflita com o que está sendo deployado.
-3. Verificar status atual de produção (`curl /api/health`) — não pushar se já está caindo.
-4. Push.
-5. (Opcional) `gh run watch <id>` pra acompanhar.
-
-### Fim da sessão
-
-- **Deletar `docs/agents/active/<meu-id>.md`** — sinaliza pros outros que terminou.
-- Última entrada em `HISTORY.md` se ainda não foi.
-
-### Conflito de spec/plan
-
-- Cada feature deve ter spec/plan próprio em `docs/superpowers/{specs,plans}/YYYY-MM-DD-<topico>-design.md`.
-- Antes de iniciar: listar `docs/superpowers/specs/` e ver se há feature em progresso (data recente, `_design.md` mas sem `plans/...` correspondente, ou `plans/...` sem implementação completa).
-- Se há overlap conceitual entre features (ex.: dois agentes mexendo no Dashboard), **escolher um**: o que tem spec mais antiga geralmente continua, o outro espera ou pivota.
-
-### Como saber em que outros agentes estão trabalhando
-
-Sinais que indicam trabalho em paralelo:
-
-- `git status`: arquivos modificados (sem staged) que você não tocou.
-- `git log --oneline -10`: commits muito recentes (< 30 min) com hash diferente do seu.
-- `docs/superpowers/specs/`: arquivos `*-design.md` recentes não escritos por você.
-- `package.json` versão bumpada quando você não bumpou.
-- `CHANGELOG.md` com entrada nova.
-
-Se identificar o tópico de outro agente (ex.: "Conversas Poderoso", "Dashboard v0.10"):
-- **Não toque nos arquivos da feature dele**, mesmo se parece simples.
-- Use os commits/specs dele como contexto pra evitar duplicação.
-- Se sua feature **depende** de algo que ele está fazendo: pause sua execução, anote o ponto, retome quando ele commitar e push.
-
-### Em caso de dúvida: PERGUNTAR ao João
-
-Se não está claro se uma mudança vai colidir com trabalho de outro agente — pergunta. É barato. Conflito de merge é caro.
+1. `gh run list --limit 5` — não pushar com build em curso (esperar terminar).
+2. `curl /api/health` — checar produção.
+3. `git push origin main`.
+4. Após o build: `portainer-fix.yml -f app_version=vX.Y.Z -f fix_worker_cmd=false` carimba o `APP_VERSION` (o build não seta sozinho).
+5. Validar `/api/health` (`version`, `status=ok`). Cold start mostra `down` por ~10-20s e recupera.
 
 ---
 

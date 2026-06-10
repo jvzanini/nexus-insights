@@ -178,9 +178,15 @@ Design system industrial (monorepo `@nexusai360/*`). Usar como **fonte de patter
 
 ---
 
-## 8.5 Coordenação multi-agente (regra absoluta)
+## 8.5 Fluxo de trabalho — SEMPRE DIRETO NA `main` (regra absoluta deste projeto)
 
-Há 2–3 sessões Claude no repositório ao mesmo tempo. **Antes de qualquer ação**: ler `docs/agents/_README.md`, listar `docs/agents/active/`, ler `tail docs/agents/HISTORY.md`, executar o checklist do `AGENTS.md`. Criar `docs/agents/active/<agent-id>.md` no início da sessão e deletar no fim. Append linha em `docs/agents/HISTORY.md` a cada commit relevante. Antes de push: `gh run list --limit 5` (não acumular deploys em CI).
+> **Decisão do dono (João, 2026-06-10), inegociável e específica deste projeto:** trabalhar **sempre direto na branch `main`**, em **sessão única**. **PROIBIDO:** criar worktrees, criar a pasta `branches/`, criar branches de feature, abrir PRs internos, ou rodar `agente start/end/handoff`. O **protocolo global multi-agente/worktrees NÃO se aplica aqui** — esta regra o sobrescreve (o próprio protocolo global prevê a exceção "trabalha direto na main aqui").
+
+- **Editar, commitar e pushar direto na `main`.** Commits atômicos (um assunto por commit), Conventional Commits.
+- **Antes de pushar:** `npx tsc --noEmit` + `npm test` da área tocada verdes; `gh run list --limit 5` (não empilhar deploys — push em `main` dispara build → Portainer redeploy).
+- **Após o build:** `gh workflow run portainer-fix.yml -f app_version=vX.Y.Z -f fix_worker_cmd=false` carimba o `APP_VERSION`; validar `/api/health`.
+- **A cada release:** atualizar `CHANGELOG.md`, `STATUS.md` e uma linha em `docs/agents/HISTORY.md`.
+- Detalhes em `docs/agents/_README.md` e `AGENTS.md`. **Não usar `docs/agents/active/`** (descontinuado).
 
 ## 9. Conduta autônoma
 
