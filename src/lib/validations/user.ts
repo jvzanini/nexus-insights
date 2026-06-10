@@ -25,6 +25,12 @@ export type CreateUserInputT = z.infer<typeof CreateUserInput>;
 export const UpdateUserInput = z.object({
   id: z.string().uuid(),
   name: z.string().min(2).max(120).optional(),
+  email: z
+    .string()
+    .trim()
+    .email("E-mail inválido")
+    .transform((v) => v.toLowerCase())
+    .optional(),
   platformRole: PlatformRoleEnum.optional(),
   password: z
     .string()

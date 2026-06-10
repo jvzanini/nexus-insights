@@ -126,7 +126,34 @@ export async function invalidateNexusChatPool(
   await cached.pool.end().catch(() => {});
 }
 
+// SQLSTATE de erros de conexão/recursos do Postgres que valem retry.
 const RETRYABLE_CODES = new Set(["53300", "53200", "08006", "08001", "08P01"]);
+// Erros de socket/rede do Node que indicam queda transitória de conexão.
+const RETRYABLE_NET_CODES = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
+  "EPIPE",
+]);
+
+/**
+ * Decide se vale retentar. Cobre, além dos SQLSTATE/erros de rede, o caso
+ * crítico do pool max:1 saturado: o pg.Pool estoura `connectionTimeoutMillis`
+ * no checkout com um Error genérico SEM `.code` e mensagem "timeout exceeded
+ * when trying to connect". Antes esse erro não era retentado e derrubava
+ * dashboard/relatórios intermitentemente ("erro ao carregar as informações").
+ * `statement_timeout` (query lenta, SQLSTATE 57014) é deixado de fora de
+ * propósito: retentar query lenta só agrava a saturação.
+ */
+function isRetryableError(err: unknown): boolean {
+  const e = err as { code?: string; message?: string };
+  const code = e.code ?? "";
+  if (RETRYABLE_CODES.has(code) || RETRYABLE_NET_CODES.has(code)) return true;
+  const msg = e.message ?? "";
+  if (/timeout exceeded when trying to connect/i.test(msg)) return true;
+  if (/Connection terminated/i.test(msg)) return true;
+  return false;
+}
 
 async function withRetry<T>(
   fn: () => Promise<T>,
@@ -138,8 +165,7 @@ async function withRetry<T>(
       return await fn();
     } catch (err) {
       lastErr = err;
-      const code = (err as { code?: string }).code ?? "";
-      if (!RETRYABLE_CODES.has(code)) throw err;
+      if (!isRetryableError(err)) throw err;
       if (attempt < maxAttempts - 1) {
         const jitter = Math.random() * 150;
         await new Promise((r) => setTimeout(r, 200 * 2 ** attempt + jitter));
