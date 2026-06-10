@@ -6,9 +6,7 @@
 
 ## Versão atual em produção
 
-**v0.55.4** — commitada e deployada em 2026-06-05. Health: `status=ok`, db ~25ms, redis ok, chatwoot ok.
-
-> **v0.56.0** commitada na branch `fix/edicao-email-e-carregamento` — aguardando merge para `main` e deploy. Edição de e-mail de usuários + resiliência do carregamento de dados.
+**v0.56.0** — mergeada (PR #1) e deployada em 2026-06-10. Health: `status=ok`, db ~47ms, redis ~7ms, chatwoot ~142ms. `version=v0.56.0`. Edição de e-mail de usuários (senha preservada) + resiliência do carregamento de dados (retry de timeout do pool + single-flight no cache).
 
 ---
 
@@ -16,7 +14,7 @@
 
 | Componente | Estado | Observação |
 |---|---|---|
-| App Next.js | ✅ Live | v0.55.4 |
+| App Next.js | ✅ Live | v0.56.0 |
 | Worker BullMQ (polling delta) | ✅ Live | polling 30s per-connection |
 | Pré-agregação | ✅ Live | refresh on-demand + cron 30min fallback |
 | Banco (Prisma + Postgres) | ✅ | leitura direta Chatwoot (read-only) |
