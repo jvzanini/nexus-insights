@@ -183,6 +183,10 @@ export function UserFormDialog({
   const showActiveToggle = isEdit && !isOwner && !isSelf;
   const lockRole = isEdit && (isOwner || isSelf);
   const lockAccess = lockRole;
+  // E-mail editável na edição por quem pode editar o usuário, exceto quando o
+  // alvo é o proprietário (imutável) ou o próprio usuário logado (que troca o
+  // e-mail pela página Perfil, com verificação). A senha não é afetada.
+  const lockEmail = isEdit && (isOwner || isSelf);
 
   // Resetar estado ao abrir
   useEffect(() => {
@@ -282,7 +286,7 @@ export function UserFormDialog({
     if (!form.name.trim()) next.name = "Nome obrigatório";
     else if (form.name.trim().length < 3) next.name = "Mínimo de 3 caracteres";
 
-    if (!isEdit) {
+    if (!lockEmail) {
       const e = form.email.trim();
       if (!e) next.email = "E-mail obrigatório";
       else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))
@@ -379,6 +383,7 @@ export function UserFormDialog({
       const updateResult = await updateUser({
         id: user.id,
         name: form.name.trim(),
+        email: lockEmail ? undefined : form.email.trim(),
         platformRole: lockRole ? undefined : form.role,
         password: form.password.length > 0 ? form.password : undefined,
         accountIds: lockAccess
@@ -484,6 +489,7 @@ export function UserFormDialog({
                 }
                 isEdit={isEdit}
                 lockRole={lockRole}
+                lockEmail={lockEmail}
                 availableRoles={availableRoles}
                 showActiveToggle={showActiveToggle}
                 ids={{
@@ -670,6 +676,7 @@ interface StepIdentityProps {
   clearError: (key: keyof FieldErrors) => void;
   isEdit: boolean;
   lockRole: boolean;
+  lockEmail: boolean;
   availableRoles: RoleMeta[];
   showActiveToggle: boolean;
   ids: {
@@ -689,6 +696,7 @@ function StepIdentity({
   clearError,
   isEdit,
   lockRole,
+  lockEmail,
   availableRoles,
   showActiveToggle,
   ids,
@@ -740,11 +748,12 @@ function StepIdentity({
           placeholder="email@exemplo.com"
           aria-invalid={!!errors.email || undefined}
           autoComplete="email"
-          disabled={isEdit}
+          disabled={lockEmail}
         />
-        {isEdit ? (
+        {lockEmail ? (
           <p className="text-[11px] text-muted-foreground">
-            O e-mail não pode ser alterado.
+            O e-mail do proprietário e o seu próprio não podem ser alterados
+            aqui — use a página Perfil para o seu.
           </p>
         ) : null}
         {errors.email ? (

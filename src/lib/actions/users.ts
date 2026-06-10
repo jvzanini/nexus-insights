@@ -333,9 +333,23 @@ export async function updateUser(rawInput: unknown): Promise<ActionResult> {
       return { success: false, error: "Você não pode liberar esses departamentos" };
     }
 
+    // Unicidade do e-mail: só checa quando o e-mail realmente muda. O próprio
+    // usuário (mesmo id) não conta como duplicado. A senha NÃO é tocada aqui —
+    // trocar e-mail mantém a senha atual.
+    if (input.email && input.email !== target.email) {
+      const existing = await prisma.user.findUnique({
+        where: { email: input.email },
+        select: { id: true },
+      });
+      if (existing && existing.id !== input.id) {
+        return { success: false, error: "E-mail já cadastrado" };
+      }
+    }
+
     await prisma.$transaction(async (tx) => {
       const data: Record<string, unknown> = {};
       if (input.name) data.name = input.name;
+      if (input.email) data.email = input.email;
       if (input.platformRole) data.platformRole = input.platformRole;
       if (input.password) {
         data.password = await bcrypt.hash(input.password, 10);
