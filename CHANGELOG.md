@@ -1,5 +1,20 @@
 # Changelog
 
+## [v0.56.2] 2026-06-10 — Dashboard/relatórios sempre no ar (resiliência a falha de conexão)
+
+Corrige a tela **"too many connections for role chatwoot_leitura"** que aparecia no Dashboard e relatórios.
+
+- **Causa (medida no banco):** o usuário read-only do Chatwoot tem **limite de 5 conexões** (num servidor que permite 400). Em picos (dashboard atualizando + worker sincronizando + relatórios + vários usuários) passa de 5 e o banco recusa a conexão. Não é vazamento — é capacidade.
+- **Resiliência (no código, já no ar):** o Dashboard e **todos os relatórios** passam a exibir o **último dado conhecido** quando há um pico, em vez de mostrar erro. Guardamos uma cópia "último dado bom" (válida por 24h) e a servimos automaticamente se o banco recusar a conexão. Self-healing: volta ao dado fresco assim que o banco responde. **Sempre aparecendo.**
+- **Capacidade na raiz (ação no banco, complementar):** subir o limite do role para 30 elimina o pico de vez — `ALTER ROLE chatwoot_leitura CONNECTION LIMIT 30;` (rodado pelo admin do banco).
+
+TDD: +6 testes. tsc 0, build 0.
+
+### Reorganização do fluxo de trabalho
+- Este projeto passa a trabalhar **sempre direto na `main`** (sessão única, sem worktrees/branches de feature). Regras atualizadas em `CLAUDE.md`, `AGENTS.md`, `README.md`, `docs/agents/_README.md`.
+
+---
+
 ## [v0.56.1] 2026-06-10 — Correção do crash de login (primeiro acesso / trocar senha)
 
 Corrige a experiência ruim ao logar com um usuário que precisa **trocar a senha no primeiro acesso** (`mustChangePassword`): a tela recarregava vazia, depois mostrava o erro cru "This page couldn't load", e só logava após recarregar manualmente.
