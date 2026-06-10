@@ -9,6 +9,7 @@ import {
   THEME_PREF_COOKIE,
   THEME_COOKIE_MAX_AGE,
 } from '@/lib/theme';
+import { resolvePostLoginRedirect } from './post-login-redirect';
 
 export async function loginAction(
   formData: FormData,
@@ -20,7 +21,7 @@ export async function loginAction(
     // Verificar se o usuário está inativo antes de tentar login
     const existingUser = await prisma.user.findUnique({
       where: { email },
-      select: { isActive: true, theme: true },
+      select: { isActive: true, theme: true, mustChangePassword: true },
     });
     if (existingUser && !existingUser.isActive) {
       return { error: 'Sua conta está inativa. Entre em contato com o administrador.' };
@@ -44,10 +45,19 @@ export async function loginAction(
       });
     }
 
+    // Redireciona JÁ para o destino final. Quando mustChangePassword=true,
+    // aponta direto para /perfil/trocar-senha em vez de cair em /dashboard e
+    // depender do middleware reescrever (302) — esse hop encadeado, dentro da
+    // navegação RSC do Server Action, gerava a tela "This page couldn't load".
+    const redirectTo = resolvePostLoginRedirect({
+      mustChangePassword: existingUser?.mustChangePassword ?? false,
+      callbackUrl,
+    });
+
     await signIn('credentials', {
       email,
       password: formData.get('password') as string,
-      redirectTo: callbackUrl,
+      redirectTo,
     });
   } catch (error) {
     if (error instanceof AuthError) {

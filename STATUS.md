@@ -6,7 +6,9 @@
 
 ## Versão atual em produção
 
-**v0.56.0** — mergeada (PR #1) e deployada em 2026-06-10. Health: `status=ok`, db ~47ms, redis ~7ms, chatwoot ~142ms. `version=v0.56.0`. Edição de e-mail de usuários (senha preservada) + resiliência do carregamento de dados (retry de timeout do pool + single-flight no cache).
+**v0.56.1** — mergeada (PR #2) e deployada em 2026-06-10. Correção do crash de login no primeiro acesso (`mustChangePassword`): redirect direto para `/perfil/trocar-senha` (sem hop) + error boundaries on-brand (protected + global) substituindo o overlay cru "This page couldn't load".
+
+> v0.56.0 (2026-06-10): edição de e-mail de usuários (senha preservada) + resiliência do carregamento de dados (retry de timeout do pool + single-flight no cache).
 
 ---
 
@@ -14,7 +16,7 @@
 
 | Componente | Estado | Observação |
 |---|---|---|
-| App Next.js | ✅ Live | v0.56.0 |
+| App Next.js | ✅ Live | v0.56.1 |
 | Worker BullMQ (polling delta) | ✅ Live | polling 30s per-connection |
 | Pré-agregação | ✅ Live | refresh on-demand + cron 30min fallback |
 | Banco (Prisma + Postgres) | ✅ | leitura direta Chatwoot (read-only) |
@@ -27,6 +29,7 @@
 
 | Versão | Data | Descrição |
 |---|---|---|
+| v0.56.1 | 2026-06-10 | Crash de login no primeiro acesso (mustChangePassword): redirect direto p/ trocar-senha (sem hop) + error boundaries (protected + global) |
 | v0.56.0 | 2026-06-10 | Edição de e-mail de usuários (senha preservada) + resiliência do carregamento (retry de timeout do pool + single-flight no cache) |
 | v0.55.4 | 2026-06-05 | RBAC: menu/rota "Usuários" restritos a super_admin (temporário, reversível) |
 | v0.55.3 | 2026-06-05 | Export XLSX: header de atributo usa a chave original (`Atributo: status_atendimento`) |
