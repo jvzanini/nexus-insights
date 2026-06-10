@@ -1,12 +1,14 @@
 # STATUS — Nexus Insights (Matrix Fitness Group)
 
-> Última atualização: 2026-06-05
+> Última atualização: 2026-06-10
 
 ---
 
 ## Versão atual em produção
 
 **v0.55.4** — commitada e deployada em 2026-06-05. Health: `status=ok`, db ~25ms, redis ok, chatwoot ok.
+
+> **v0.56.0** commitada na branch `fix/edicao-email-e-carregamento` — aguardando merge para `main` e deploy. Edição de e-mail de usuários + resiliência do carregamento de dados.
 
 ---
 
@@ -27,6 +29,7 @@
 
 | Versão | Data | Descrição |
 |---|---|---|
+| v0.56.0 | 2026-06-10 | Edição de e-mail de usuários (senha preservada) + resiliência do carregamento (retry de timeout do pool + single-flight no cache) |
 | v0.55.4 | 2026-06-05 | RBAC: menu/rota "Usuários" restritos a super_admin (temporário, reversível) |
 | v0.55.3 | 2026-06-05 | Export XLSX: header de atributo usa a chave original (`Atributo: status_atendimento`) |
 | v0.55.2 | 2026-06-05 | Export XLSX: colunas País/Estado-Cidade após Documento, "Estado"→"Caixa de entrada", headers de atributo legíveis |

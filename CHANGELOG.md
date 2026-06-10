@@ -1,5 +1,21 @@
 # Changelog
 
+## [v0.56.0] 2026-06-10 — Edição de e-mail de usuários + resiliência do carregamento de dados
+
+**Edição de e-mail (gestão de usuários):**
+- Quem tem permissão para editar outros usuários agora pode **atualizar o e-mail** no dialog de edição (antes o campo era travado).
+- A **senha é mantida** ao trocar o e-mail — só muda se uma nova senha for digitada.
+- E-mail normalizado (`trim` + minúsculas) e **checagem de unicidade** (não permite e-mail já usado por outro usuário; manter o próprio e-mail é permitido).
+- O campo continua travado para o **proprietário** (imutável) e para o **próprio usuário logado** (que troca o e-mail pela página Perfil, com verificação).
+
+**Resiliência do carregamento ("erro ao carregar as informações"):**
+- Corrige o erro **intermitente** que aparecia no Dashboard e nos relatórios que leem o banco do Chatwoot ao vivo.
+- **Causa raiz:** o pool por conexão é `max:1` (limite do usuário read-only). O Dashboard dispara ~14 queries simultâneas; quando o pool satura, o tempo de espera por uma conexão estoura com um erro que **não era retentado** e derrubava todas as telas. Além disso, o cache (30s) expirava antes do polling (60s) e, sem *single-flight*, várias requisições batiam o banco ao mesmo tempo.
+- **Correção:** o retry agora cobre o timeout de espera por conexão e quedas de socket transitórias; e o cache passou a ter *single-flight* (só 1 requisição busca o banco por vez por chave; as demais aguardam o mesmo resultado).
+- TDD: +8 testes. tsc 0. Sem regressões.
+
+---
+
 ## [v0.55.4] 2026-06-05 — RBAC: menu/rota "Usuários" restritos a super_admin (temporário)
 
 - **Menu "Usuários" oculto** para admin/manager/viewer — visível apenas para `super_admin` (`nav.ts`, `visibleTo: ["super_admin"]`).
