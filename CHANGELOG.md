@@ -1,5 +1,17 @@
 # Changelog
 
+## [v0.56.1] 2026-06-10 — Correção do crash de login (primeiro acesso / trocar senha)
+
+Corrige a experiência ruim ao logar com um usuário que precisa **trocar a senha no primeiro acesso** (`mustChangePassword`): a tela recarregava vazia, depois mostrava o erro cru "This page couldn't load", e só logava após recarregar manualmente.
+
+- **Causa:** o login mandava para `/dashboard` e o middleware reescrevia (302) para `/perfil/trocar-senha`. Esse redirecionamento **encadeado**, durante a navegação iniciada pelo formulário, o Next não conseguia concluir → tela de erro crua. Quem não precisa trocar senha ia direto ao `/dashboard` (sem o salto) e por isso nunca via o problema.
+- **Correção (login):** o login agora **já manda direto** para a tela de trocar senha quando o usuário precisa — sem o salto intermediário. Passa a se comportar como o login normal, que sempre funcionou. A senha **não é tocada** nesse fluxo.
+- **Correção (robustez):** o app **nunca tinha uma tela de erro própria**. Adicionamos páginas de erro on-brand (com botão **"Tentar novamente"**) que substituem o overlay cru do Next em qualquer falha momentânea — vale para o login e para todas as telas. Antes, qualquer engasgo virava aquela tela preta assustadora.
+
+TDD: +4 testes. tsc 0, build 0. Sem regressões.
+
+---
+
 ## [v0.56.0] 2026-06-10 — Edição de e-mail de usuários + resiliência do carregamento de dados
 
 **Edição de e-mail (gestão de usuários):**
