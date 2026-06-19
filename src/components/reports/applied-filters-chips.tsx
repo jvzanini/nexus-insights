@@ -287,7 +287,7 @@ export function AppliedFiltersChips({
   // Data só aparece quando ≠ default ("created") e o período não é "Todos"
   // (onde a coluna de data não tem efeito).
   const showDateChip =
-    applied.dateField === "created" && applied.period !== "todos";
+    applied.dateField === "updated" && applied.period !== "todos";
   const durationChip = applied.durationFilter
     ? durationChipLabel(applied.durationFilter)
     : null;
@@ -306,7 +306,7 @@ export function AppliedFiltersChips({
       {showDateChip ? (
         <span className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-violet-500/40 bg-violet-500/10 px-2.5 py-1 text-xs text-foreground">
           <Eye className="h-3 w-3 text-violet-400" aria-hidden="true" />
-          <span className="truncate">Critério: {DATE_FIELD_LABELS.created}</span>
+          <span className="truncate">Critério: {DATE_FIELD_LABELS.updated}</span>
           <button
             type="button"
             onClick={() => onRemove("dateField")}

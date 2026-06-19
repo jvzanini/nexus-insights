@@ -18,9 +18,9 @@ export const DATE_FIELD_LABELS: Record<DateField, string> = {
 
 export const DATE_FIELD_HELP: Record<DateField, string> = {
   created:
-    "Filtra pela data em que a conversa foi criada. Mostra apenas as que começaram no período, mesmo sem atividade depois.",
+    "Mostra apenas as conversas que foram criadas no período, mesmo sem atividade depois.",
   updated:
-    "Filtra pela data da última movimentação. Mostra tudo que teve atividade no período, mesmo conversas antigas.",
+    "Filtra pela última atualização na conversa. Mostra todas as conversas que tiveram mensagens, do cliente ou do atendente, no período — mesmo conversas antigas.",
 };
 
 export const INDICATOR_LABELS: Record<DurationIndicator, string> = {
@@ -31,10 +31,10 @@ export const INDICATOR_LABELS: Record<DurationIndicator, string> = {
 
 export const INDICATOR_HELP: Record<DurationIndicator, string> = {
   waiting:
-    "Tempo desde a última mensagem do cliente sem o atendente responder. Só conversas não resolvidas em que o cliente foi o último a falar. Uma nota interna do atendente também encerra essa contagem.",
-  open: "Tempo desde a última ação do atendente numa conversa ainda aberta. Normalmente aguardando retorno do cliente ou sem fechamento.",
+    "Tempo desde a última mensagem do cliente sem o atendente responder. Só conversas não resolvidas em que o cliente foi o último a falar. Uma nota privada do atendente encerra essa contagem.",
+  open: "Tempo desde a última mensagem do atendente numa conversa ainda aberta. Normalmente aguardando retorno do cliente ou conversa ainda não resolvida.",
   stalled:
-    "Tempo desde a última movimentação, seja de quem for. Encontra conversas estagnadas/esquecidas, independente do status.",
+    "Tempo desde a última atividade na conversa (qualquer mensagem). Encontra conversas estagnadas ou esquecidas que ainda estão abertas.",
 };
 
 export const MODE_LABELS: Record<DurationMode, string> = {
@@ -43,13 +43,13 @@ export const MODE_LABELS: Record<DurationMode, string> = {
   between: "entre",
 };
 
-/** Rótulo da unidade no select (mês/ano com a aproximação explícita). */
+/** Rótulo da unidade no select. */
 export const UNIT_SELECT_LABELS: Record<DurationUnit, string> = {
   minute: "minuto",
   hour: "hora",
   day: "dia",
-  month: "mês (≈30 dias)",
-  year: "ano (≈365 dias)",
+  month: "mês",
+  year: "ano",
 };
 
 const UNIT_NOUN: Record<DurationUnit, [string, string]> = {

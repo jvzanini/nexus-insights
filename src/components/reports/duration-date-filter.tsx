@@ -9,9 +9,10 @@
 //     (no mínimo / no máximo / entre), valor livre e unidade.
 // O filtro de tempo é client-side (matchDuration) sobre segundos exatos.
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { AlertTriangle, Info, RotateCcw } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { CustomSelect, type SelectOption } from "@/components/ui/custom-select";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -153,6 +154,59 @@ function RadioCard({
   );
 }
 
+/** Tag de status de conversa (aberta / resolvida / não resolvida) para destaque. */
+function StatusTag({
+  children,
+  tone,
+}: {
+  children: ReactNode;
+  tone: "open" | "resolved" | "unresolved";
+}) {
+  const cls =
+    tone === "open"
+      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+      : tone === "unresolved"
+        ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+        : "bg-muted text-foreground/80";
+  return (
+    <span
+      className={cn(
+        "mx-0.5 inline-flex items-center rounded px-1.5 py-px text-[11px] font-medium",
+        cls,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** Descrição rica do indicador, com tags de status destacadas. */
+const INDICATOR_RICH_DESC: Record<DurationIndicator, ReactNode> = {
+  waiting: (
+    <>
+      Tempo desde a última mensagem do cliente sem o atendente responder. Só
+      conversas <StatusTag tone="unresolved">não resolvidas</StatusTag> em que o
+      cliente foi o último a falar. Uma nota privada do atendente encerra essa
+      contagem.
+    </>
+  ),
+  open: (
+    <>
+      Tempo desde a última mensagem do atendente numa conversa ainda{" "}
+      <StatusTag tone="open">aberta</StatusTag>. Normalmente aguardando retorno
+      do cliente ou conversa ainda não{" "}
+      <StatusTag tone="resolved">resolvida</StatusTag>.
+    </>
+  ),
+  stalled: (
+    <>
+      Tempo desde a última atividade na conversa (qualquer mensagem). Encontra
+      conversas estagnadas ou esquecidas que ainda estão{" "}
+      <StatusTag tone="open">abertas</StatusTag>.
+    </>
+  ),
+};
+
 /** Conteúdo da seção "Critério de visualização" (Criado em / Última atualização em). */
 export function CriterioVisualizacaoContent({
   dateField,
@@ -280,6 +334,10 @@ export function TempoMensagemContent({
             </div>
           </div>
 
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {INDICATOR_RICH_DESC[df.indicator]}
+          </p>
+
           <div className="flex flex-wrap items-end gap-2">
             <div className="flex flex-col gap-1">
               <span className="text-xs text-muted-foreground">
@@ -295,7 +353,7 @@ export function TempoMensagemContent({
                   setValueStr(e.target.value);
                   commitValue(e.target.value, "value");
                 }}
-                className="w-20"
+                className="w-24"
               />
             </div>
             <div className="flex flex-col gap-1">
@@ -324,7 +382,7 @@ export function TempoMensagemContent({
                       setValueEndStr(e.target.value);
                       commitValue(e.target.value, "valueEnd");
                     }}
-                    className="w-20"
+                    className="w-24"
                   />
                 </div>
                 <div className="flex flex-col gap-1">
@@ -369,14 +427,18 @@ export function TempoMensagemContent({
             {EXACT_TIME_NOTE}
           </p>
 
-          <button
-            type="button"
-            onClick={() => onChange(undefined)}
-            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground cursor-pointer"
-          >
-            <RotateCcw className="h-3.5 w-3.5" aria-hidden />
-            Limpar filtro de tempo
-          </button>
+          <div className="flex justify-end border-t border-border/40 pt-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onChange(undefined)}
+              className="cursor-pointer"
+            >
+              <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+              Limpar filtro de tempo
+            </Button>
+          </div>
         </>
       ) : null}
     </div>

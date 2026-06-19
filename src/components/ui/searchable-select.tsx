@@ -16,6 +16,8 @@ export interface SearchableSelectOption {
   description?: string;
   notes?: string;
   endAdornment?: ReactNode;
+  /** Ícone à esquerda do label (trigger e item), para consistência visual. */
+  icon?: ReactNode;
 }
 
 /**
@@ -188,7 +190,12 @@ export function SearchableSelect({
                 </>
               ) : (
                 <>
-                  <span className="truncate">
+                  <span className="flex min-w-0 items-center gap-2 truncate">
+                    {selected?.icon ? (
+                      <span className="shrink-0 text-muted-foreground">
+                        {selected.icon}
+                      </span>
+                    ) : null}
                     {selected?.label ?? placeholder}
                   </span>
                   <ChevronDown
@@ -249,6 +256,11 @@ export function SearchableSelect({
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
+                        {opt.icon ? (
+                          <span className="shrink-0 text-muted-foreground">
+                            {opt.icon}
+                          </span>
+                        ) : null}
                         <span className="truncate font-medium text-foreground">
                           {opt.label}
                         </span>

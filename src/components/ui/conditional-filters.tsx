@@ -1,12 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { Plus, Trash2, FolderPlus, Filter, FolderOpen } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CustomSelect } from "@/components/ui/custom-select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { MultiSelectCheckbox } from "@/components/ui/multi-select-checkbox";
 import {
   isGroup as isConditionGroup,
@@ -23,6 +30,8 @@ export interface ConditionFieldDef {
   label: string;
   type: "string" | "number" | "select" | "multi_select" | "date";
   options?: { value: string | number; label: string }[];
+  /** Ícone do campo (consistência com o filtro Simples) no seletor de campo. */
+  icon?: ReactNode;
 }
 
 export interface ConditionalFiltersProps {
@@ -414,13 +423,17 @@ function ConditionRow({
         className="size-3.5 shrink-0 text-muted-foreground"
         aria-hidden="true"
       />
-      <CustomSelect
-        aria-label="Campo"
+      <SearchableSelect
         value={condition.field}
         onChange={handleFieldChange}
-        options={fields.map((f) => ({ value: f.key, label: f.label }))}
+        options={fields.map((f) => ({
+          value: f.key,
+          label: f.label,
+          icon: f.icon,
+        }))}
+        searchPlaceholder="Buscar campo..."
         className="w-auto"
-        triggerClassName="h-9 min-w-[170px] font-medium"
+        triggerClassName="h-9 min-w-[200px] font-medium"
       />
 
       <CustomSelect

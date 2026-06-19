@@ -18,6 +18,7 @@ import {
   Globe,
   Inbox,
   MapPin,
+  Phone,
   RotateCcw,
   Tag,
   User,
@@ -104,7 +105,6 @@ const DOC_TYPE_TO_ID: Record<DocumentTypeFilter, number> = {
 
 type SimpleSectionKey =
   | "criterio"
-  | "criterioAdv"
   | "tempo"
   | "inboxIds"
   | "teamIds"
@@ -134,29 +134,34 @@ function buildFields({
   countries: MetaItem[];
   estados: MetaItem[];
 }): ConditionFieldDef[] {
+  const ic = "h-4 w-4 text-muted-foreground";
   return [
     {
       key: "inbox.id",
       label: "Caixa de entrada",
       type: "multi_select",
+      icon: <Inbox className={ic} aria-hidden />,
       options: inboxes.map((i) => ({ value: i.id, label: i.name })),
     },
     {
       key: "team.id",
       label: "Departamento",
       type: "multi_select",
+      icon: <Building2 className={ic} aria-hidden />,
       options: teams.map((t) => ({ value: t.id, label: t.name })),
     },
     {
       key: "assignee.id",
       label: "Atendente",
       type: "multi_select",
+      icon: <User className={ic} aria-hidden />,
       options: assignees.map((a) => ({ value: a.id, label: a.name })),
     },
     {
       key: "status",
       label: "Status",
       type: "select",
+      icon: <Activity className={ic} aria-hidden />,
       options: [
         { value: 0, label: "Aberta" },
         { value: 1, label: "Resolvida" },
@@ -168,6 +173,7 @@ function buildFields({
       key: "priority",
       label: "Prioridade",
       type: "select",
+      icon: <AlertCircle className={ic} aria-hidden />,
       options: [
         { value: 0, label: "Urgente" },
         { value: 1, label: "Alta" },
@@ -179,43 +185,51 @@ function buildFields({
       key: "labels",
       label: "Etiquetas",
       type: "multi_select",
+      icon: <Tag className={ic} aria-hidden />,
       options: labels.map((l) => ({ value: l.id, label: l.name })),
     },
     {
       key: "waiting_seconds",
       label: "Sem resposta há (segundos)",
       type: "number",
+      icon: <Clock className={ic} aria-hidden />,
     },
     {
       key: "open_seconds",
       label: "Aberta há (segundos)",
       type: "number",
+      icon: <Clock className={ic} aria-hidden />,
     },
     {
       key: "stalled_seconds",
       label: "Parada há (segundos)",
       type: "number",
+      icon: <Clock className={ic} aria-hidden />,
     },
     {
       key: "contact.name",
       label: "Nome do contato",
       type: "string",
+      icon: <User className={ic} aria-hidden />,
     },
     {
       key: "contact.phone_number",
       label: "WhatsApp",
       type: "string",
+      icon: <Phone className={ic} aria-hidden />,
     },
     {
       key: "contact.country",
       label: "País",
       type: "multi_select",
+      icon: <Globe className={ic} aria-hidden />,
       options: countries.map((c) => ({ value: c.name, label: c.name })),
     },
     {
       key: "contact.estado",
       label: "Estado/Cidade",
       type: "multi_select",
+      icon: <MapPin className={ic} aria-hidden />,
       options: estados.map((e) => ({ value: e.name, label: e.name })),
     },
   ];
@@ -459,7 +473,7 @@ export function FiltersDialog({
               <CollapsibleSection
                 title="Critério de visualização"
                 count={
-                  draft.dateField === "created" && draft.period !== "todos" ? 1 : 0
+                  draft.dateField === "updated" && draft.period !== "todos" ? 1 : 0
                 }
                 open={openSection === "criterio"}
                 onOpenChange={makeSectionToggle("criterio")}
@@ -707,26 +721,8 @@ export function FiltersDialog({
 
             <TabsContent
               value="advanced"
-              className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1"
+              className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1"
             >
-              <CollapsibleSection
-                title="Critério de visualização"
-                count={
-                  draft.dateField === "created" && draft.period !== "todos" ? 1 : 0
-                }
-                open={openSection === "criterioAdv"}
-                onOpenChange={makeSectionToggle("criterioAdv")}
-                icon={
-                  <Eye className="h-4 w-4 text-muted-foreground" aria-hidden />
-                }
-              >
-                <CriterioVisualizacaoContent
-                  dateField={draft.dateField}
-                  period={draft.period}
-                  onChange={(v) => update("dateField", v)}
-                />
-              </CollapsibleSection>
-
               <ConditionalFilters
                 fields={buildFields({
                   inboxes,
