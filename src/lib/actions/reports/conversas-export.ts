@@ -11,11 +11,13 @@ import { applyConditions } from "@/lib/utils/apply-conditions";
 import { matchDocumentTypes } from "@/lib/reports/match-document-types";
 import { matchLocation } from "@/lib/reports/match-location";
 import { sortConversasByStack } from "@/lib/reports/sort-conversas";
+import { matchDuration, deriveStalledSeconds } from "@/lib/reports/match-duration";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
 import type { AuthUser } from "@/lib/auth-helpers";
 import type { ConditionGroup } from "@/lib/utils/apply-conditions";
 import type { DocumentTypeFilter } from "@/lib/reports/match-document-types";
 import type { SortRule } from "@/components/reports/sorting-dialog";
+import type { DurationFilter } from "@/lib/reports/filter-state";
 
 const DEFAULT_ACCOUNT_ID = 9; // Matrix Fitness Group (single-tenant atualmente).
 const MAX_EXPORT_ROWS = 50_000;
@@ -53,6 +55,10 @@ export interface ExportConversasInput {
    * `sortConversasByStack` (DRY com a tabela).
    */
   sortStack?: SortRule[];
+  /**
+   * v0.57 — filtro de duração (Sem resposta/Aberta/Parada há). Replica matchDuration p/ o XLSX bater com a tela.
+   */
+  durationFilter?: DurationFilter;
 }
 
 export interface ExportConversasResult {
@@ -165,9 +171,14 @@ export async function exportConversasAction(
       return { error: "Sem conversas para exportar" };
     }
 
-    // v0.32 — replica pipeline client-side para que o XLSX exportado bata
+    // v0.32/v0.57 — replica pipeline client-side para que o XLSX exportado bata
     // exatamente com a tabela visível. Ordem espelha `<ConversasTable>`:
-    //   matchSearchClient → applyConditions → matchDocumentTypes → sortConversasByStack
+    //   matchSearchClient → applyConditions → matchDocumentTypes → matchLocation → matchDuration → sortConversasByStack
+    //
+    // serverNow é materializado uma vez e reutilizado em deriveStalledSeconds
+    // (para que applyConditions possa referenciar stalled_seconds) e em matchDuration.
+    const serverNow = Date.now();
+    rows = rows.map((r) => ({ ...r, stalled_seconds: deriveStalledSeconds(r, serverNow) }));
     if (args.searchClient && args.searchClient.trim()) {
       rows = matchSearchClient(rows, args.searchClient);
     }
@@ -180,6 +191,7 @@ export async function exportConversasAction(
     if (args.countries?.length || args.estados?.length) {
       rows = matchLocation(rows, args.countries ?? [], args.estados ?? []);
     }
+    rows = matchDuration(rows, args.durationFilter, serverNow);
     if (args.sortStack && args.sortStack.length > 0) {
       rows = sortConversasByStack(rows, args.sortStack);
     }

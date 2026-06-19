@@ -10,6 +10,7 @@ import type { ReportFilters } from "@/lib/chatwoot/filters";
 import type { ConditionGroup } from "@/lib/utils/apply-conditions";
 import type { DocumentTypeFilter } from "@/lib/reports/match-document-types";
 import type { SortRule } from "@/components/reports/sorting-dialog";
+import type { DurationFilter } from "@/lib/reports/filter-state";
 
 interface ExportButtonProps {
   filters: ReportFilters;
@@ -51,6 +52,11 @@ interface ExportButtonProps {
    * `sortConversasByStack` antes de gerar o XLSX (DRY com a tabela).
    */
   sortStack?: SortRule[];
+  /**
+   * v0.57 — filtro de duração (Sem resposta/Aberta/Parada há). Server replica
+   * via `matchDuration` para que o XLSX bata com a tela.
+   */
+  durationFilter?: DurationFilter;
 }
 
 /**
@@ -92,6 +98,7 @@ export function ExportButton({
   countries,
   estados,
   sortStack,
+  durationFilter,
 }: ExportButtonProps) {
   const [pending, startTransition] = useTransition();
   const [internalLoading, setInternalLoading] = useState(false);
@@ -112,6 +119,7 @@ export function ExportButton({
           countries,
           estados,
           sortStack,
+          durationFilter,
         });
         if (result.error) {
           toast.error(result.error);
