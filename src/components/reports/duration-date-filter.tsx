@@ -43,9 +43,7 @@ const DEFAULT_DURATION: DurationFilter = {
   unit: "minute",
 };
 
-const INDICATOR_OPTIONS: SelectOption[] = (
-  ["waiting", "open", "stalled"] as DurationIndicator[]
-).map((i) => ({ value: i, label: INDICATOR_LABELS[i] }));
+const INDICATORS: DurationIndicator[] = ["waiting", "open", "stalled"];
 
 const UNIT_OPTIONS: SelectOption[] = (
   ["minute", "hour", "day", "month", "year"] as DurationUnit[]
@@ -100,18 +98,18 @@ function Segmented<T extends string>({
 }
 
 /**
- * Tag de status de conversa, usando as MESMAS cores do sistema (status-badge):
- * Aberta/não resolvida = âmbar; Resolvida = azul (sky).
+ * Tag de status de conversa. Cores definidas pelo dono: âmbar para "aberta"
+ * (em aberto), azul (sky) para "resolvida" e "não resolvida".
  */
 function StatusTag({
   children,
   tone,
 }: {
   children: ReactNode;
-  tone: "open" | "resolved";
+  tone: "amber" | "sky";
 }) {
   const cls =
-    tone === "resolved"
+    tone === "sky"
       ? "bg-sky-500/15 text-sky-500"
       : "bg-amber-500/15 text-amber-500";
   return (
@@ -126,12 +124,12 @@ function StatusTag({
   );
 }
 
-/** Descrição rica do indicador, com tags de status destacadas (cores do sistema). */
+/** Descrição rica do indicador, com tags de status destacadas. */
 const INDICATOR_RICH_DESC: Record<DurationIndicator, ReactNode> = {
   waiting: (
     <>
       Tempo desde a última mensagem do cliente sem o atendente responder. Só
-      conversas <StatusTag tone="open">não resolvidas</StatusTag> em que o
+      conversas <StatusTag tone="sky">não resolvidas</StatusTag> em que o
       cliente foi o último a falar. Uma nota privada do atendente encerra essa
       contagem.
     </>
@@ -139,16 +137,16 @@ const INDICATOR_RICH_DESC: Record<DurationIndicator, ReactNode> = {
   open: (
     <>
       Tempo desde a última mensagem do atendente numa conversa ainda{" "}
-      <StatusTag tone="open">aberta</StatusTag>. Normalmente aguardando retorno
+      <StatusTag tone="amber">aberta</StatusTag>. Normalmente aguardando retorno
       do cliente ou conversa ainda não{" "}
-      <StatusTag tone="resolved">resolvida</StatusTag>.
+      <StatusTag tone="sky">resolvida</StatusTag>.
     </>
   ),
   stalled: (
     <>
       Tempo desde a última atividade na conversa (qualquer mensagem). Encontra
       conversas estagnadas ou esquecidas que ainda estão{" "}
-      <StatusTag tone="open">abertas</StatusTag>.
+      <StatusTag tone="amber">abertas</StatusTag>.
     </>
   ),
 };
@@ -163,7 +161,7 @@ function RadioCard({
 }: {
   selected: boolean;
   title: string;
-  description: string;
+  description: ReactNode;
   onSelect: () => void;
   disabled?: boolean;
 }) {
@@ -265,8 +263,7 @@ export function TempoMensagemContent({
   }
 
   // Selecionar um indicador ATIVA o filtro (cria com defaults se vazio).
-  function selectIndicator(v: string) {
-    const indicator = v as DurationIndicator;
+  function selectIndicator(indicator: DurationIndicator) {
     if (!df) onChange({ ...DEFAULT_DURATION, indicator });
     else onChange({ ...df, indicator });
   }
@@ -301,38 +298,33 @@ export function TempoMensagemContent({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">Indicador</span>
-          <CustomSelect
-            aria-label="Indicador de tempo"
-            value={df?.indicator ?? ""}
-            onChange={selectIndicator}
-            options={INDICATOR_OPTIONS}
-            placeholder="Selecione um indicador"
-            triggerClassName="min-w-[200px]"
+      {/* 3 opções como cards (mesmo padrão do Critério de visualização),
+          cada uma com descrição e tags de status coloridas. */}
+      <div role="radiogroup" aria-label="Indicador de tempo" className="space-y-2">
+        {INDICATORS.map((ind) => (
+          <RadioCard
+            key={ind}
+            selected={df?.indicator === ind}
+            title={INDICATOR_LABELS[ind]}
+            description={INDICATOR_RICH_DESC[ind]}
+            onSelect={() => selectIndicator(ind)}
           />
-        </div>
-        {df ? (
-          <div className="flex flex-col gap-1">
-            <span className="text-xs text-muted-foreground">Condição</span>
-            <Segmented<DurationMode>
-              ariaLabel="Condição de tempo"
-              value={df.mode}
-              onChange={changeMode}
-              options={MODE_OPTIONS}
-            />
-          </div>
-        ) : null}
+        ))}
       </div>
 
       {df ? (
         <>
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            {INDICATOR_RICH_DESC[df.indicator]}
-          </p>
-
-          <div className="flex flex-wrap items-end gap-2">
+          {/* Condição + valor + unidade na mesma linha; "entre" expande de/até. */}
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-muted-foreground">Condição</span>
+              <Segmented<DurationMode>
+                ariaLabel="Condição de tempo"
+                value={df.mode}
+                onChange={changeMode}
+                options={MODE_OPTIONS}
+              />
+            </div>
             <div className="flex flex-col gap-1">
               <span className="text-xs text-muted-foreground">
                 {df.mode === "between" ? "De" : "Valor"}
@@ -357,7 +349,7 @@ export function TempoMensagemContent({
                 value={df.unit}
                 onChange={(v) => patch({ unit: v as DurationUnit })}
                 options={UNIT_OPTIONS}
-                triggerClassName="min-w-[150px]"
+                triggerClassName="min-w-[140px]"
               />
             </div>
 
@@ -386,7 +378,7 @@ export function TempoMensagemContent({
                     value={df.unitEnd ?? df.unit}
                     onChange={(v) => patch({ unitEnd: v as DurationUnit })}
                     options={UNIT_OPTIONS}
-                    triggerClassName="min-w-[150px]"
+                    triggerClassName="min-w-[140px]"
                   />
                 </div>
               </>
