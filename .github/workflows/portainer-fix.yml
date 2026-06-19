@@ -41,9 +41,9 @@ jobs:
         id: resolve
         run: |
           set -e
-          STACK_NAME=$(curl --silent --insecure -H "X-API-Key: $PORTAINER_TOKEN" "$PORTAINER_URL/api/stacks/$PORTAINER_STACK_ID" | jq -r '.Name')
+          STACK_NAME=$(curl --silent --insecure --connect-timeout 15 --max-time 90 --retry 3 --retry-delay 5 --retry-all-errors -H "X-API-Key: $PORTAINER_TOKEN" "$PORTAINER_URL/api/stacks/$PORTAINER_STACK_ID" | jq -r '.Name')
           echo "stack_name=$STACK_NAME" >> "$GITHUB_OUTPUT"
-          curl --silent --insecure -H "X-API-Key: $PORTAINER_TOKEN" "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/services" > /tmp/svc.json
+          curl --silent --insecure --connect-timeout 15 --max-time 90 --retry 3 --retry-delay 5 --retry-all-errors -H "X-API-Key: $PORTAINER_TOKEN" "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/services" > /tmp/svc.json
           jq -r --arg n "${STACK_NAME}_app" '[.[] | select(.Spec.Name==$n)][0].ID' /tmp/svc.json > /tmp/app-id.txt
           jq -r --arg n "${STACK_NAME}_worker" '[.[] | select(.Spec.Name==$n)][0].ID' /tmp/svc.json > /tmp/worker-id.txt
           echo "App service:    $(cat /tmp/app-id.txt)"
@@ -57,7 +57,7 @@ jobs:
           SVC_NAME="${{ steps.resolve.outputs.stack_name }}_app"
           NEW_VER="$APP_VERSION"
           # Pega versão atual do service
-          curl --silent --insecure -H "X-API-Key: $PORTAINER_TOKEN" "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/services/$SVC_ID" > /tmp/app-svc.json
+          curl --silent --insecure --connect-timeout 15 --max-time 90 --retry 3 --retry-delay 5 --retry-all-errors -H "X-API-Key: $PORTAINER_TOKEN" "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/services/$SVC_ID" > /tmp/app-svc.json
           SVC_VER=$(jq -r '.Version.Index' /tmp/app-svc.json)
           # Constrói novo Spec: substitui APP_VERSION=... ou adiciona se não existir; força update via ForceUpdate++
           jq --arg ver "APP_VERSION=$NEW_VER" '
@@ -70,7 +70,7 @@ jobs:
             | .TaskTemplate.ForceUpdate = ((.TaskTemplate.ForceUpdate // 0) + 1)
           ' /tmp/app-svc.json > /tmp/app-spec.json
           echo "App service $SVC_NAME version=$SVC_VER → APP_VERSION=$NEW_VER"
-          HTTP=$(curl --silent --insecure -o /tmp/app-resp.log -w "%{http_code}" -X POST \
+          HTTP=$(curl --silent --insecure --connect-timeout 15 --max-time 90 -o /tmp/app-resp.log -w "%{http_code}" -X POST \
             -H "X-API-Key: $PORTAINER_TOKEN" -H "Content-Type: application/json" \
             "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/services/$SVC_ID/update?version=$SVC_VER" \
             --data-binary @/tmp/app-spec.json)
@@ -87,7 +87,7 @@ jobs:
           set -e
           SVC_ID=$(cat /tmp/worker-id.txt)
           SVC_NAME="${{ steps.resolve.outputs.stack_name }}_worker"
-          curl --silent --insecure -H "X-API-Key: $PORTAINER_TOKEN" "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/services/$SVC_ID" > /tmp/worker-svc.json
+          curl --silent --insecure --connect-timeout 15 --max-time 90 --retry 3 --retry-delay 5 --retry-all-errors -H "X-API-Key: $PORTAINER_TOKEN" "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/services/$SVC_ID" > /tmp/worker-svc.json
           SVC_VER=$(jq -r '.Version.Index' /tmp/worker-svc.json)
           # ContainerSpec.Args é o array que vai depois do ENTRYPOINT.
           # Queremos: ["npx", "tsx", "/app/worker/index.ts"]
@@ -104,7 +104,7 @@ jobs:
           jq '.Spec.TaskTemplate.ContainerSpec | {Command, Args}' /tmp/worker-svc.json
           echo "Depois:"
           jq '. | {Command: .TaskTemplate.ContainerSpec.Command, Args: .TaskTemplate.ContainerSpec.Args}' /tmp/worker-spec.json
-          HTTP=$(curl --silent --insecure -o /tmp/worker-resp.log -w "%{http_code}" -X POST \
+          HTTP=$(curl --silent --insecure --connect-timeout 15 --max-time 90 -o /tmp/worker-resp.log -w "%{http_code}" -X POST \
             -H "X-API-Key: $PORTAINER_TOKEN" -H "Content-Type: application/json" \
             "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/services/$SVC_ID/update?version=$SVC_VER" \
             --data-binary @/tmp/worker-spec.json)

@@ -65,12 +65,24 @@ jobs:
             echo "PORTAINER_STACK_ID não configurado — pulando."
             exit 0
           fi
+          # Flags comuns: timeouts previsíveis (nunca pendura) + retry resiliente
+          # a engasgos transitórios de rede/servidor. CURL_GET para leituras
+          # (seguro re-tentar); o pull e o update têm tratamento próprio.
+          CURL_GET="curl --silent --insecure --connect-timeout 15 --max-time 60 --retry 4 --retry-delay 5 --retry-all-errors"
           AUTH=$(printf '{"username":"%s","password":"%s"}' "${GITHUB_ACTOR:-jvzanini}" "$GHCR_TOKEN" | base64 | tr -d '\n')
-          curl --silent --insecure -X POST -H "X-API-Key: $PORTAINER_TOKEN" -H "X-Registry-Auth: $AUTH" "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/images/create?fromImage=ghcr.io/jvzanini/nexus-insights&tag=latest" -o /tmp/pull.log -w "Pull image: HTTP %{http_code}\n" || true
-          STACK_NAME=$(curl --silent --insecure -H "X-API-Key: $PORTAINER_TOKEN" "$PORTAINER_URL/api/stacks/$PORTAINER_STACK_ID" | jq -r '.Name')
+
+          # Pull antecipado é best-effort: acelera o rollover, mas o Swarm também
+          # puxa a imagem no update (ForceUpdate + X-Registry-Auth). max-time
+          # curto + "|| true" evita que um pull lento trave/derrube o job.
+          curl --silent --insecure --connect-timeout 15 --max-time 180 -X POST \
+            -H "X-API-Key: $PORTAINER_TOKEN" -H "X-Registry-Auth: $AUTH" \
+            "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/images/create?fromImage=ghcr.io/jvzanini/nexus-insights&tag=latest" \
+            -o /tmp/pull.log -w "Pull image: HTTP %{http_code}\n" || echo "Pull antecipado falhou/excedeu tempo — seguindo (o Swarm puxa no update)."
+
+          STACK_NAME=$($CURL_GET -H "X-API-Key: $PORTAINER_TOKEN" "$PORTAINER_URL/api/stacks/$PORTAINER_STACK_ID" | jq -r '.Name')
           SERVICE_NAME="${STACK_NAME}_app"
           echo "Stack: $STACK_NAME | Service alvo: $SERVICE_NAME"
-          curl --silent --insecure -H "X-API-Key: $PORTAINER_TOKEN" "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/services" > /tmp/svc.json
+          $CURL_GET -H "X-API-Key: $PORTAINER_TOKEN" "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/services" > /tmp/svc.json
           SVC_ID=$(jq -r --arg n "$SERVICE_NAME" '[.[] | select(.Spec.Name==$n)][0].ID // empty' /tmp/svc.json)
           if [ -z "$SVC_ID" ]; then
             echo "Service $SERVICE_NAME não encontrado:"
@@ -80,12 +92,27 @@ jobs:
           SVC_VER=$(jq -r --arg n "$SERVICE_NAME" '[.[] | select(.Spec.Name==$n)][0].Version.Index' /tmp/svc.json)
           jq --arg n "$SERVICE_NAME" '[.[] | select(.Spec.Name==$n)][0].Spec | .TaskTemplate.ForceUpdate = ((.TaskTemplate.ForceUpdate // 0) + 1)' /tmp/svc.json > /tmp/spec.json
           echo "Service ID: $SVC_ID version: $SVC_VER — forçando atualização"
-          HTTP=$(curl --silent --insecure -o /tmp/upd.log -w "%{http_code}" -X POST -H "X-API-Key: $PORTAINER_TOKEN" -H "Content-Type: application/json" -H "X-Registry-Auth: $AUTH" "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/services/$SVC_ID/update?version=$SVC_VER" --data-binary @/tmp/spec.json)
-          echo "Service update: HTTP $HTTP"
+
+          # Update do serviço: dispara o rolling update (o Swarm o executa de
+          # forma assíncrona; a API responde rápido). Re-lê a version a cada
+          # tentativa porque ela muda se um update parcial foi aceito — evita
+          # erro de "version conflict" no retry.
+          HTTP=""
+          for attempt in 1 2 3; do
+            HTTP=$(curl --silent --insecure --connect-timeout 15 --max-time 90 \
+              -o /tmp/upd.log -w "%{http_code}" -X POST \
+              -H "X-API-Key: $PORTAINER_TOKEN" -H "Content-Type: application/json" -H "X-Registry-Auth: $AUTH" \
+              "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/services/$SVC_ID/update?version=$SVC_VER" \
+              --data-binary @/tmp/spec.json || echo "000")
+            echo "Service update (tentativa $attempt): HTTP $HTTP"
+            [ "$HTTP" = "200" ] && break
+            echo "--- response ---"; cat /tmp/upd.log 2>/dev/null; echo ""
+            # Re-lê a version atual antes de tentar de novo (pode ter mudado).
+            sleep 6
+            SVC_VER=$($CURL_GET -H "X-API-Key: $PORTAINER_TOKEN" "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/services/$SVC_ID" | jq -r '.Version.Index')
+          done
           if [ "$HTTP" != "200" ]; then
-            echo "--- response ---"
-            cat /tmp/upd.log
-            echo ""
+            echo "Falha ao disparar o redeploy após 3 tentativas (HTTP $HTTP)."
             exit 1
           fi
           echo "Redeploy disparado com sucesso."
