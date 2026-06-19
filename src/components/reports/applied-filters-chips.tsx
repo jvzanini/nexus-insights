@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, CalendarDays, Clock, X, Zap } from "lucide-react";
+import { ArrowDown, ArrowUp, Clock, Eye, X, Zap } from "lucide-react";
 
 import { FilterChipListPopover } from "@/components/reports/filter-chip-list-popover";
 import type {
@@ -305,12 +305,12 @@ export function AppliedFiltersChips({
     <div className="flex flex-wrap items-center gap-2">
       {showDateChip ? (
         <span className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-violet-500/40 bg-violet-500/10 px-2.5 py-1 text-xs text-foreground">
-          <CalendarDays className="h-3 w-3 text-violet-400" aria-hidden="true" />
-          <span className="truncate">Data: {DATE_FIELD_LABELS.created}</span>
+          <Eye className="h-3 w-3 text-violet-400" aria-hidden="true" />
+          <span className="truncate">Critério: {DATE_FIELD_LABELS.created}</span>
           <button
             type="button"
             onClick={() => onRemove("dateField")}
-            aria-label="Remover filtro de data"
+            aria-label="Remover critério de visualização"
             className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
           >
             <X className="h-3.5 w-3.5" aria-hidden="true" />

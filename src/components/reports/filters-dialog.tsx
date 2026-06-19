@@ -11,6 +11,8 @@ import {
   Activity,
   AlertCircle,
   Building2,
+  Clock,
+  Eye,
   FileText,
   Filter,
   Globe,
@@ -50,7 +52,10 @@ import {
   ConditionalFilters,
   type ConditionFieldDef,
 } from "@/components/ui/conditional-filters";
-import { DurationDateFilter } from "./duration-date-filter";
+import {
+  CriterioVisualizacaoContent,
+  TempoMensagemContent,
+} from "./duration-date-filter";
 import {
   diffFilterStates,
   isDurationFilterValid,
@@ -98,6 +103,8 @@ const DOC_TYPE_TO_ID: Record<DocumentTypeFilter, number> = {
 };
 
 type SimpleSectionKey =
+  | "criterio"
+  | "tempo"
   | "inboxIds"
   | "teamIds"
   | "assigneeIds"
@@ -406,16 +413,6 @@ export function FiltersDialog({
 
         {/* Body — scroll interno */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-4">
-          {/* Bloco fixo global (fora das abas): Data + Filtrar por tempo.
-              Preservado na troca de aba. */}
-          <DurationDateFilter
-            dateField={draft.dateField}
-            durationFilter={draft.durationFilter}
-            period={draft.period}
-            statuses={draft.statuses}
-            onDateFieldChange={(v) => update("dateField", v)}
-            onDurationChange={(v) => update("durationFilter", v)}
-          />
           <Tabs
             value={draft.mode}
             // v0.32 T8: troca real do tab é mediada por handleTabClick — se
@@ -458,6 +455,40 @@ export function FiltersDialog({
               value="simple"
               className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1"
             >
+              <CollapsibleSection
+                title="Critério de visualização"
+                count={
+                  draft.dateField === "created" && draft.period !== "todos" ? 1 : 0
+                }
+                open={openSection === "criterio"}
+                onOpenChange={makeSectionToggle("criterio")}
+                icon={
+                  <Eye className="h-4 w-4 text-muted-foreground" aria-hidden />
+                }
+              >
+                <CriterioVisualizacaoContent
+                  dateField={draft.dateField}
+                  period={draft.period}
+                  onChange={(v) => update("dateField", v)}
+                />
+              </CollapsibleSection>
+
+              <CollapsibleSection
+                title="Tempo de mensagem"
+                count={draft.durationFilter ? 1 : 0}
+                open={openSection === "tempo"}
+                onOpenChange={makeSectionToggle("tempo")}
+                icon={
+                  <Clock className="h-4 w-4 text-muted-foreground" aria-hidden />
+                }
+              >
+                <TempoMensagemContent
+                  durationFilter={draft.durationFilter}
+                  statuses={draft.statuses}
+                  onChange={(v) => update("durationFilter", v)}
+                />
+              </CollapsibleSection>
+
               <CollapsibleSection
                 title="Caixa de entrada"
                 count={draft.inboxIds.length}
