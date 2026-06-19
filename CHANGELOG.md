@@ -1,5 +1,19 @@
 # Changelog
 
+## [v0.57.3] 2026-06-19 — Critério "Criado em" por padrão, "última atualização" real e Avançado consistente
+
+Ajustes finos do relatório de Conversas a partir do uso real:
+
+- **Critério "Criado em" por padrão:** a tela passa a abrir filtrando pela **data de criação** da conversa (antes era a última atualização). O usuário troca para "Última atualização em" quando quiser.
+- **"Última atualização" = mensagens reais:** o critério "Última atualização em" passa a considerar **apenas mensagens públicas** (do cliente ou do atendente) no período — **exclui mensagens de sistema/atividade** (ex.: "atribuído a", "prioridade alterada"), templates e **notas privadas**. (As métricas "Sem resposta há" e "Aberta há" já excluíam mensagens de sistema.)
+- **"Parada há" só em conversas abertas:** o indicador passa a valer apenas para conversas **não resolvidas** (qualquer atividade conta como movimento).
+- **Modo Avançado consistente com o Simples:** o seletor de **Campo** (ao "Adicionar condição") agora é uma lista suspensa com **busca, rolagem e ícone + nome** por campo, igual ao Simples; nomenclatura alinhada. O "Critério de visualização" foi removido da aba Avançado (fica só no Simples).
+- **UX do "Tempo de mensagem":** descrições dos indicadores com **tags de status** (aberta / resolvida / não resolvida); campo de valor maior; unidades sem o "(≈30 dias)"; "Limpar filtro de tempo" virou botão.
+
+Técnico: novo `periodColumn = "active_public"` (EXISTS por `message_type IN (0,1) AND private=false`), aplicado só no relatório de Conversas — sem alterar a semântica canônica (`last_activity_at`) dos demais relatórios. tsc 0, build 0, 531 testes da área verdes.
+
+---
+
 ## [v0.57.2] 2026-06-19 — Modo Avançado dos filtros no padrão do design system
 
 Repaginação do modo **Avançado** (query builder) do relatório de Conversas, que ainda usava controles fora do padrão:
