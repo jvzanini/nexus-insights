@@ -1,13 +1,14 @@
 # STATUS — Nexus Insights (Matrix Fitness Group)
 
-> Última atualização: 2026-06-10
+> Última atualização: 2026-06-19
 
 ---
 
 ## Versão atual em produção
 
-**v0.56.2** — deployada em 2026-06-10 (direto na `main`). Dashboard/relatórios sempre no ar: servem o último dado conhecido (`${key}:last`, TTL 24h) quando o Chatwoot recusa conexão ("too many connections for role chatwoot_leitura"). Causa medida: role read-only com CONNECTION LIMIT=5 (servidor max_connections=400) — correção de capacidade complementar = `ALTER ROLE chatwoot_leitura CONNECTION LIMIT 30` (admin do banco).
+**v0.57.0** — 2026-06-19 (direto na `main`). Filtros de **Data** (Criado em / Última atualização em → `periodColumn`) e **Duração** (Sem resposta há / Aberta há / Parada há, com no mínimo/no máximo/entre + valor livre + unidade) no relatório de Conversas, num bloco fixo no topo do modal. Duração client-side (`matchDuration`, segundos exatos); `stalled_seconds` derivado de `last_activity_at` com `serverNow`. Reflete no Export XLSX e em chips.
 
+> v0.56.2 (2026-06-10): Dashboard/relatórios sempre no ar — último dado conhecido (`${key}:last`, TTL 24h) quando o Chatwoot recusa conexão. `ALTER ROLE chatwoot_leitura CONNECTION LIMIT 30` (admin do banco).
 > v0.56.1 (2026-06-10): crash de login no primeiro acesso (mustChangePassword) — redirect direto + error boundaries.
 > v0.56.0 (2026-06-10): edição de e-mail de usuários (senha preservada) + resiliência do carregamento (retry timeout pool + single-flight).
 
@@ -19,7 +20,7 @@
 
 | Componente | Estado | Observação |
 |---|---|---|
-| App Next.js | ✅ Live | v0.56.2 |
+| App Next.js | ✅ Live | v0.57.0 |
 | Worker BullMQ (polling delta) | ✅ Live | polling 30s per-connection |
 | Pré-agregação | ✅ Live | refresh on-demand + cron 30min fallback |
 | Banco (Prisma + Postgres) | ✅ | leitura direta Chatwoot (read-only) |

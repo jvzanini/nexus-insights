@@ -1,5 +1,18 @@
 # Changelog
 
+## [v0.57.0] 2026-06-19 — Filtros de Data e Duração no relatório de Conversas
+
+Dois novos filtros no relatório de **Conversas**, num **bloco fixo no topo do modal** de filtros (válido nas abas Simples e Avançado, preservado ao trocar de aba):
+
+- **Data:** escolher se o período (Hoje/Semana/Mês/Personalizado) observa a data de **criação** da conversa (**"Criado em"**) ou a da **última movimentação** (**"Última atualização em"**, padrão = comportamento anterior). Antes o período sempre olhava a última atividade — não dava para ver "apenas as conversas **criadas** no mês". Desabilitado quando o período é "Todos" (não tem efeito).
+- **Filtrar por tempo:** filtrar por **"Sem resposta há"**, **"Aberta há"** ou **"Parada há"** (novo indicador: sem movimento, independe do status), com condição **no mínimo / no máximo / entre**, **valor livre** e **unidade** (minuto/hora/dia/mês/ano). Cada indicador traz descrição precisa; aviso inline quando o filtro só se aplica a conversas não resolvidas; faixa com fim ≤ início é bloqueada. Reflete no **Export XLSX** e em **chips** removíveis.
+
+Técnico: `dateField` → `ReportFilters.periodColumn` (server-side; cache-key já discrimina). Duração é client-side via `matchDuration` sobre **segundos exatos** (a coluna arredonda só para leitura); `stalled_seconds` derivado de `last_activity_at` com `serverNow` (base temporal alinhada ao servidor). Spec + plano com double-check e **3 reviews adversariais**; correções aplicadas (tipo ISO de `last_activity_at`, materialização de `stalled_seconds` no export, validação de faixa).
+
+TDD: +17 testes (filter-state, match-duration). tsc 0, build 0. Área de relatórios 100% verde (452 testes).
+
+---
+
 ## [v0.56.2] 2026-06-10 — Dashboard/relatórios sempre no ar (resiliência a falha de conexão)
 
 Corrige a tela **"too many connections for role chatwoot_leitura"** que aparecia no Dashboard e relatórios.
