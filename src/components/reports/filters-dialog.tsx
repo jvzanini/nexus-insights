@@ -104,6 +104,7 @@ const DOC_TYPE_TO_ID: Record<DocumentTypeFilter, number> = {
 
 type SimpleSectionKey =
   | "criterio"
+  | "criterioAdv"
   | "tempo"
   | "inboxIds"
   | "teamIds"
@@ -182,17 +183,17 @@ function buildFields({
     },
     {
       key: "waiting_seconds",
-      label: "Tempo sem resposta (s)",
+      label: "Sem resposta há (segundos)",
       type: "number",
     },
     {
       key: "open_seconds",
-      label: "Tempo aberta (s)",
+      label: "Aberta há (segundos)",
       type: "number",
     },
     {
       key: "stalled_seconds",
-      label: "Tempo parada (s)",
+      label: "Parada há (segundos)",
       type: "number",
     },
     {
@@ -706,8 +707,26 @@ export function FiltersDialog({
 
             <TabsContent
               value="advanced"
-              className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1"
+              className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1"
             >
+              <CollapsibleSection
+                title="Critério de visualização"
+                count={
+                  draft.dateField === "created" && draft.period !== "todos" ? 1 : 0
+                }
+                open={openSection === "criterioAdv"}
+                onOpenChange={makeSectionToggle("criterioAdv")}
+                icon={
+                  <Eye className="h-4 w-4 text-muted-foreground" aria-hidden />
+                }
+              >
+                <CriterioVisualizacaoContent
+                  dateField={draft.dateField}
+                  period={draft.period}
+                  onChange={(v) => update("dateField", v)}
+                />
+              </CollapsibleSection>
+
               <ConditionalFilters
                 fields={buildFields({
                   inboxes,

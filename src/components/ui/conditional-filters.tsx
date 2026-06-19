@@ -1,17 +1,12 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type ChangeEvent,
-} from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, FolderPlus, Filter, FolderOpen } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CustomSelect } from "@/components/ui/custom-select";
 import { MultiSelectCheckbox } from "@/components/ui/multi-select-checkbox";
 import {
   isGroup as isConditionGroup,
@@ -419,36 +414,25 @@ function ConditionRow({
         className="size-3.5 shrink-0 text-muted-foreground"
         aria-hidden="true"
       />
-      <select
-        value={condition.field}
-        onChange={(e) => handleFieldChange(e.target.value)}
+      <CustomSelect
         aria-label="Campo"
-        className="h-9 min-w-[160px] cursor-pointer rounded-md border border-input bg-card px-2.5 text-sm font-medium text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 dark:bg-input/30"
-      >
-        {fields.map((f) => (
-          <option key={f.key} value={f.key}>
-            {f.label}
-          </option>
-        ))}
-      </select>
+        value={condition.field}
+        onChange={handleFieldChange}
+        options={fields.map((f) => ({ value: f.key, label: f.label }))}
+        className="w-auto"
+        triggerClassName="h-9 min-w-[170px] font-medium"
+      />
 
-      <select
-        value={condition.operator}
-        onChange={(e) =>
-          onChange({
-            ...condition,
-            operator: e.target.value as ConditionOperator,
-          })
-        }
+      <CustomSelect
         aria-label="Operador"
-        className="h-9 min-w-[120px] cursor-pointer rounded-md border border-input bg-card px-2.5 text-sm text-muted-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 dark:bg-input/30"
-      >
-        {operators.map((op) => (
-          <option key={op.value} value={op.value}>
-            {op.label}
-          </option>
-        ))}
-      </select>
+        value={condition.operator}
+        onChange={(v) =>
+          onChange({ ...condition, operator: v as ConditionOperator })
+        }
+        options={operators.map((op) => ({ value: op.value, label: op.label }))}
+        className="w-auto"
+        triggerClassName="h-9 min-w-[150px]"
+      />
 
       <ValueInput
         field={fieldDef}
@@ -482,22 +466,23 @@ function ValueInput({ field, operator, value, onChange }: ValueInputProps) {
   const isMultiOp = operator === "in" || operator === "not_in";
 
   if (field.type === "select" && !isMultiOp) {
+    const selected = value == null ? "" : String(value);
     return (
-      <select
-        value={(value as string | number | undefined) ?? ""}
-        onChange={(e: ChangeEvent<HTMLSelectElement>) =>
-          onChange(e.target.value)
-        }
+      <CustomSelect
         aria-label="Valor"
-        className="h-8 min-w-32 cursor-pointer rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 dark:bg-input/30"
-      >
-        <option value="">—</option>
-        {field.options?.map((opt) => (
-          <option key={String(opt.value)} value={String(opt.value)}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
+        value={selected}
+        onChange={(v) => {
+          const orig = field.options?.find((o) => String(o.value) === v);
+          onChange(orig ? orig.value : v);
+        }}
+        options={(field.options ?? []).map((o) => ({
+          value: String(o.value),
+          label: o.label,
+        }))}
+        placeholder="Selecionar"
+        className="w-auto"
+        triggerClassName="h-9 min-w-[150px]"
+      />
     );
   }
 
@@ -506,7 +491,8 @@ function ValueInput({ field, operator, value, onChange }: ValueInputProps) {
     const opts = field.options ?? [];
 
     if (opts.length === 0) {
-      // Free-form multi: usa input separado por vírgula.
+      // Free-form multi (campo sem options, ex.: nome/WhatsApp com "em"):
+      // input separado por vírgula.
       return (
         <Input
           type="text"
@@ -521,63 +507,27 @@ function ValueInput({ field, operator, value, onChange }: ValueInputProps) {
           }
           placeholder="valor1, valor2"
           aria-label="Valores"
-          className="h-8 min-w-40"
+          className="h-9 min-w-40"
         />
       );
     }
 
-    // Quando todas as opções têm value numérico (caso comum: inboxes, teams,
-    // labels, status), reusa o MultiSelectCheckbox compacto — popover com
-    // busca interna + Selecionar todos / Limpar + scroll. Substitui o
-    // "tapete de chips" que estourava o Dialog.
-    const allNumeric = opts.every((o) => typeof o.value === "number");
-    if (allNumeric) {
-      return (
-        <div className="min-w-[220px] max-w-[320px] flex-1">
-          <MultiSelectCheckbox
-            label="Valor"
-            options={opts.map((o) => ({
-              id: o.value as number,
-              name: o.label,
-            }))}
-            value={arr.map((v) => Number(v)).filter((n) => Number.isFinite(n))}
-            onChange={(next) => onChange(next)}
-          />
-        </div>
-      );
-    }
-
-    // Fallback para options string: chips, mas com altura limitada e scroll
-    // interno para não estourar o Dialog quando há muitas opções.
-    const toggle = (optValue: string | number) => {
-      const exists = arr.some((v) => String(v) === String(optValue));
-      const next = exists
-        ? arr.filter((v) => String(v) !== String(optValue))
-        : [...arr, optValue];
-      onChange(next);
-    };
+    // Padrão único para QUALQUER multi_select (numérico OU string): o
+    // MultiSelectCheckbox do design system — popover com busca, Selecionar
+    // todos / Limpar e scroll. Mapeia opção→índice e preserva o valor
+    // original (number ou string) no onChange.
+    const metaItems = opts.map((o, i) => ({ id: i, name: o.label }));
+    const selectedIds = arr
+      .map((v) => opts.findIndex((o) => String(o.value) === String(v)))
+      .filter((i) => i >= 0);
     return (
-      <div className="flex max-h-32 max-w-[280px] flex-wrap gap-1 overflow-y-auto rounded-md border border-border/40 bg-background/40 p-1.5">
-        {opts.map((opt) => {
-          const active = arr.some((v) => String(v) === String(opt.value));
-          return (
-            <button
-              key={String(opt.value)}
-              type="button"
-              role="checkbox"
-              aria-checked={active}
-              onClick={() => toggle(opt.value)}
-              className={cn(
-                "cursor-pointer rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-                active
-                  ? "border-primary/40 bg-primary/10 text-primary"
-                  : "border-border/60 bg-background/40 text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {opt.label}
-            </button>
-          );
-        })}
+      <div className="min-w-[220px] max-w-[320px] flex-1">
+        <MultiSelectCheckbox
+          label="Valor"
+          options={metaItems}
+          value={selectedIds}
+          onChange={(ids) => onChange(ids.map((i) => opts[i]!.value))}
+        />
       </div>
     );
   }
