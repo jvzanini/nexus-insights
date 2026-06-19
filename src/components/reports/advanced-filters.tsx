@@ -235,7 +235,9 @@ export function AdvancedFilters({
       (applied.mode === "advanced" &&
       applied.conditionGroup?.items?.length
         ? 1
-        : 0),
+        : 0) +
+      (applied.dateField === "created" && applied.period !== "todos" ? 1 : 0) +
+      (applied.durationFilter ? 1 : 0),
     [applied],
   );
 
@@ -303,6 +305,8 @@ export function AdvancedFilters({
       countries: [],
       estados: [],
       conditionGroup: undefined,
+      dateField: "updated",
+      durationFilter: undefined,
     };
     setApplied(next);
     setDraft(next);
@@ -371,6 +375,12 @@ export function AdvancedFilters({
           break;
         case "estados":
           next.estados = [];
+          break;
+        case "dateField":
+          next.dateField = "updated";
+          break;
+        case "durationFilter":
+          next.durationFilter = undefined;
           break;
         default:
           return;
@@ -623,6 +633,7 @@ export function AdvancedFilters({
           countries={exportCountries}
           estados={exportEstados}
           sortStack={sortStack}
+          durationFilter={applied.durationFilter}
         />
       </div>
 
