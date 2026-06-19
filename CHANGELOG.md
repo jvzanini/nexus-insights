@@ -1,5 +1,18 @@
 # Changelog
 
+## [v0.57.1] 2026-06-19 — Filtros de Conversas no padrão (dropdowns) + renomeação
+
+Refinamento de UX dos filtros introduzidos na v0.57.0, alinhando ao design system do projeto:
+
+- **Formato dropdown padrão:** "Critério de visualização" e "Tempo de mensagem" deixam de ser um bloco fixo acima das abas e passam a ser **dropdowns (`CollapsibleSection`)** dentro do modo Simples, iguais aos demais filtros — com accordion (um aberto por vez), combináveis com todos os outros e sem atrapalhar a navegação.
+- **Renomeação:** "Data" → **"Critério de visualização"**; "Filtrar por tempo" → **"Tempo de mensagem"** (nomes que representam o que cada um faz).
+- **Descrições inline:** no Critério, cada opção (Criado em / Última atualização em) traz a explicação **sempre visível** ao lado, sem precisar clicar em ícone de ajuda.
+- Ícones e chips alinhados (Eye/Clock); cores e tokens do design system.
+
+Sem mudança de comportamento/dados — apenas apresentação. tsc 0, build 0, 453 testes da área verdes.
+
+---
+
 ## [v0.57.0] 2026-06-19 — Filtros de Data e Duração no relatório de Conversas
 
 Dois novos filtros no relatório de **Conversas**, num **bloco fixo no topo do modal** de filtros (válido nas abas Simples e Avançado, preservado ao trocar de aba):
