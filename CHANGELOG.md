@@ -1,5 +1,18 @@
 # Changelog
 
+## [v0.57.4] 2026-06-19 — Tags com as cores do sistema, filtro de tempo mais direto e Avançado completo
+
+Mais um ciclo de acabamento dos filtros de Conversas:
+
+- **Tags de status com as cores corretas:** nas descrições dos indicadores, "aberta"/"não resolvida" usam **âmbar** e "resolvida" usa **azul** — as mesmas cores do badge de status no sistema.
+- **"Tempo de mensagem" sem liga/desliga:** removido o interruptor. O **indicador é o gatilho** — começa vazio (filtro inativo) e, ao escolher "Sem resposta há / Aberta há / Parada há", o filtro já fica ativo; "Limpar filtro de tempo" volta ao vazio.
+- **Menos ruído:** removidas as mensagens repetidas abaixo da descrição e o travessão ("—") da descrição de "Última atualização em".
+- **Avançado completo (tudo do Simples + mais):** adicionado o filtro de **Documento** (Com CPF / Com CNPJ / Sem documento) ao construtor de condições, e o **Critério de visualização** + **Tempo de mensagem** passam a aparecer também na aba Avançado, no mesmo padrão do Simples. O Avançado mantém os recursos extras (condições, grupos E/OU).
+
+Técnico: `documentType` materializado na linha (via `detectDocument`) para o construtor avaliar; tags reutilizam a paleta do `status-badge`. tsc 0, build 0, 531 testes da área verdes.
+
+---
+
 ## [v0.57.3] 2026-06-19 — Critério "Criado em" por padrão, "última atualização" real e Avançado consistente
 
 Ajustes finos do relatório de Conversas a partir do uso real:

@@ -6,7 +6,9 @@
 
 ## Versão atual em produção
 
-**v0.57.3** — 2026-06-19 (direto na `main`). Ajustes do relatório de Conversas: critério **"Criado em" por padrão**; "Última atualização" passa a filtrar só por **mensagens públicas** (cliente/atendente, exclui sistema/atividade e notas privadas) via `periodColumn=active_public` (EXISTS, só neste relatório — não muda a semântica canônica dos demais); **"Parada há" só em conversas não-resolvidas**. Avançado: seletor de Campo com **busca + ícone + nome** (SearchableSelect), Critério removido do Avançado. UX do tempo: tags de status, input maior, "Limpar" como botão.
+**v0.57.4** — 2026-06-19 (direto na `main`). Acabamento dos filtros de Conversas: tags de status com cores do sistema (aberta/não resolvida=âmbar, resolvida=azul); "Tempo de mensagem" sem switch (indicador é o gatilho); sem mensagens/travessões duplicados; **Avançado completo** = campo Documento no builder (documentType via detectDocument) + Critério de visualização + Tempo de mensagem no topo (igual ao Simples).
+
+> v0.57.3 (2026-06-19): critério "Criado em" por padrão; "Última atualização" só por mensagens públicas (`periodColumn=active_public`, EXISTS); "Parada há" só não-resolvidas; Avançado com Campo via SearchableSelect.
 
 > v0.57.2 (2026-06-19): modo Avançado no padrão (Campo/Operador/Valor = CustomSelect; multi-seleção no MultiSelectCheckbox).
 > v0.57.1 (2026-06-19): "Critério de visualização" e "Tempo de mensagem" viram dropdowns (`CollapsibleSection`) no modo Simples, combináveis; critério com descrições inline.
@@ -24,7 +26,7 @@
 
 | Componente | Estado | Observação |
 |---|---|---|
-| App Next.js | ✅ Live | v0.57.3 |
+| App Next.js | ✅ Live | v0.57.4 |
 | Worker BullMQ (polling delta) | ✅ Live | polling 30s per-connection |
 | Pré-agregação | ✅ Live | refresh on-demand + cron 30min fallback |
 | Banco (Prisma + Postgres) | ✅ | leitura direta Chatwoot (read-only) |
