@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.57.5] 2026-06-19 — "Tempo de mensagem" no mesmo padrão do "Critério de visualização"
+
+- As **3 opções** (Sem resposta há / Aberta há / Parada há) agora aparecem como **cards**, no mesmo formato do "Critério de visualização", cada uma com sua **descrição** e **tags de status coloridas** (âmbar para "aberta"; azul para "resolvida" e "não resolvida").
+- Ao selecionar uma opção, **condição + valor + unidade** ficam **na mesma linha**, alinhados; a condição **"entre"** expande os campos "De" e "Até".
+- A frase **"Mostra conversas com…"** continua se atualizando conforme a seleção; removida a descrição que se repetia abaixo.
+- Mesmo comportamento no modo **Avançado** (componente único, idêntico ao Simples).
+
+tsc 0, build 0, 453 testes da área verdes.
+
+---
+
 ## [v0.57.4] 2026-06-19 — Tags com as cores do sistema, filtro de tempo mais direto e Avançado completo
 
 Mais um ciclo de acabamento dos filtros de Conversas:

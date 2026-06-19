@@ -6,7 +6,9 @@
 
 ## Versão atual em produção
 
-**v0.57.4** — 2026-06-19 (direto na `main`). Acabamento dos filtros de Conversas: tags de status com cores do sistema (aberta/não resolvida=âmbar, resolvida=azul); "Tempo de mensagem" sem switch (indicador é o gatilho); sem mensagens/travessões duplicados; **Avançado completo** = campo Documento no builder (documentType via detectDocument) + Critério de visualização + Tempo de mensagem no topo (igual ao Simples).
+**v0.57.5** — 2026-06-19 (direto na `main`). "Tempo de mensagem" no mesmo padrão do "Critério de visualização": 3 indicadores como cards com descrição + tags coloridas (âmbar=aberta; azul=resolvida/não resolvida); condição+valor+unidade na mesma linha ("entre" expande de/até); frase "Mostra conversas com..." mantida; descrição duplicada removida. Vale Simples e Avançado.
+
+> v0.57.4 (2026-06-19): tags com cores do sistema; Tempo sem switch; Avançado completo (Documento + Critério + Tempo).
 
 > v0.57.3 (2026-06-19): critério "Criado em" por padrão; "Última atualização" só por mensagens públicas (`periodColumn=active_public`, EXISTS); "Parada há" só não-resolvidas; Avançado com Campo via SearchableSelect.
 
@@ -26,7 +28,7 @@
 
 | Componente | Estado | Observação |
 |---|---|---|
-| App Next.js | ✅ Live | v0.57.4 |
+| App Next.js | ✅ Live | v0.57.5 |
 | Worker BullMQ (polling delta) | ✅ Live | polling 30s per-connection |
 | Pré-agregação | ✅ Live | refresh on-demand + cron 30min fallback |
 | Banco (Prisma + Postgres) | ✅ | leitura direta Chatwoot (read-only) |
