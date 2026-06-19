@@ -323,9 +323,16 @@ export function FiltersDialog({
   // modal nem chama onClear (que reseta período fora do dialog).
   function handleClearOnlyFilters() {
     setDraft((prev) => {
+      // Critério (volta a "created") e Tempo (undefined) são globais — também
+      // limpos pelo "Limpar todos".
+      const globals = {
+        dateField: "created" as const,
+        durationFilter: undefined,
+      };
       if (prev.mode === "simple") {
         return {
           ...prev,
+          ...globals,
           inboxIds: [],
           teamIds: [],
           assigneeIds: [],
@@ -337,14 +344,17 @@ export function FiltersDialog({
           estados: [],
         };
       }
-      return { ...prev, conditionGroup: undefined };
+      return { ...prev, ...globals, conditionGroup: undefined };
     });
   }
 
-  // Botão "Limpar todos" só faz sentido quando há ao menos um filtro selecionado
-  // no tab ATIVO (Simples vê os 7 arrays; Avançado vê o conditionGroup).
+  // Botão "Limpar todos" fica ativo quando há QUALQUER filtro no tab ativo OU
+  // nos filtros globais (Critério ≠ default, Tempo definido).
+  const hasGlobalFilter =
+    draft.dateField === "updated" || !!draft.durationFilter;
   const hasAnyFilter =
-    draft.mode === "simple"
+    hasGlobalFilter ||
+    (draft.mode === "simple"
       ? draft.inboxIds.length > 0 ||
         draft.teamIds.length > 0 ||
         draft.assigneeIds.length > 0 ||
@@ -355,7 +365,7 @@ export function FiltersDialog({
         (draft.countries ?? []).length > 0 ||
         (draft.estados ?? []).length > 0
       : !!draft.conditionGroup &&
-        (draft.conditionGroup.items?.length ?? 0) > 0;
+        (draft.conditionGroup.items?.length ?? 0) > 0);
 
   // v0.32 T8 — Confirmação ao trocar de tab quando o tab atual tem dados.
   // O usuário só pode usar UM modo por vez (decisão João): trocar limpa

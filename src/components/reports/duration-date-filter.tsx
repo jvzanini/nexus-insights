@@ -263,7 +263,12 @@ export function TempoMensagemContent({
   }
 
   // Selecionar um indicador ATIVA o filtro (cria com defaults se vazio).
+  // Clicar no indicador já selecionado DESSELECIONA (volta ao estado vazio).
   function selectIndicator(indicator: DurationIndicator) {
+    if (df?.indicator === indicator) {
+      onChange(undefined);
+      return;
+    }
     if (!df) onChange({ ...DEFAULT_DURATION, indicator });
     else onChange({ ...df, indicator });
   }
