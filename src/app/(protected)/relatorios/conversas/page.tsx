@@ -71,7 +71,9 @@ export default async function ConversasPage({ searchParams }: PageProps) {
       : undefined,
     labelIds: filterState.labelIds.length ? filterState.labelIds : undefined,
     excludeMatrixIA,
-    periodColumn: filterState.dateField === "created" ? "created" : "active",
+    // "updated" usa active_public: período por mensagem PÚBLICA (cliente/atendente),
+    // excluindo sistema e notas privadas. "created" filtra por data de criação.
+    periodColumn: filterState.dateField === "created" ? "created" : "active_public",
     // search removido: virou client-side em ConversasPageClient (T10).
   };
 

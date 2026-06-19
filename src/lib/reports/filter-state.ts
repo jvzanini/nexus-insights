@@ -131,7 +131,7 @@ export const EMPTY_FILTER_STATE: FilterState = {
   countries: [],
   estados: [],
   mode: "simple",
-  dateField: "updated",
+  dateField: "created",
 };
 
 const DOC_TYPE_VALUES: readonly DocumentTypeFilter[] = ["cpf", "cnpj", "none"];
@@ -169,7 +169,8 @@ export function serializeFilterState(state: FilterState): URLSearchParams {
     }
   }
   if (state.page && state.page > 1) p.set("page", String(state.page));
-  if (state.dateField === "created") p.set("date", "created");
+  // Default agora é "created"; só serializa quando o usuário escolhe "updated".
+  if (state.dateField === "updated") p.set("date", "updated");
   if (state.durationFilter) {
     const dur = serializeDuration(state.durationFilter);
     if (dur) p.set("dur", dur);
@@ -250,7 +251,7 @@ export function deserializeFilterState(params: URLSearchParams): FilterState {
     mode,
     conditionGroup,
     page,
-    dateField: params.get("date") === "created" ? "created" : "updated",
+    dateField: params.get("date") === "updated" ? "updated" : "created",
     durationFilter: parseDuration(params.get("dur")),
   };
 }

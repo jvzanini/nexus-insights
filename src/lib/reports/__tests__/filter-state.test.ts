@@ -516,18 +516,18 @@ describe("FilterState — countries/estados (localização)", () => {
 });
 
 describe("dateField", () => {
-  it("default é 'updated' e não serializa", () => {
-    expect(EMPTY_FILTER_STATE.dateField).toBe("updated");
+  it("default é 'created' e não serializa", () => {
+    expect(EMPTY_FILTER_STATE.dateField).toBe("created");
     expect(serializeFilterState(base).get("date")).toBeNull();
   });
-  it("serializa e deserializa 'created'", () => {
-    const p = serializeFilterState({ ...base, dateField: "created" });
-    expect(p.get("date")).toBe("created");
-    expect(deserializeFilterState(p).dateField).toBe("created");
-  });
-  it("valor inválido cai em 'updated'", () => {
-    const p = new URLSearchParams({ date: "xpto" });
+  it("serializa e deserializa 'updated'", () => {
+    const p = serializeFilterState({ ...base, dateField: "updated" });
+    expect(p.get("date")).toBe("updated");
     expect(deserializeFilterState(p).dateField).toBe("updated");
+  });
+  it("valor inválido cai em 'created'", () => {
+    const p = new URLSearchParams({ date: "xpto" });
+    expect(deserializeFilterState(p).dateField).toBe("created");
   });
 });
 
@@ -567,7 +567,7 @@ describe("durationFilter", () => {
     expect(serializeFilterState({ ...base, durationFilter: invalid }).get("dur")).toBeNull();
   });
   it("diffFilterStates conta dateField e durationFilter", () => {
-    expect(diffFilterStates(base, { ...base, dateField: "created" })).toBe(1);
+    expect(diffFilterStates(base, { ...base, dateField: "updated" })).toBe(1);
     const df = { indicator: "stalled", mode: "lte", value: 2, unit: "day" } as const;
     expect(diffFilterStates(base, { ...base, durationFilter: df })).toBe(1);
   });

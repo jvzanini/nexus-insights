@@ -7,6 +7,7 @@
 import type { ConversaRow } from "@/lib/chatwoot/queries/conversas-list";
 import type { DurationFilter, DurationIndicator } from "./filter-state";
 import { UNIT_SECONDS, isDurationFilterValid } from "./filter-state";
+import { STATUS_RESOLVED } from "./canonical";
 
 // Re-exporta UNIT_SECONDS (fonte única em filter-state) para consumidores que
 // já importavam daqui.
@@ -22,6 +23,11 @@ export function deriveStalledSeconds(row: ConversaRow, serverNow: number): numbe
 function resolveSeconds(row: ConversaRow, indicator: DurationIndicator, serverNow: number): number | null {
   if (indicator === "waiting") return row.waiting_seconds;
   if (indicator === "open") return row.open_seconds;
+  // "Parada há": qualquer atividade conta (sistema, nota, cliente, atendente),
+  // mas só vale para conversas não resolvidas. waiting/open já zeram em
+  // resolvidas via CASE no SQL; stalled vem de last_activity_at (sempre
+  // preenchido), então o filtro de status é aplicado aqui.
+  if (row.status === STATUS_RESOLVED) return null;
   return deriveStalledSeconds(row, serverNow);
 }
 

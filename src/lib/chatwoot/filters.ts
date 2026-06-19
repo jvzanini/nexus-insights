@@ -17,6 +17,7 @@
 
 import {
   buildActivePeriodClause,
+  buildActivePublicPeriodClause,
   buildCreatedPeriodClause,
   chatwootMatrixIaClause,
   type PeriodColumn,
@@ -109,10 +110,14 @@ export function buildBaseFilter(
     parts.push(
       periodColumn === "created"
         ? buildCreatedPeriodClause({ start: startIdx, end: endIdx })
-        : buildActivePeriodClause({ start: startIdx, end: endIdx }),
+        : periodColumn === "active_public"
+          ? buildActivePublicPeriodClause({ start: startIdx, end: endIdx })
+          : buildActivePeriodClause({ start: startIdx, end: endIdx }),
     );
   } else if (filters.period?.start) {
     const periodColumn: PeriodColumn = filters.periodColumn ?? "active";
+    // active_public sem `end` não é usado na prática (períodos sempre têm
+    // start+end); cai no comportamento de coluna simples como fallback.
     const col = periodColumn === "created" ? "c.created_at" : "c.last_activity_at";
     parts.push(`${col} >= $${++p}`);
     params.push(filters.period.start);

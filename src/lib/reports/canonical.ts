@@ -17,7 +17,7 @@
 
 import { MATRIX_IA_INBOX_ID } from "@/lib/constants/matrix-ia";
 
-export type PeriodColumn = "active" | "created";
+export type PeriodColumn = "active" | "created" | "active_public";
 
 /** Status enum do Chatwoot (canônico). */
 export const STATUS_OPEN = 0;
@@ -52,6 +52,32 @@ export function buildCreatedPeriodClause(params: {
   end: number;
 }): string {
   return `c.created_at >= $${params.start} AND c.created_at < $${params.end}`;
+}
+
+/**
+ * Cláusula SQL para "conversas com MENSAGEM PÚBLICA no período".
+ *
+ * Diferente de `active` (que usa `c.last_activity_at`, atualizado pelo Chatwoot
+ * em QUALQUER evento — inclusive mensagens de sistema/atividade e mudanças de
+ * status), este recorte considera apenas movimentação real de pessoas: mensagem
+ * do cliente (incoming) ou do atendente (outgoing) PÚBLICA. Exclui:
+ *  - mensagens de sistema/atividade (`message_type=2`) e templates (`=3`);
+ *  - notas privadas (`private = TRUE`).
+ *
+ * Usa `EXISTS` correlacionado (sem CTE/JOIN) para não afetar cursor, count nem
+ * ordenação de quem consome o `buildBaseFilter`.
+ */
+export function buildActivePublicPeriodClause(params: {
+  start: number;
+  end: number;
+}): string {
+  return `EXISTS (
+    SELECT 1 FROM messages m
+    WHERE m.conversation_id = c.id
+      AND m.message_type IN (${MSG_INCOMING}, ${MSG_OUTGOING})
+      AND m.private = FALSE
+      AND m.created_at >= $${params.start} AND m.created_at < $${params.end}
+  )`;
 }
 
 /** Helper para excluir Matrix IA. Default da plataforma. */
