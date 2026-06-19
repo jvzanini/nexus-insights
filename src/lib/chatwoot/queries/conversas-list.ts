@@ -97,6 +97,8 @@ export interface ConversaRow {
   labels: ConversaLabel[];
   /** Derivado client-side (now - last_activity_at). Não vem do SQL. */
   stalled_seconds?: number | null;
+  /** Tipo de documento detectado (cpf|cnpj|none), materializado client-side. */
+  documentType?: string;
 }
 
 export interface ConversasListResult {

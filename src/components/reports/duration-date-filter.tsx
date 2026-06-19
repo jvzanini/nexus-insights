@@ -8,6 +8,7 @@
 //   - Tempo de mensagem: Sem resposta há / Aberta há / Parada há, com modo
 //     (no mínimo / no máximo / entre), valor livre e unidade.
 // O filtro de tempo é client-side (matchDuration) sobre segundos exatos.
+// O indicador é o gatilho: vazio = filtro inativo; selecionar ativa.
 
 import { useEffect, useState, type ReactNode } from "react";
 import { AlertTriangle, Info, RotateCcw } from "lucide-react";
@@ -15,7 +16,6 @@ import { AlertTriangle, Info, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CustomSelect, type SelectOption } from "@/components/ui/custom-select";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { UNIT_SECONDS } from "@/lib/reports/match-duration";
 import type { PeriodKey } from "@/lib/datetime-core";
@@ -29,11 +29,8 @@ import type {
 import {
   DATE_FIELD_HELP,
   DATE_FIELD_LABELS,
-  EXACT_TIME_NOTE,
-  INDICATOR_HELP,
   INDICATOR_LABELS,
   MODE_LABELS,
-  RESOLVED_WARN,
   STATUS_RESOLVED_ID,
   UNIT_SELECT_LABELS,
   durationSentence,
@@ -48,11 +45,7 @@ const DEFAULT_DURATION: DurationFilter = {
 
 const INDICATOR_OPTIONS: SelectOption[] = (
   ["waiting", "open", "stalled"] as DurationIndicator[]
-).map((i) => ({
-  value: i,
-  label: INDICATOR_LABELS[i],
-  description: INDICATOR_HELP[i],
-}));
+).map((i) => ({ value: i, label: INDICATOR_LABELS[i] }));
 
 const UNIT_OPTIONS: SelectOption[] = (
   ["minute", "hour", "day", "month", "year"] as DurationUnit[]
@@ -106,6 +99,60 @@ function Segmented<T extends string>({
   );
 }
 
+/**
+ * Tag de status de conversa, usando as MESMAS cores do sistema (status-badge):
+ * Aberta/não resolvida = âmbar; Resolvida = azul (sky).
+ */
+function StatusTag({
+  children,
+  tone,
+}: {
+  children: ReactNode;
+  tone: "open" | "resolved";
+}) {
+  const cls =
+    tone === "resolved"
+      ? "bg-sky-500/15 text-sky-500"
+      : "bg-amber-500/15 text-amber-500";
+  return (
+    <span
+      className={cn(
+        "mx-0.5 inline-flex items-center rounded px-1.5 py-px text-[11px] font-medium",
+        cls,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** Descrição rica do indicador, com tags de status destacadas (cores do sistema). */
+const INDICATOR_RICH_DESC: Record<DurationIndicator, ReactNode> = {
+  waiting: (
+    <>
+      Tempo desde a última mensagem do cliente sem o atendente responder. Só
+      conversas <StatusTag tone="open">não resolvidas</StatusTag> em que o
+      cliente foi o último a falar. Uma nota privada do atendente encerra essa
+      contagem.
+    </>
+  ),
+  open: (
+    <>
+      Tempo desde a última mensagem do atendente numa conversa ainda{" "}
+      <StatusTag tone="open">aberta</StatusTag>. Normalmente aguardando retorno
+      do cliente ou conversa ainda não{" "}
+      <StatusTag tone="resolved">resolvida</StatusTag>.
+    </>
+  ),
+  stalled: (
+    <>
+      Tempo desde a última atividade na conversa (qualquer mensagem). Encontra
+      conversas estagnadas ou esquecidas que ainda estão{" "}
+      <StatusTag tone="open">abertas</StatusTag>.
+    </>
+  ),
+};
+
 /** Item de rádio com descrição sempre visível (sem tooltip/interrogação). */
 function RadioCard({
   selected,
@@ -154,59 +201,6 @@ function RadioCard({
   );
 }
 
-/** Tag de status de conversa (aberta / resolvida / não resolvida) para destaque. */
-function StatusTag({
-  children,
-  tone,
-}: {
-  children: ReactNode;
-  tone: "open" | "resolved" | "unresolved";
-}) {
-  const cls =
-    tone === "open"
-      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-      : tone === "unresolved"
-        ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-        : "bg-muted text-foreground/80";
-  return (
-    <span
-      className={cn(
-        "mx-0.5 inline-flex items-center rounded px-1.5 py-px text-[11px] font-medium",
-        cls,
-      )}
-    >
-      {children}
-    </span>
-  );
-}
-
-/** Descrição rica do indicador, com tags de status destacadas. */
-const INDICATOR_RICH_DESC: Record<DurationIndicator, ReactNode> = {
-  waiting: (
-    <>
-      Tempo desde a última mensagem do cliente sem o atendente responder. Só
-      conversas <StatusTag tone="unresolved">não resolvidas</StatusTag> em que o
-      cliente foi o último a falar. Uma nota privada do atendente encerra essa
-      contagem.
-    </>
-  ),
-  open: (
-    <>
-      Tempo desde a última mensagem do atendente numa conversa ainda{" "}
-      <StatusTag tone="open">aberta</StatusTag>. Normalmente aguardando retorno
-      do cliente ou conversa ainda não{" "}
-      <StatusTag tone="resolved">resolvida</StatusTag>.
-    </>
-  ),
-  stalled: (
-    <>
-      Tempo desde a última atividade na conversa (qualquer mensagem). Encontra
-      conversas estagnadas ou esquecidas que ainda estão{" "}
-      <StatusTag tone="open">abertas</StatusTag>.
-    </>
-  ),
-};
-
 /** Conteúdo da seção "Critério de visualização" (Criado em / Última atualização em). */
 export function CriterioVisualizacaoContent({
   dateField,
@@ -245,7 +239,7 @@ export function CriterioVisualizacaoContent({
   );
 }
 
-/** Conteúdo da seção "Tempo de mensagem". */
+/** Conteúdo da seção "Tempo de mensagem". O indicador é o gatilho do filtro. */
 export function TempoMensagemContent({
   durationFilter,
   statuses,
@@ -255,7 +249,6 @@ export function TempoMensagemContent({
   statuses: number[];
   onChange: (v: DurationFilter | undefined) => void;
 }) {
-  const enabled = !!durationFilter;
   const df = durationFilter;
 
   const [valueStr, setValueStr] = useState(String(df?.value ?? DEFAULT_DURATION.value));
@@ -264,11 +257,18 @@ export function TempoMensagemContent({
   useEffect(() => {
     setValueStr(String(df?.value ?? DEFAULT_DURATION.value));
     setValueEndStr(df?.valueEnd != null ? String(df.valueEnd) : "");
-  }, [df?.value, df?.valueEnd, enabled]);
+  }, [df?.value, df?.valueEnd]);
 
   function patch(next: Partial<DurationFilter>) {
     if (!df) return;
     onChange({ ...df, ...next });
+  }
+
+  // Selecionar um indicador ATIVA o filtro (cria com defaults se vazio).
+  function selectIndicator(v: string) {
+    const indicator = v as DurationIndicator;
+    if (!df) onChange({ ...DEFAULT_DURATION, indicator });
+    else onChange({ ...df, indicator });
   }
 
   function changeMode(mode: DurationMode) {
@@ -301,39 +301,33 @@ export function TempoMensagemContent({
 
   return (
     <div className="space-y-3">
-      <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
-        <Switch
-          checked={enabled}
-          onCheckedChange={(on) => onChange(on ? DEFAULT_DURATION : undefined)}
-          aria-label="Ativar filtro de tempo de mensagem"
-        />
-        <span>{enabled ? "Filtro ativo" : "Ativar filtro"}</span>
-      </label>
-
-      {enabled && df ? (
-        <>
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-muted-foreground">Indicador</span>
-              <CustomSelect
-                aria-label="Indicador de tempo"
-                value={df.indicator}
-                onChange={(v) => patch({ indicator: v as DurationIndicator })}
-                options={INDICATOR_OPTIONS}
-                triggerClassName="min-w-[180px]"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-muted-foreground">Condição</span>
-              <Segmented<DurationMode>
-                ariaLabel="Condição de tempo"
-                value={df.mode}
-                onChange={changeMode}
-                options={MODE_OPTIONS}
-              />
-            </div>
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-col gap-1">
+          <span className="text-xs text-muted-foreground">Indicador</span>
+          <CustomSelect
+            aria-label="Indicador de tempo"
+            value={df?.indicator ?? ""}
+            onChange={selectIndicator}
+            options={INDICATOR_OPTIONS}
+            placeholder="Selecione um indicador"
+            triggerClassName="min-w-[200px]"
+          />
+        </div>
+        {df ? (
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-muted-foreground">Condição</span>
+            <Segmented<DurationMode>
+              ariaLabel="Condição de tempo"
+              value={df.mode}
+              onChange={changeMode}
+              options={MODE_OPTIONS}
+            />
           </div>
+        ) : null}
+      </div>
 
+      {df ? (
+        <>
           <p className="text-xs leading-relaxed text-muted-foreground">
             {INDICATOR_RICH_DESC[df.indicator]}
           </p>
@@ -415,17 +409,7 @@ export function TempoMensagemContent({
               excluem e o resultado fica vazio. Para medir tempo em conversas
               resolvidas, use &quot;Parada há&quot;.
             </p>
-          ) : isWaitingOrOpen ? (
-            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-              {RESOLVED_WARN}
-            </p>
           ) : null}
-
-          <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-            {EXACT_TIME_NOTE}
-          </p>
 
           <div className="flex justify-end border-t border-border/40 pt-3">
             <Button

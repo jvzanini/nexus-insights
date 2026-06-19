@@ -12,6 +12,7 @@ import { matchDocumentTypes } from "@/lib/reports/match-document-types";
 import { matchLocation } from "@/lib/reports/match-location";
 import { sortConversasByStack } from "@/lib/reports/sort-conversas";
 import { matchDuration, deriveStalledSeconds } from "@/lib/reports/match-duration";
+import { detectDocument } from "@/lib/utils/format-document";
 import type { ReportFilters } from "@/lib/chatwoot/filters";
 import type { AuthUser } from "@/lib/auth-helpers";
 import type { ConditionGroup } from "@/lib/utils/apply-conditions";
@@ -178,7 +179,15 @@ export async function exportConversasAction(
     // serverNow é materializado uma vez e reutilizado em deriveStalledSeconds
     // (para que applyConditions possa referenciar stalled_seconds) e em matchDuration.
     const serverNow = Date.now();
-    rows = rows.map((r) => ({ ...r, stalled_seconds: deriveStalledSeconds(r, serverNow) }));
+    rows = rows.map((r) => ({
+      ...r,
+      stalled_seconds: deriveStalledSeconds(r, serverNow),
+      documentType:
+        detectDocument({
+          identifier: r.contact.identifier,
+          additional_attributes: r.contact.additional_attributes,
+        })?.type ?? "none",
+    }));
     if (args.searchClient && args.searchClient.trim()) {
       rows = matchSearchClient(rows, args.searchClient);
     }

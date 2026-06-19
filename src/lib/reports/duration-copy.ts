@@ -20,7 +20,7 @@ export const DATE_FIELD_HELP: Record<DateField, string> = {
   created:
     "Mostra apenas as conversas que foram criadas no período, mesmo sem atividade depois.",
   updated:
-    "Filtra pela última atualização na conversa. Mostra todas as conversas que tiveram mensagens, do cliente ou do atendente, no período — mesmo conversas antigas.",
+    "Filtra pela última atualização na conversa. Mostra todas as conversas que tiveram mensagens, do cliente ou do atendente, no período, mesmo conversas antigas.",
 };
 
 export const INDICATOR_LABELS: Record<DurationIndicator, string> = {

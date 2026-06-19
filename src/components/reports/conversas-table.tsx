@@ -658,7 +658,16 @@ export function ConversasTable({
   // useMemo com deps específicas pra evitar invalidate cascateado e manter
   // 60fps em datasets até 50k.
   const enrichedRows = useMemo(
-    () => rows.map((r) => ({ ...r, stalled_seconds: deriveStalledSeconds(r, serverNow) })),
+    () =>
+      rows.map((r) => ({
+        ...r,
+        stalled_seconds: deriveStalledSeconds(r, serverNow),
+        documentType:
+          detectDocument({
+            identifier: r.contact.identifier,
+            additional_attributes: r.contact.additional_attributes,
+          })?.type ?? "none",
+      })),
     [rows, serverNow],
   );
 

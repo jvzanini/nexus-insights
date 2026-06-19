@@ -105,7 +105,9 @@ const DOC_TYPE_TO_ID: Record<DocumentTypeFilter, number> = {
 
 type SimpleSectionKey =
   | "criterio"
+  | "criterioAdv"
   | "tempo"
+  | "tempoAdv"
   | "inboxIds"
   | "teamIds"
   | "assigneeIds"
@@ -187,6 +189,17 @@ function buildFields({
       type: "multi_select",
       icon: <Tag className={ic} aria-hidden />,
       options: labels.map((l) => ({ value: l.id, label: l.name })),
+    },
+    {
+      key: "documentType",
+      label: "Documento",
+      type: "multi_select",
+      icon: <FileText className={ic} aria-hidden />,
+      options: [
+        { value: "cpf", label: "Com CPF" },
+        { value: "cnpj", label: "Com CNPJ" },
+        { value: "none", label: "Sem documento" },
+      ],
     },
     {
       key: "waiting_seconds",
@@ -721,8 +734,45 @@ export function FiltersDialog({
 
             <TabsContent
               value="advanced"
-              className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1"
+              className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1"
             >
+              {/* Critério + Tempo: mesmos filtros globais do Simples, no padrão
+                  dropdown. O builder abaixo dá os recursos avançados (condições
+                  e grupos) sobre todos os campos (incl. Documento). */}
+              <CollapsibleSection
+                title="Critério de visualização"
+                count={
+                  draft.dateField === "updated" && draft.period !== "todos" ? 1 : 0
+                }
+                open={openSection === "criterioAdv"}
+                onOpenChange={makeSectionToggle("criterioAdv")}
+                icon={
+                  <Eye className="h-4 w-4 text-muted-foreground" aria-hidden />
+                }
+              >
+                <CriterioVisualizacaoContent
+                  dateField={draft.dateField}
+                  period={draft.period}
+                  onChange={(v) => update("dateField", v)}
+                />
+              </CollapsibleSection>
+
+              <CollapsibleSection
+                title="Tempo de mensagem"
+                count={draft.durationFilter ? 1 : 0}
+                open={openSection === "tempoAdv"}
+                onOpenChange={makeSectionToggle("tempoAdv")}
+                icon={
+                  <Clock className="h-4 w-4 text-muted-foreground" aria-hidden />
+                }
+              >
+                <TempoMensagemContent
+                  durationFilter={draft.durationFilter}
+                  statuses={draft.statuses}
+                  onChange={(v) => update("durationFilter", v)}
+                />
+              </CollapsibleSection>
+
               <ConditionalFilters
                 fields={buildFields({
                   inboxes,
