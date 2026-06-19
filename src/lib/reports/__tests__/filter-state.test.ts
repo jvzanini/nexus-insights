@@ -12,6 +12,8 @@ import {
 } from "@/lib/reports/condition-group-codec";
 import type { ConditionGroup } from "@/lib/utils/apply-conditions";
 
+const base: FilterState = { ...EMPTY_FILTER_STATE };
+
 function makeState(overrides: Partial<FilterState> = {}): FilterState {
   return {
     period: "hoje",
@@ -25,6 +27,7 @@ function makeState(overrides: Partial<FilterState> = {}): FilterState {
     countries: [],
     estados: [],
     mode: "simple",
+    dateField: "updated",
     ...overrides,
   };
 }
@@ -509,6 +512,48 @@ describe("FilterState — countries/estados (localização)", () => {
     const state = deserializeFilterState(sp);
     expect(state.countries).toEqual(["Brasil"]);
     expect(state.estados).toEqual(["MG-Minas Gerais", "ZZ-Outros Estados"]);
+  });
+});
+
+describe("dateField", () => {
+  it("default é 'updated' e não serializa", () => {
+    expect(EMPTY_FILTER_STATE.dateField).toBe("updated");
+    expect(serializeFilterState(base).get("date")).toBeNull();
+  });
+  it("serializa e deserializa 'created'", () => {
+    const p = serializeFilterState({ ...base, dateField: "created" });
+    expect(p.get("date")).toBe("created");
+    expect(deserializeFilterState(p).dateField).toBe("created");
+  });
+  it("valor inválido cai em 'updated'", () => {
+    const p = new URLSearchParams({ date: "xpto" });
+    expect(deserializeFilterState(p).dateField).toBe("updated");
+  });
+});
+
+describe("durationFilter", () => {
+  it("round-trip gte", () => {
+    const df = { indicator: "waiting", mode: "gte", value: 10, unit: "minute" } as const;
+    const p = serializeFilterState({ ...base, durationFilter: df });
+    expect(p.get("dur")).toBe("waiting:gte:10:minute");
+    expect(deserializeFilterState(p).durationFilter).toEqual(df);
+  });
+  it("round-trip between com unitEnd", () => {
+    const df = { indicator: "open", mode: "between", value: 5, unit: "minute", valueEnd: 1, unitEnd: "hour" } as const;
+    const p = serializeFilterState({ ...base, durationFilter: df });
+    expect(p.get("dur")).toBe("open:between:5:minute:1:hour");
+    expect(deserializeFilterState(p).durationFilter).toEqual(df);
+  });
+  it("token inválido → undefined", () => {
+    expect(deserializeFilterState(new URLSearchParams({ dur: "lixo:xx" })).durationFilter).toBeUndefined();
+  });
+  it("value <= 0 → undefined", () => {
+    expect(deserializeFilterState(new URLSearchParams({ dur: "waiting:gte:0:minute" })).durationFilter).toBeUndefined();
+  });
+  it("diffFilterStates conta dateField e durationFilter", () => {
+    expect(diffFilterStates(base, { ...base, dateField: "created" })).toBe(1);
+    const df = { indicator: "stalled", mode: "lte", value: 2, unit: "day" } as const;
+    expect(diffFilterStates(base, { ...base, durationFilter: df })).toBe(1);
   });
 });
 

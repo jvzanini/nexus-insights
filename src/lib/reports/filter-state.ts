@@ -18,6 +18,55 @@ export type FilterMode = "simple" | "advanced";
 /** Tipo de documento detectado em uma conversa. */
 export type DocumentTypeFilter = "cpf" | "cnpj" | "none";
 
+export type DateField = "created" | "updated";
+export type DurationIndicator = "waiting" | "open" | "stalled";
+export type DurationMode = "gte" | "lte" | "between";
+export type DurationUnit = "minute" | "hour" | "day" | "month" | "year";
+
+export interface DurationFilter {
+  indicator: DurationIndicator;
+  mode: DurationMode;
+  value: number;
+  unit: DurationUnit;
+  valueEnd?: number;
+  unitEnd?: DurationUnit;
+}
+
+const INDICATORS: readonly DurationIndicator[] = ["waiting", "open", "stalled"];
+const MODES: readonly DurationMode[] = ["gte", "lte", "between"];
+const UNITS: readonly DurationUnit[] = ["minute", "hour", "day", "month", "year"];
+
+const isInd = (v: string): v is DurationIndicator => (INDICATORS as readonly string[]).includes(v);
+const isMode = (v: string): v is DurationMode => (MODES as readonly string[]).includes(v);
+const isUnit = (v: string): v is DurationUnit => (UNITS as readonly string[]).includes(v);
+
+function serializeDuration(d: DurationFilter): string | null {
+  if (!Number.isFinite(d.value) || d.value <= 0) return null;
+  if (d.mode === "between") {
+    if (!d.valueEnd || !Number.isFinite(d.valueEnd) || d.valueEnd <= 0) return null;
+    return `${d.indicator}:between:${d.value}:${d.unit}:${d.valueEnd}:${d.unitEnd ?? d.unit}`;
+  }
+  return `${d.indicator}:${d.mode}:${d.value}:${d.unit}`;
+}
+
+function parseDuration(raw: string | null): DurationFilter | undefined {
+  if (!raw) return undefined;
+  const t = raw.split(":");
+  if (t.length < 4) return undefined;
+  const [ind, mode, valueStr, unit] = t;
+  if (!isInd(ind) || !isMode(mode) || !isUnit(unit)) return undefined;
+  const value = Number.parseInt(valueStr, 10);
+  if (!Number.isFinite(value) || value <= 0) return undefined;
+  if (mode === "between") {
+    if (t.length < 6) return undefined;
+    const valueEnd = Number.parseInt(t[4], 10);
+    const unitEnd = t[5];
+    if (!Number.isFinite(valueEnd) || valueEnd <= 0 || !isUnit(unitEnd)) return undefined;
+    return { indicator: ind, mode, value, unit, valueEnd, unitEnd };
+  }
+  return { indicator: ind, mode, value, unit };
+}
+
 export interface FilterState {
   period: PeriodKey;
   customRange?: { start: string; end: string }; // ISO yyyy-mm-dd
@@ -40,6 +89,10 @@ export interface FilterState {
   conditionGroup?: ConditionGroup;
   /** Página atual (1-based). Default 1 (não persiste em URL quando = 1). */
   page?: number;
+  /** Campo de data usado para filtro de período. Default "updated" (última atualização). */
+  dateField: DateField;
+  /** Filtro de duração (tempo de espera / tempo aberto / tempo parado). */
+  durationFilter?: DurationFilter;
 }
 
 export const EMPTY_FILTER_STATE: FilterState = {
@@ -54,6 +107,7 @@ export const EMPTY_FILTER_STATE: FilterState = {
   countries: [],
   estados: [],
   mode: "simple",
+  dateField: "updated",
 };
 
 const DOC_TYPE_VALUES: readonly DocumentTypeFilter[] = ["cpf", "cnpj", "none"];
@@ -91,6 +145,11 @@ export function serializeFilterState(state: FilterState): URLSearchParams {
     }
   }
   if (state.page && state.page > 1) p.set("page", String(state.page));
+  if (state.dateField === "created") p.set("date", "created");
+  if (state.durationFilter) {
+    const dur = serializeDuration(state.durationFilter);
+    if (dur) p.set("dur", dur);
+  }
   return p;
 }
 
@@ -167,6 +226,8 @@ export function deserializeFilterState(params: URLSearchParams): FilterState {
     mode,
     conditionGroup,
     page,
+    dateField: params.get("date") === "created" ? "created" : "updated",
+    durationFilter: parseDuration(params.get("dur")),
   };
 }
 
@@ -205,6 +266,8 @@ export function diffFilterStates(
     JSON.stringify(b.conditionGroup ?? null)
   )
     diff++;
+  if (a.dateField !== b.dateField) diff++;
+  if (JSON.stringify(a.durationFilter ?? null) !== JSON.stringify(b.durationFilter ?? null)) diff++;
   return diff;
 }
 
