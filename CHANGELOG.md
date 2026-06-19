@@ -1,5 +1,18 @@
 # Changelog
 
+## [v0.57.2] 2026-06-19 — Modo Avançado dos filtros no padrão do design system
+
+Repaginação do modo **Avançado** (query builder) do relatório de Conversas, que ainda usava controles fora do padrão:
+
+- **Listas suspensas no padrão:** os seletores de **Campo**, **Operador** e **Valor (tipo seleção)** deixam de ser `<select>` nativo do navegador e passam a usar o `CustomSelect` do design system (cores, foco e comportamento consistentes).
+- **Multi-seleção unificada:** filtros de múltipla escolha — inclusive **País** e **Estado/Cidade** (que caíam em "chips") — agora usam o mesmo `MultiSelectCheckbox` dos demais (lista suspensa com **busca**, **Selecionar todos** e **Limpar**).
+- **Critério de visualização no Avançado:** disponível também na aba Avançado, no mesmo formato dropdown do modo Simples.
+- **Nomenclatura alinhada:** campos de tempo do builder passam a "Sem resposta há / Aberta há / Parada há (segundos)", consistentes com o Simples.
+
+Sem mudança de comportamento/dados — apenas apresentação e consistência. tsc 0, build 0, testes da área verdes.
+
+---
+
 ## [v0.57.1] 2026-06-19 — Filtros de Conversas no padrão (dropdowns) + renomeação
 
 Refinamento de UX dos filtros introduzidos na v0.57.0, alinhando ao design system do projeto:

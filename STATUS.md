@@ -6,8 +6,9 @@
 
 ## Versão atual em produção
 
-**v0.57.1** — 2026-06-19 (direto na `main`). Refinamento de UX dos filtros de Conversas: **"Critério de visualização"** (Criado em / Última atualização em → `periodColumn`) e **"Tempo de mensagem"** (Sem resposta há / Aberta há / Parada há) viram **dropdowns no padrão** (`CollapsibleSection`) dentro do modo Simples, combináveis; critério com descrições inline visíveis. Sem mudança de dados.
+**v0.57.2** — 2026-06-19 (direto na `main`). Modo **Avançado** dos filtros no padrão do design system: seletores de Campo/Operador/Valor viram `CustomSelect` (em vez de `<select>` nativo); multi-seleção (incl. País/Estado) unificada no `MultiSelectCheckbox` (busca + selecionar todos + limpar); "Critério de visualização" também na aba Avançado; nomenclatura de tempo alinhada ao Simples. Sem mudança de dados.
 
+> v0.57.1 (2026-06-19): "Critério de visualização" e "Tempo de mensagem" viram dropdowns (`CollapsibleSection`) no modo Simples, combináveis; critério com descrições inline.
 > v0.57.0 (2026-06-19): filtros de Data e Duração no relatório de Conversas (lógica: `dateField`→`periodColumn`, `matchDuration` sobre segundos exatos, `stalled_seconds` via `serverNow`, export + chips).
 
 > v0.56.2 (2026-06-10): Dashboard/relatórios sempre no ar — último dado conhecido (`${key}:last`, TTL 24h) quando o Chatwoot recusa conexão. `ALTER ROLE chatwoot_leitura CONNECTION LIMIT 30` (admin do banco).
@@ -22,7 +23,7 @@
 
 | Componente | Estado | Observação |
 |---|---|---|
-| App Next.js | ✅ Live | v0.57.1 |
+| App Next.js | ✅ Live | v0.57.2 |
 | Worker BullMQ (polling delta) | ✅ Live | polling 30s per-connection |
 | Pré-agregação | ✅ Live | refresh on-demand + cron 30min fallback |
 | Banco (Prisma + Postgres) | ✅ | leitura direta Chatwoot (read-only) |
