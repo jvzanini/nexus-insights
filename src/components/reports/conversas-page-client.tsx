@@ -24,7 +24,7 @@ import { ConversasTable } from "@/components/reports/conversas-table";
 import { ContentLoadingWrapper } from "@/components/reports/content-loading-wrapper";
 import { PresetsDialog } from "@/components/reports/presets-dialog";
 import type { SortRule } from "@/components/reports/sorting-dialog";
-import type { FilterState } from "@/lib/reports/filter-state";
+import type { FilterState, DurationFilter } from "@/lib/reports/filter-state";
 import { useLocalStorageState } from "@/lib/hooks/use-local-storage-state";
 import {
   useFilterPresets,
@@ -62,6 +62,8 @@ interface Props {
    * oculto. Mapping definitivo virá em Configurações > Perfil (futuro).
    */
   currentChatwootUserId: number | null;
+  serverNow: number;
+  durationFilter?: DurationFilter;
 }
 
 const PAGE_SIZE_CLIENT = 1000;
@@ -77,6 +79,8 @@ export function ConversasPageClient({
   reportFilters,
   conditionGroup,
   currentChatwootUserId,
+  serverNow,
+  durationFilter,
 }: Props) {
   const [sortStack, setSortStack] = useLocalStorageState<SortRule[]>(
     STORAGE_SORT,
@@ -205,6 +209,8 @@ export function ConversasPageClient({
             documentTypes={filterState.documentTypes}
             countries={filterState.countries}
             estados={filterState.estados}
+            serverNow={serverNow}
+            durationFilter={durationFilter}
           />
         </div>
       </ContentLoadingWrapper>

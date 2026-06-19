@@ -62,8 +62,10 @@ import {
   type DocumentTypeFilter,
 } from "@/lib/reports/match-document-types";
 import { matchLocation } from "@/lib/reports/match-location";
+import { matchDuration, deriveStalledSeconds } from "@/lib/reports/match-duration";
 import type { FetchConversasInput } from "@/lib/actions/reports/conversas";
 import type { ConversaRow } from "@/lib/chatwoot/queries/conversas-list";
+import type { DurationFilter } from "@/lib/reports/filter-state";
 import type { SortRule } from "@/components/reports/sorting-dialog";
 
 interface ConversasTableProps {
@@ -106,6 +108,8 @@ interface ConversasTableProps {
   documentTypes?: DocumentTypeFilter[];
   countries?: string[];
   estados?: string[];
+  serverNow: number;
+  durationFilter?: DurationFilter;
 }
 
 type SortDirection = "asc" | "desc";
@@ -450,6 +454,7 @@ const COLUMNS: ColumnDef[] = [
       }
       return (
         <span
+          title={`${row.waiting_seconds} s`}
           className={cn(
             "whitespace-nowrap text-[13px] font-semibold tabular-nums",
             durationTone(row.waiting_seconds),
@@ -476,6 +481,7 @@ const COLUMNS: ColumnDef[] = [
       }
       return (
         <span
+          title={`${row.open_seconds} s`}
           className={cn(
             "whitespace-nowrap text-[13px] font-semibold tabular-nums",
             durationTone(row.open_seconds),
@@ -548,6 +554,8 @@ export function ConversasTable({
   documentTypes,
   countries,
   estados,
+  serverNow,
+  durationFilter,
 }: ConversasTableProps) {
   // Alias interno — preserva todos os consumers já existentes (OpenIdLink,
   // HighlightedText em colunas, ConversaDrillDown, Field) que recebem
@@ -649,9 +657,14 @@ export function ConversasTable({
   // search → conditionGroup → sort → slice por página. Cada estágio é
   // useMemo com deps específicas pra evitar invalidate cascateado e manter
   // 60fps em datasets até 50k.
+  const enrichedRows = useMemo(
+    () => rows.map((r) => ({ ...r, stalled_seconds: deriveStalledSeconds(r, serverNow) })),
+    [rows, serverNow],
+  );
+
   const searchedRows = useMemo(
-    () => matchSearchClient(rows, searchClient),
-    [rows, searchClient],
+    () => matchSearchClient(enrichedRows, searchClient),
+    [enrichedRows, searchClient],
   );
 
   // v0.35 F1 fix: aplica filtro Documento (faltava cabeamento na pipeline).
@@ -678,11 +691,16 @@ export function ConversasTable({
     return applyConditions(locFilteredRows, conditionGroup);
   }, [locFilteredRows, conditionGroup]);
 
+  const durationFilteredRows = useMemo(
+    () => matchDuration(filteredRows, durationFilter, serverNow),
+    [filteredRows, durationFilter, serverNow],
+  );
+
   // ---- Ordenação aplicada no client (estável). -----
   const sortedRows = useMemo(() => {
-    if (sortStack.length === 0) return filteredRows;
+    if (sortStack.length === 0) return durationFilteredRows;
     const cols = new Map(COLUMNS.map((c) => [c.key, c]));
-    const decorated = filteredRows.map((row, idx) => ({ row, idx }));
+    const decorated = durationFilteredRows.map((row, idx) => ({ row, idx }));
     decorated.sort((A, B) => {
       for (const rule of sortStack) {
         const col = cols.get(rule.key);
@@ -694,7 +712,7 @@ export function ConversasTable({
       return A.idx - B.idx; // estabilidade.
     });
     return decorated.map((d) => d.row);
-  }, [filteredRows, sortStack]);
+  }, [durationFilteredRows, sortStack]);
 
   // ---- Paginação UI sobre dados hidratados (v0.25) -----
   const totalFiltered = sortedRows.length;

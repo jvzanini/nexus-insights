@@ -59,6 +59,7 @@ const baseProps = {
   sortStack: [],
   onSortStackChange: () => {},
   searchClient: "",
+  serverNow: Date.now(),
 };
 
 describe("ConversasTable v3 (paginação)", () => {

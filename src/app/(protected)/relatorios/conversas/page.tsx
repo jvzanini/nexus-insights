@@ -71,8 +71,11 @@ export default async function ConversasPage({ searchParams }: PageProps) {
       : undefined,
     labelIds: filterState.labelIds.length ? filterState.labelIds : undefined,
     excludeMatrixIA,
+    periodColumn: filterState.dateField === "created" ? "created" : "active",
     // search removido: virou client-side em ConversasPageClient (T10).
   };
+
+  const serverNow = Date.now();
 
   // Carrega meta + dados em paralelo. Cada chamada é resiliente a falhas
   // do Chatwoot (cache fallback), por isso o `.catch(() => null)`.
@@ -163,6 +166,8 @@ export default async function ConversasPage({ searchParams }: PageProps) {
                 : undefined
             }
             currentChatwootUserId={null}
+            serverNow={serverNow}
+            durationFilter={filterState.durationFilter}
           />
         </div>
       </FilterTransitionProvider>

@@ -95,6 +95,8 @@ export interface ConversaRow {
    */
   open_seconds: number | null;
   labels: ConversaLabel[];
+  /** Derivado client-side (now - last_activity_at). Não vem do SQL. */
+  stalled_seconds?: number | null;
 }
 
 export interface ConversasListResult {
