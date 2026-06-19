@@ -50,6 +50,7 @@ import {
   ConditionalFilters,
   type ConditionFieldDef,
 } from "@/components/ui/conditional-filters";
+import { DurationDateFilter } from "./duration-date-filter";
 import {
   diffFilterStates,
   isFilterStateEqual,
@@ -179,6 +180,11 @@ function buildFields({
     {
       key: "open_seconds",
       label: "Tempo aberta (s)",
+      type: "number",
+    },
+    {
+      key: "stalled_seconds",
+      label: "Tempo parada (s)",
       type: "number",
     },
     {
@@ -396,6 +402,16 @@ export function FiltersDialog({
 
         {/* Body — scroll interno */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-4">
+          {/* Bloco fixo global (fora das abas): Data + Filtrar por tempo.
+              Preservado na troca de aba. */}
+          <DurationDateFilter
+            dateField={draft.dateField}
+            durationFilter={draft.durationFilter}
+            period={draft.period}
+            statuses={draft.statuses}
+            onDateFieldChange={(v) => update("dateField", v)}
+            onDurationChange={(v) => update("durationFilter", v)}
+          />
           <Tabs
             value={draft.mode}
             // v0.32 T8: troca real do tab é mediada por handleTabClick — se
@@ -737,7 +753,8 @@ export function FiltersDialog({
             Você tem seleções no filtro{" "}
             {draft.mode === "simple" ? "Simples" : "Avançado"}. Trocar para o{" "}
             {pendingTab === "advanced" ? "Avançado" : "Simples"} vai descartar
-            essa configuração — você só pode usar um modo por vez.
+            essa configuração — você só pode usar um modo por vez. Os filtros de
+            Data e de tempo são preservados.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
