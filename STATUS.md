@@ -6,7 +6,9 @@
 
 ## Versão atual em produção
 
-**v0.57.5** — 2026-06-19 (direto na `main`). "Tempo de mensagem" no mesmo padrão do "Critério de visualização": 3 indicadores como cards com descrição + tags coloridas (âmbar=aberta; azul=resolvida/não resolvida); condição+valor+unidade na mesma linha ("entre" expande de/até); frase "Mostra conversas com..." mantida; descrição duplicada removida. Vale Simples e Avançado.
+**v0.57.6** — 2026-06-19 (direto na `main`). Comportamento dos filtros: "Limpar todos" ativa/limpa também Critério e Tempo (globais); clicar no indicador de Tempo já selecionado o desmarca; dropdowns sempre aparecem completos na viewport (collisionPadding + max-h --available-height + scroll). Aviso de troca de aba dispara para filtros da aba (Critério/Tempo são globais, preservados).
+
+> v0.57.5 (2026-06-19): "Tempo de mensagem" como 3 cards (igual Critério), tags âmbar/azul, condição+valor+unidade em linha.
 
 > v0.57.4 (2026-06-19): tags com cores do sistema; Tempo sem switch; Avançado completo (Documento + Critério + Tempo).
 
@@ -28,7 +30,7 @@
 
 | Componente | Estado | Observação |
 |---|---|---|
-| App Next.js | ✅ Live | v0.57.5 |
+| App Next.js | ✅ Live | v0.57.6 |
 | Worker BullMQ (polling delta) | ✅ Live | polling 30s per-connection |
 | Pré-agregação | ✅ Live | refresh on-demand + cron 30min fallback |
 | Banco (Prisma + Postgres) | ✅ | leitura direta Chatwoot (read-only) |

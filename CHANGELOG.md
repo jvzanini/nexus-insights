@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.57.6] 2026-06-19 — Ajustes de comportamento dos filtros (limpar, toggle, dropdowns)
+
+- **"Limpar todos"** agora **ativa e limpa** também os filtros globais (Critério de visualização ≠ padrão e Tempo de mensagem) — antes ficava desabilitado mesmo com esses filtros aplicados.
+- **Tempo de mensagem**: clicar de novo no indicador **já selecionado o desmarca** (volta ao vazio), sem precisar do botão "Limpar filtro de tempo".
+- **Dropdowns** (listas suspensas) passam a **aparecer sempre completos na tela**: respeitam a borda da viewport e ganham rolagem interna quando grandes, em vez de ficar cortados exigindo rolar a página.
+
+tsc 0, build 0, testes da área verdes. *(O aviso de troca Simples↔Avançado continua disparando para os filtros específicos da aba; Critério e Tempo são globais às duas abas e por isso são preservados na troca.)*
+
+---
+
 ## [v0.57.5] 2026-06-19 — "Tempo de mensagem" no mesmo padrão do "Critério de visualização"
 
 - As **3 opções** (Sem resposta há / Aberta há / Parada há) agora aparecem como **cards**, no mesmo formato do "Critério de visualização", cada uma com sua **descrição** e **tags de status coloridas** (âmbar para "aberta"; azul para "resolvida" e "não resolvida").
