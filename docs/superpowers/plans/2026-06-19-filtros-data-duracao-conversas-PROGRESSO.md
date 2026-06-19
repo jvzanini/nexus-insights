@@ -3,8 +3,21 @@
 > Ponto de retomada para modo autônomo. Atualizar a cada bloco/commit.
 
 ## Estado atual
-- **Fase:** SPEC — v1 escrita, rodando 2 reviews adversariais → consolidar v3.
-- **Spec:** `docs/superpowers/specs/2026-06-19-filtros-data-duracao-conversas-design.md`
+- **Fase:** PLANO pronto (v3, pós review adversarial). Iniciando IMPLEMENTAÇÃO (subagent-driven + TDD).
+- **Spec:** `docs/superpowers/specs/2026-06-19-filtros-data-duracao-conversas-design.md` (v3)
+- **Plano:** `docs/superpowers/plans/2026-06-19-filtros-data-duracao-conversas.md` (v3, 8 tasks)
+- **Tasks de lógica (subagente):** T1 filter-state, T2 match-duration, T5 export.
+- **Tasks de UI (inline + ui-ux-pro-max):** T3+T4 (page/client/table, checkpoint único), T6 contadores/builder, T7 modal, T8 chips.
+
+## Status das tasks
+- [ ] T1 filter-state (tipos+serialização+diff)
+- [ ] T2 match-duration (helper+testes)
+- [ ] T3+T4 page→periodColumn/serverNow + pipeline tabela + title (checkpoint único)
+- [ ] T5 export XLSX
+- [ ] T6 contadores/resets/builder stalled
+- [ ] T7 UI bloco Data+Tempo no modal
+- [ ] T8 chips Data/Duração
+- [ ] Verificação tsc+jest+e2e → release
 
 ## Decisões travadas (do usuário)
 1. Dois filtros novos no **modal de Filtros** (Simples + Avançado), vinculados às pílulas de período.
