@@ -550,6 +550,22 @@ describe("durationFilter", () => {
   it("value <= 0 → undefined", () => {
     expect(deserializeFilterState(new URLSearchParams({ dur: "waiting:gte:0:minute" })).durationFilter).toBeUndefined();
   });
+  it("between com fim <= início → ignorado (parse e serialize)", () => {
+    // 1 hora (início) vs 5 minutos (fim): fim < início → inválido.
+    expect(
+      deserializeFilterState(new URLSearchParams({ dur: "waiting:between:1:hour:5:minute" }))
+        .durationFilter,
+    ).toBeUndefined();
+    const invalid = {
+      indicator: "waiting",
+      mode: "between",
+      value: 1,
+      unit: "hour",
+      valueEnd: 5,
+      unitEnd: "minute",
+    } as const;
+    expect(serializeFilterState({ ...base, durationFilter: invalid }).get("dur")).toBeNull();
+  });
   it("diffFilterStates conta dateField e durationFilter", () => {
     expect(diffFilterStates(base, { ...base, dateField: "created" })).toBe(1);
     const df = { indicator: "stalled", mode: "lte", value: 2, unit: "day" } as const;

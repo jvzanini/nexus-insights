@@ -40,10 +40,33 @@ const isInd = (v: string): v is DurationIndicator => (INDICATORS as readonly str
 const isMode = (v: string): v is DurationMode => (MODES as readonly string[]).includes(v);
 const isUnit = (v: string): v is DurationUnit => (UNITS as readonly string[]).includes(v);
 
-function serializeDuration(d: DurationFilter): string | null {
-  if (!Number.isFinite(d.value) || d.value <= 0) return null;
+/** Segundos por unidade. Mês/ano são aproximações (30/365 dias). */
+export const UNIT_SECONDS: Record<DurationUnit, number> = {
+  minute: 60,
+  hour: 3_600,
+  day: 86_400,
+  month: 2_592_000,
+  year: 31_536_000,
+};
+
+/**
+ * Valida um DurationFilter. Em "between", exige fim > início comparando em
+ * segundos (spec §7.3: faixa com fim ≤ início é inválida e deve ser ignorada).
+ */
+export function isDurationFilterValid(d: DurationFilter): boolean {
+  if (!Number.isFinite(d.value) || d.value <= 0) return false;
   if (d.mode === "between") {
-    if (!d.valueEnd || !Number.isFinite(d.valueEnd) || d.valueEnd <= 0) return null;
+    if (!d.valueEnd || !Number.isFinite(d.valueEnd) || d.valueEnd <= 0) return false;
+    const startSec = d.value * UNIT_SECONDS[d.unit];
+    const endSec = d.valueEnd * UNIT_SECONDS[d.unitEnd ?? d.unit];
+    return endSec > startSec;
+  }
+  return true;
+}
+
+function serializeDuration(d: DurationFilter): string | null {
+  if (!isDurationFilterValid(d)) return null;
+  if (d.mode === "between") {
     return `${d.indicator}:between:${d.value}:${d.unit}:${d.valueEnd}:${d.unitEnd ?? d.unit}`;
   }
   return `${d.indicator}:${d.mode}:${d.value}:${d.unit}`;
@@ -61,8 +84,9 @@ function parseDuration(raw: string | null): DurationFilter | undefined {
     if (t.length < 6) return undefined;
     const valueEnd = Number.parseInt(t[4], 10);
     const unitEnd = t[5];
-    if (!Number.isFinite(valueEnd) || valueEnd <= 0 || !isUnit(unitEnd)) return undefined;
-    return { indicator: ind, mode, value, unit, valueEnd, unitEnd };
+    if (!isUnit(unitEnd)) return undefined;
+    const parsed: DurationFilter = { indicator: ind, mode, value, unit, valueEnd, unitEnd };
+    return isDurationFilterValid(parsed) ? parsed : undefined;
   }
   return { indicator: ind, mode, value, unit };
 }

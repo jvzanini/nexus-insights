@@ -53,6 +53,7 @@ import {
 import { DurationDateFilter } from "./duration-date-filter";
 import {
   diffFilterStates,
+  isDurationFilterValid,
   isFilterStateEqual,
   type DocumentTypeFilter,
   type FilterMode,
@@ -262,6 +263,9 @@ export function FiltersDialog({
 
   const isDirty = !isFilterStateEqual(draft, applied);
   const pending = diffFilterStates(draft, applied);
+  // Bloqueia Aplicar quando o filtro de tempo "entre" está com fim ≤ início.
+  const durationInvalid =
+    !!draft.durationFilter && !isDurationFilterValid(draft.durationFilter);
 
   function update<K extends keyof FilterState>(k: K, v: FilterState[K]) {
     setDraft((p) => ({ ...p, [k]: v }));
@@ -721,7 +725,7 @@ export function FiltersDialog({
                 onApply(draft);
                 onOpenChange(false);
               }}
-              disabled={!isDirty}
+              disabled={!isDirty || durationInvalid}
               aria-label="Aplicar filtros"
               className="cursor-pointer disabled:cursor-not-allowed"
             >
