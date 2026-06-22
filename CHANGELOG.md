@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.57.7] 2026-06-22 — Critério/Tempo no aviso de troca de aba + indicador do Critério
+
+- **Critério de visualização** e **Tempo de mensagem** passam a ser tratados como os demais filtros: ao mexer neles e **trocar entre Simples/Avançado**, o **aviso de "vai perder"** dispara, e eles são **descartados na troca** (junto com os filtros da aba).
+- **Critério de visualização** sempre mostra o **indicador "1"** (há sempre uma opção selecionada — Criado em ou Última atualização); o botão **Aplicar** só habilita quando a escolha muda em relação ao aplicado.
+
+**Pendente (diagnosticado):** bug raro em que um filtro simples aparece aplicado (chip) mas reabre desmarcado no modal — causa identificada (`useState(initial)` em advanced-filters não re-sincroniza quando a prop muda via realtime/refresh). Correção será feita com repro/teste dedicados (mexe no estado central do componente).
+
+tsc 0, build 0, testes da área verdes.
+
+---
+
 ## [v0.57.6] 2026-06-19 — Ajustes de comportamento dos filtros (limpar, toggle, dropdowns)
 
 - **"Limpar todos"** agora **ativa e limpa** também os filtros globais (Critério de visualização ≠ padrão e Tempo de mensagem) — antes ficava desabilitado mesmo com esses filtros aplicados.

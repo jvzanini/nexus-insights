@@ -1,6 +1,6 @@
 {
   "name": "nexus-insights",
-  "version": "0.57.6",
+  "version": "0.57.7",
   "private": true,
   "description": "Plataforma de relatórios e insights da operação Chatwoot da Matrix Fitness Group",
   "scripts": {

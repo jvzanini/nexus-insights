@@ -383,12 +383,23 @@ export function FiltersDialog({
       s.labelIds.length > 0 ||
       (s.documentTypes ?? []).length > 0 ||
       (s.countries ?? []).length > 0 ||
-      (s.estados ?? []).length > 0
+      (s.estados ?? []).length > 0 ||
+      hasGlobalData(s)
     );
   }
 
+  // Critério (≠ default "created") e Tempo de mensagem são considerados na
+  // detecção de "tem dados" — mexer neles também dispara o aviso de troca de
+  // aba e os zera na troca (decisão do dono: tratá-los como filtros normais).
+  function hasGlobalData(s: FilterState): boolean {
+    return s.dateField === "updated" || !!s.durationFilter;
+  }
+
   function hasDataInAdvanced(s: FilterState): boolean {
-    return !!s.conditionGroup && (s.conditionGroup.items?.length ?? 0) > 0;
+    return (
+      (!!s.conditionGroup && (s.conditionGroup.items?.length ?? 0) > 0) ||
+      hasGlobalData(s)
+    );
   }
 
   function handleTabClick(target: FilterMode) {
@@ -424,6 +435,9 @@ export function FiltersDialog({
         // Sai do Avançado → limpa o conditionGroup
         next.conditionGroup = undefined;
       }
+      // Critério e Tempo (globais) também são descartados na troca.
+      next.dateField = "created";
+      next.durationFilter = undefined;
       return next;
     });
     setPendingTab(null);
@@ -495,9 +509,7 @@ export function FiltersDialog({
             >
               <CollapsibleSection
                 title="Critério de visualização"
-                count={
-                  draft.dateField === "updated" && draft.period !== "todos" ? 1 : 0
-                }
+                count={1}
                 open={openSection === "criterio"}
                 onOpenChange={makeSectionToggle("criterio")}
                 icon={
@@ -751,9 +763,7 @@ export function FiltersDialog({
                   e grupos) sobre todos os campos (incl. Documento). */}
               <CollapsibleSection
                 title="Critério de visualização"
-                count={
-                  draft.dateField === "updated" && draft.period !== "todos" ? 1 : 0
-                }
+                count={1}
                 open={openSection === "criterioAdv"}
                 onOpenChange={makeSectionToggle("criterioAdv")}
                 icon={
